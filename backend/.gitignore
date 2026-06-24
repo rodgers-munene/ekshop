@@ -1,0 +1,32 @@
+# ─── Virtual environment ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ─── Environment & Secrets ────────────────────────────────────────────────────
+# Copy .env.example → .env and fill in values. Never commit .env.
+.env
+.env.*
+!.env.example
+
+# ─── Python bytecode ──────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ─── Testing & Coverage ───────────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ─── Local databases ──────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Build & distribution ─────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
