@@ -57,3 +57,16 @@ class LoginRequest(BaseModel):
     @classmethod
     def email_lowercase(cls, v: str) -> str:
         return v.strip().lower()
+    
+    
+class Notification(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    type: str
+    title: str
+    body: Optional[str]
+    is_read: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+    

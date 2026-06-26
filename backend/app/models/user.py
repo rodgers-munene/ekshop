@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey, Index
+from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import UUID, INET
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -116,3 +116,4 @@ class NotificationPreference(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     user = relationship("User", back_populates="notification_preferences")
+    

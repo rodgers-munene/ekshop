@@ -59,3 +59,11 @@ class ShopPaymentMethodRead(BaseModel):
     is_primary: bool
 
     model_config = {"from_attributes": True}
+
+
+class ShopDashboardRead(BaseModel):
+    total_sales: int
+    rating_avg: str
+    rating_count: int
+    total_products: int
+    total_orders: int

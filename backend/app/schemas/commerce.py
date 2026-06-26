@@ -31,6 +31,19 @@ class UserAddressRead(BaseModel):
     is_default: bool
 
     model_config = {"from_attributes": True}
+    
+class UserAddressUpdate(BaseModel):
+    label: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    county: Optional[str] = None
+    town: Optional[str] = None
+    exact_location: Optional[str] = None
+    apartment: Optional[str] = None
+    floor: Optional[str] = None
+    is_default: Optional[bool] = None
+
 
 
 class CartItemRead(BaseModel):
