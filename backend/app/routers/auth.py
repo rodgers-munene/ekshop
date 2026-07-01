@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS
+from app.core.config import ACCESS_TOKEN_EXPIRE_DAYS, REFRESH_TOKEN_EXPIRE_DAYS
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -154,7 +154,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     access_token = create_access_token(
         data={"sub": str(user.id), "role": user.role.value},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS),
     )
 
     raw_refresh = generate_refresh_token()
@@ -206,7 +206,7 @@ def refresh(raw_token: str, db: Session = Depends(get_db)):
 
     new_access = create_access_token(
         data={"sub": str(user.id), "role": user.role.value},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS),
     )
     new_raw_refresh = generate_refresh_token()
     db.add(RefreshToken(
