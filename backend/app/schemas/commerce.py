@@ -5,6 +5,17 @@ from pydantic import BaseModel
 from app.models.commerce import OrderStatus, OrderGroupStatus
 
 
+class CartItemCreate(BaseModel):
+    product_id: uuid.UUID
+    variant_id: Optional[uuid.UUID] = None
+    quantity: int = 1
+
+
+class CheckoutCreate(BaseModel):
+    address_id: uuid.UUID
+    notes: Optional[str] = None
+
+
 class UserAddressCreate(BaseModel):
     label: Optional[str] = None
     first_name: str
@@ -91,6 +102,10 @@ class OrderRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class OrderStatusUpdate(BaseModel):
+    status: OrderStatus
 
 
 class OrderGroupRead(BaseModel):

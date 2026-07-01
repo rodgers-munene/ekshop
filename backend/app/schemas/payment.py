@@ -25,3 +25,12 @@ class PaymentRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+    
+
+class StkPushRequest(BaseModel):
+    order_group_id: uuid.UUID # which order is being paid for
+    phone: str
+    
+class StkPushResponse(BaseModel):
+    message: str
+    checkout_request_id: str

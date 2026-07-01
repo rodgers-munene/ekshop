@@ -13,8 +13,19 @@ class CategoryRead(BaseModel):
     icon_url: Optional[str]
     sort_order: int
     is_active: bool
+    children: List["CategoryRead"] = []
 
     model_config = {"from_attributes": True}
+
+CategoryRead.model_rebuild()
+
+
+class ProductImageCreate(BaseModel):
+    url: str
+    thumbnail_url: Optional[str] = None
+    alt_text: Optional[str] = None
+    sort_order: int = 0
+    is_primary: bool = False
 
 
 class ProductImageRead(BaseModel):
@@ -33,6 +44,14 @@ class ProductVariantCreate(BaseModel):
     value: str
     price_delta: str = "0.00"
     stock_qty: int = 0
+    sku: Optional[str] = None
+
+
+class ProductVariantUpdate(BaseModel):
+    name: Optional[str] = None
+    value: Optional[str] = None
+    price_delta: Optional[str] = None
+    stock_qty: Optional[int] = None
     sku: Optional[str] = None
 
 
@@ -64,7 +83,6 @@ class ProductCreate(BaseModel):
     tags: Optional[List[str]] = None
     variants: Optional[List[ProductVariantCreate]] = None
 
-
 class ProductRead(BaseModel):
     id: uuid.UUID
     shop_id: uuid.UUID
@@ -87,6 +105,11 @@ class ProductRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
+class ProductListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[ProductRead]
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None

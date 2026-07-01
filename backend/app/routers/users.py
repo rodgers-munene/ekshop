@@ -7,9 +7,12 @@ from app.dependencies.auth import get_current_active_user
 from app.dependencies.database import get_db
 from app.models.user import User
 from app.models.delivery import Notification as NotificationModel
-from app.models.commerce import UserAddress
+from app.models.commerce import UserAddress, Wishlist
+from app.models.analytics import EventType
 from app.schemas.user import UserRead, UserUpdate, Notification
 from app.schemas.commerce import UserAddressRead, UserAddressCreate, UserAddressUpdate
+from app.schemas.catalog import ProductRead
+from app.services import recommendations as rec_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -114,6 +117,57 @@ def delete_user_address(address_id: uuid.UUID, db: Session = Depends(get_db), cu
     db.commit()
     
     
+@router.get("/me/wishlist", response_model=list[ProductRead])
+def get_wishlist(current_user: User = Depends(get_current_active_user)):
+    return [entry.product for entry in current_user.wishlists]
+
+
+@router.post("/me/wishlist", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
+def add_to_wishlist(
+    product_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    existing = db.query(Wishlist).filter(
+        Wishlist.user_id == current_user.id,
+        Wishlist.product_id == product_id,
+    ).first()
+    if existing:
+        raise HTTPException(409, "Product already in wishlist")
+
+    entry = Wishlist(user_id=current_user.id, product_id=product_id)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+
+    rec_service.log_event(
+        db=db,
+        session_id=f"user-{current_user.id}",
+        event_type=EventType.wishlist,
+        user_id=current_user.id,
+        product_id=product_id,
+    )
+
+    return entry.product
+
+
+@router.delete("/me/wishlist/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_from_wishlist(
+    product_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    entry = db.query(Wishlist).filter(
+        Wishlist.user_id == current_user.id,
+        Wishlist.product_id == product_id,
+    ).first()
+    if not entry:
+        raise HTTPException(404, "Product not in wishlist")
+
+    db.delete(entry)
+    db.commit()
+
+
 @router.get(
     "/me/notifications",
     response_model=list[Notification],

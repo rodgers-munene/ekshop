@@ -45,9 +45,10 @@ class PaymentIntent(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_group_id = Column(UUID(as_uuid=True), ForeignKey("order_groups.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    provider = Column(String(50), nullable=False)
     provider_ref = Column(String(100), unique=True)
-    items_snapshot = Column(JSONB, nullable=False)
-    delivery_fee = Column(String(20), default="0.00")
+    amount = Column(String(20), nullable=False)
+    status = Column(Enum(PaymentStatus, native_enum=False), default=PaymentStatus.pending, nullable=False)
     expires_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
