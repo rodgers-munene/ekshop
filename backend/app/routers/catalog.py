@@ -106,7 +106,9 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), curren
 )
 def get_products(
     category_id: Optional[uuid.UUID] = None,
+    category_slug: Optional[str] = None,
     search: Optional[str] = None,
+    q: Optional[str] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     page: int = Query(1, ge=1),
@@ -116,12 +118,19 @@ def get_products(
     query = db.query(Product).filter(
         Product.status == ProductStatus.active
     )
-    
-    if category_id:
+
+    if category_slug:
+        cat = db.query(Category).filter(Category.slug == category_slug).first()
+        if cat:
+            child_ids = [c.id for c in (cat.children or [])]
+            all_ids = [cat.id] + child_ids
+            query = query.filter(Product.category_id.in_(all_ids))
+    elif category_id:
         query = query.filter(Product.category_id == category_id)
         
-    if search:
-        query = query.filter(Product.name.ilike(f"%{search}%"))
+    term = search or q
+    if term:
+        query = query.filter(Product.name.ilike(f"%{term}%"))
     
     if min_price:
         query = query.filter(cast(Product.price, Numeric) >= min_price)

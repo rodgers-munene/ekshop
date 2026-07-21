@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import NUMERIC
 from sqlalchemy.orm import Session
 
 from app.models.analytics import UserEvent, ProductScore, UserPreference, EventType, SearchTerm
-from app.models.catalog import Product, ProductStatus
+from app.models.catalog import Category, Product, ProductStatus
 
 
 def log_event(
@@ -98,18 +98,13 @@ def get_recommendations(
     user_id: Optional[uuid.UUID] = None,
     limit: int = 20,
 ) -> List[Product]:
-    base = (
-        db.query(Product)
-        .outerjoin(ProductScore, Product.id == ProductScore.product_id)
-        .filter(Product.status == ProductStatus.active)
-    )
-
-    preferred_categories: List[str] = []
-    price_min: Optional[float] = None
-    price_max: Optional[float] = None
-
+    # ── Authenticated user with browsing history ──────────────
     if user_id:
         prefs = db.query(UserPreference).filter(UserPreference.user_id == user_id).first()
+        preferred_categories: List[str] = []
+        price_min: Optional[float] = None
+        price_max: Optional[float] = None
+
         if prefs:
             if prefs.price_range_min:
                 price_min = float(prefs.price_range_min)
@@ -117,43 +112,88 @@ def get_recommendations(
                 price_max = float(prefs.price_range_max)
             if prefs.category_weights:
                 sorted_cats = sorted(
-                    prefs.category_weights.items(),
-                    key=lambda x: x[1],
-                    reverse=True,
+                    prefs.category_weights.items(), key=lambda x: x[1], reverse=True
                 )
                 preferred_categories = [c for c, _ in sorted_cats[:5]]
 
-    if price_min is not None:
-        base = base.filter(cast(Product.price, NUMERIC) >= price_min)
-    if price_max is not None:
-        base = base.filter(cast(Product.price, NUMERIC) <= price_max)
+        base = (
+            db.query(Product)
+            .outerjoin(ProductScore, Product.id == ProductScore.product_id)
+            .filter(Product.status == ProductStatus.active)
+        )
+        if price_min is not None:
+            base = base.filter(cast(Product.price, NUMERIC) >= price_min)
+        if price_max is not None:
+            base = base.filter(cast(Product.price, NUMERIC) <= price_max)
 
-    results: List[Product] = []
+        results: List[Product] = []
+        if preferred_categories:
+            cat_ids = [uuid.UUID(c) for c in preferred_categories]
+            top = (
+                base.filter(Product.category_id.in_(cat_ids))
+                .order_by(cast(ProductScore.trending_score, NUMERIC).desc().nulls_last())
+                .limit(limit // 2)
+                .all()
+            )
+            results.extend(top)
 
-    # first bucket: preferred-category products ordered by trending
-    if preferred_categories:
-        cat_ids = [uuid.UUID(c) for c in preferred_categories]
-        cat_products = (
-            base.filter(Product.category_id.in_(cat_ids))
-            .order_by(cast(ProductScore.trending_score, NUMERIC).desc().nulls_last())
-            .limit(limit // 2)
+        seen = {p.id for p in results}
+        fill = (
+            base.filter(~Product.id.in_(seen) if seen else True)
+            .order_by(
+                cast(ProductScore.trending_score, NUMERIC).desc().nulls_last(),
+                Product.created_at.desc(),
+            )
+            .limit(limit - len(results))
             .all()
         )
-        results.extend(cat_products)
+        results.extend(fill)
+        return results
 
-    # second bucket: fill remaining slots with trending products not already included
-    seen = {p.id for p in results}
-    remaining = limit - len(results)
-    trending = (
-        base.filter(~Product.id.in_(seen) if seen else True)
-        .order_by(
-            cast(ProductScore.trending_score, NUMERIC).desc().nulls_last(),
-            Product.created_at.desc(),
-        )
-        .limit(remaining)
+    # ── Anonymous visitor: spread evenly across all categories ─
+    parent_categories = (
+        db.query(Category)
+        .filter(Category.parent_id == None, Category.is_active == True)
         .all()
     )
-    results.extend(trending)
+
+    results = []
+    seen: set = set()
+    per_cat = max(2, limit // max(len(parent_categories), 1))
+
+    for cat in parent_categories:
+        child_ids = [c.id for c in (cat.children or [])]
+        all_ids = [cat.id] + child_ids
+        products = (
+            db.query(Product)
+            .outerjoin(ProductScore, Product.id == ProductScore.product_id)
+            .filter(Product.status == ProductStatus.active, Product.category_id.in_(all_ids))
+            .order_by(
+                cast(ProductScore.trending_score, NUMERIC).desc().nulls_last(),
+                Product.created_at.desc(),
+            )
+            .limit(per_cat)
+            .all()
+        )
+        for p in products:
+            if p.id not in seen:
+                seen.add(p.id)
+                results.append(p)
+
+    # fill any remaining slots with trending products not yet included
+    if len(results) < limit:
+        extra = (
+            db.query(Product)
+            .outerjoin(ProductScore, Product.id == ProductScore.product_id)
+            .filter(Product.status == ProductStatus.active, ~Product.id.in_(seen))
+            .order_by(
+                cast(ProductScore.trending_score, NUMERIC).desc().nulls_last(),
+                Product.created_at.desc(),
+            )
+            .limit(limit - len(results))
+            .all()
+        )
+        results.extend(extra)
 
     return results
 
@@ -161,9 +201,12 @@ def get_recommendations(
 def get_trending(db: Session, limit: int = 20) -> List[Product]:
     return (
         db.query(Product)
-        .join(ProductScore, Product.id == ProductScore.product_id)
+        .outerjoin(ProductScore, Product.id == ProductScore.product_id)
         .filter(Product.status == ProductStatus.active)
-        .order_by(cast(ProductScore.trending_score, NUMERIC).desc())
+        .order_by(
+            cast(ProductScore.trending_score, NUMERIC).desc().nulls_last(),
+            Product.created_at.desc(),
+        )
         .limit(limit)
         .all()
     )

@@ -13,10 +13,11 @@ export async function serverFetch<T>(
         ...options,
         headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorisation: `Bearer ${token}`}: {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...options.headers,
         },
         cache: "no-store",
+        redirect: "follow",
     });
 
     if (!res.ok) {

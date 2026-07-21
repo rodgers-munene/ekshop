@@ -141,6 +141,14 @@ class Order(Base):
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     delivery = relationship("Delivery", back_populates="order", uselist=False)
 
+    @property
+    def buyer_name(self) -> str:
+        return f"{self.buyer.first_name} {self.buyer.last_name}"
+
+    @property
+    def delivery_address(self):
+        return self.group.delivery_address
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"

@@ -18,6 +18,7 @@ export interface Category {
   name: string;
   slug: string;
   parent_id?: string;
+  icon_url?: string;
   is_active: boolean;
   children?: Category[];
 }
@@ -29,6 +30,7 @@ export interface Shop {
   slug: string;
   description?: string;
   logo_url?: string;
+  banner_url?: string;
   county?: string;
   is_verified: boolean;
   rating_avg: string;
@@ -44,20 +46,44 @@ export interface ProductImage {
   sort_order: number;
 }
 
+export interface ShopSummary {
+  id: string;
+  name: string;
+  slug: string;
+  is_verified: boolean;
+  rating_avg: string;
+  rating_count: number;
+}
+
+export interface ProductVariant {
+  id: string;
+  name: string;
+  value: string;
+  price_delta: string;
+  stock_qty: number;
+  sku?: string;
+}
+
 export interface Product {
   id: string;
+  shop_id: string;
+  category_id?: string;
   name: string;
   slug: string;
   description?: string;
   price: string;
   compare_price?: string;
+  sku?: string;
   stock_qty: number;
   status: string;
-  shop: Shop;
-  category?: Category;
+  condition?: string;
+  tags?: string[];
+  shop?: ShopSummary;
   images: ProductImage[];
-  rating_avg: string;
-  rating_count: number;
+  variants?: ProductVariant[];
+  rating_avg?: string;
+  rating_count?: number;
+  created_at: string;
 }
 
 export interface ProductListResponse {
@@ -86,6 +112,16 @@ export interface Order {
   total: string;
   items: OrderItem[];
   created_at: string;
+  buyer_name?: string;
+  delivery_address?: {
+    first_name: string;
+    last_name: string;
+    phone: string;
+    county: string;
+    town: string;
+    exact_location?: string;
+    apartment?: string;
+  };
 }
 
 export interface OrderGroup {
@@ -115,6 +151,29 @@ export interface Delivery {
   estimated_at?: string;
   delivered_at?: string;
   events: DeliveryEvent[];
+}
+
+// Addresses
+export interface UserAddress {
+  id: string;
+  label?: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  county: string;
+  town: string;
+  street?: string;
+  building?: string;
+  is_default: boolean;
+}
+
+// Seller dashboard
+export interface ShopDashboardStats {
+  total_sales: number;
+  rating_avg: string;
+  rating_count: number;
+  total_products: number;
+  total_orders: number;
 }
 
 // Pagination helper

@@ -182,6 +182,27 @@ def get_shop_orders(
 
 
 @router.get(
+    "/me/orders/{order_id}",
+    response_model=OrderRead,
+    summary="Get one order in my shop",
+)
+def get_shop_order(
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_seller),
+):
+    shop = db.query(Shop).filter(Shop.seller_id == current_user.id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    order = db.query(Order).filter(Order.id == order_id, Order.shop_id == shop.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    return order
+
+
+@router.get(
     "/me/dashboard",
     response_model=ShopDashboardRead,
     status_code=status.HTTP_200_OK,

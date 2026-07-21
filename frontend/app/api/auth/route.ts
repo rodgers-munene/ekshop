@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL
 
 export async function POST(req: NextRequest) {
-  const { action, email, password } = await req.json();
+  const body = await req.json();
+  const { action, email, password } = body;
 
   // logout
   if (action === "logout") {
@@ -12,6 +13,21 @@ export async function POST(req: NextRequest) {
     cookieStore.delete("ekshop_token");
     cookieStore.delete("ekshop_refresh");
     return NextResponse.json({ ok: true });
+  }
+
+  // register
+  if (action === "register") {
+    const { first_name, last_name, phone, county, role } = body;
+    const registerRes = await fetch(`${BASE_URL}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, first_name, last_name, phone, county, role }),
+    });
+    if (!registerRes.ok) {
+      const error = await registerRes.json().catch(() => ({}));
+      return NextResponse.json({ detail: error.detail ?? "Registration failed" }, { status: registerRes.status });
+    }
+    // auto-login after register
   }
 
   // login

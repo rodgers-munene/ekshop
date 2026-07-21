@@ -11,7 +11,7 @@ class CategoryRead(BaseModel):
     name: str
     slug: str
     icon_url: Optional[str]
-    sort_order: int
+    sort_order: Optional[int] = 0
     is_active: bool
     children: List["CategoryRead"] = []
 
@@ -33,7 +33,7 @@ class ProductImageRead(BaseModel):
     url: str
     thumbnail_url: Optional[str]
     alt_text: Optional[str]
-    sort_order: int
+    sort_order: Optional[int] = 0
     is_primary: bool
 
     model_config = {"from_attributes": True}
@@ -83,6 +83,17 @@ class ProductCreate(BaseModel):
     tags: Optional[List[str]] = None
     variants: Optional[List[ProductVariantCreate]] = None
 
+class ShopSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    is_verified: bool
+    rating_avg: str
+    rating_count: int
+
+    model_config = {"from_attributes": True}
+
+
 class ProductRead(BaseModel):
     id: uuid.UUID
     shop_id: uuid.UUID
@@ -94,13 +105,16 @@ class ProductRead(BaseModel):
     compare_price: Optional[str]
     sku: Optional[str]
     stock_qty: int
-    condition: ProductCondition
+    condition: Optional[ProductCondition] = ProductCondition.new
     status: ProductStatus
-    is_fragile: bool
-    tags: Optional[List[str]]
-    popularity: int
+    is_fragile: Optional[bool] = False
+    tags: Optional[List[str]] = None
+    popularity: Optional[int] = 0
+    rating_avg: Optional[str] = "0.00"
+    rating_count: Optional[int] = 0
     images: List[ProductImageRead] = []
     variants: List[ProductVariantRead] = []
+    shop: Optional[ShopSummary] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

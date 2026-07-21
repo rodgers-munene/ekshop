@@ -100,6 +100,8 @@ class OrderRead(BaseModel):
     notes: Optional[str]
     items: List[OrderItemRead] = []
     created_at: datetime
+    buyer_name: Optional[str] = None
+    delivery_address: Optional[Any] = None
 
     model_config = {"from_attributes": True}
 
