@@ -15,9 +15,12 @@ data "aws_ami" "al2023" {
   most_recent = true
   owners      = ["amazon"]
 
+  # Standard AL2023 only (not "al2023-ami-minimal-*", which excludes
+  # amazon-ssm-agent — SSM Run Command is how we deploy, so it must be
+  # preinstalled on first boot).
   filter {
     name   = "name"
-    values = ["al2023-ami-*-x86_64"]
+    values = ["al2023-ami-2023.*-x86_64"]
   }
   filter {
     name   = "virtualization-type"
