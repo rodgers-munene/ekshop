@@ -3,8 +3,8 @@ output "ecr_repository_url" {
 }
 
 output "backend_url" {
-  description = "Public HTTP URL of the backend (add HTTPS once a domain exists)"
-  value       = "http://${aws_eip.backend.public_ip}"
+  description = "Public HTTPS URL of the backend, via sslip.io (no domain purchased — see README)"
+  value       = "https://${replace(aws_eip.backend.public_ip, ".", "-")}.sslip.io"
 }
 
 output "ec2_instance_id" {

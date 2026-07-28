@@ -73,7 +73,8 @@ ECR, then run a deploy script on the EC2 instance via `aws ssm send-command`
 (pulls the new image, refreshes the env file from Secrets Manager, restarts
 the container) and waits for it to report `Success`.
 
-Your API is live at the `backend_url` output (`http://<elastic-ip>`).
+Your API is live at the `backend_url` output
+(`https://<elastic-ip-with-dashes>.sslip.io`).
 Update `plain_env.FRONTEND_URL`, `plain_env.CORS_ORIGINS`, and
 `plain_env.MPESA_CALLBACK_URL` in `terraform.tfvars` once you know the real
 frontend origin and callback URL, then `terraform apply` again (this updates
@@ -81,13 +82,36 @@ the Secrets Manager secret; re-run the GitHub Actions workflow, or manually
 re-run the SSM deploy command, to pick up the change — the running container
 doesn't auto-reload env vars).
 
-## Follow-ups this setup intentionally defers
+## HTTPS without a purchased domain
 
-- **HTTPS**: the instance currently serves plain HTTP. Once you have a
-  domain, point it at the Elastic IP and add Nginx + Let's Encrypt
-  (`certbot`) on the instance as a reverse proxy in front of the container,
-  or put a Classic/Application Load Balancer with an ACM cert in front of
-  it. Either is a follow-up, not required to get the pipeline working today.
+No domain was bought for this project, but the frontend (Vercel, HTTPS) can't
+call a plain-HTTP backend (mixed content). The fix in place:
+
+- **[sslip.io](https://sslip.io)** — a free wildcard DNS service that
+  resolves `<ip-with-dashes>.sslip.io` to that IP with no signup, e.g.
+  `108-132-239-118.sslip.io` → `108.132.239.118`. AWS's own auto-generated
+  EC2 hostname (`ec2-<ip>.<region>.compute.amazonaws.com`) does **not**
+  work for this — Let's Encrypt's CA policy explicitly refuses to issue
+  certs for `*.amazonaws.com`.
+- **Nginx**, installed via the instance's `dnf`, reverse-proxies
+  `:80`/`:443` → `127.0.0.1:8000` (the app container binds to localhost
+  only, per the `-p 127.0.0.1:8000:8000` in the deploy workflow, so it's
+  never reachable except through Nginx).
+- **Certbot** (`pip3 install certbot certbot-nginx` — AL2023's default repos
+  don't package certbot) issued a real Let's Encrypt certificate for the
+  sslip.io hostname and configured the Nginx TLS block automatically.
+- Renewal: a cron job (`17 3 * * * /usr/local/bin/certbot renew --quiet`,
+  via `cronie`, which also isn't installed by default on this AMI) handles
+  renewal before the cert's ~90-day expiry.
+
+If a real domain is bought later, point an A record at the Elastic IP,
+re-run `certbot --nginx -d yourdomain.com` on the instance, and update
+`plain_env.FRONTEND_URL` / `CORS_ORIGINS` / `MPESA_CALLBACK_URL` and the
+`backend_url` output accordingly — the sslip.io setup is a stand-in, not a
+dead end you need to unwind first.
+
+## Other follow-ups this setup intentionally defers
+
 - **App Runner migration**: if/when the AWS account verification clears
   (check with `aws apprunner list-services --region eu-west-1` — it stops
   returning `SubscriptionRequiredException`), moving to App Runner later is
