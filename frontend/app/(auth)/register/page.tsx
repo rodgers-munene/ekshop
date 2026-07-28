@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { useAuthStore, AuthUser } from "@/store/authStore";
 
 const schema = z.object({
   first_name: z.string().min(2, "First name is required"),
@@ -22,9 +20,8 @@ const schema = z.object({
 type RegisterForm = z.infer<typeof schema>;
 
 export default function RegisterPage() {
-  const router = useRouter();
-  const { setUser } = useAuthStore();
   const [loading, setLoading] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<RegisterForm>({
     resolver: zodResolver(schema),
@@ -46,9 +43,7 @@ export default function RegisterPage() {
         toast.error(json.detail ?? "Registration failed");
         return;
       }
-      setUser(json.user as AuthUser);
-      toast.success(`Welcome, ${json.user.first_name}!`);
-      router.push(data.role === "seller" ? "/dashboard" : "/");
+      setRegisteredEmail(data.email);
     } catch {
       toast.error("Something went wrong. Try again.");
     } finally {
@@ -67,7 +62,7 @@ export default function RegisterPage() {
           <h1 className="text-5xl font-bold leading-tight mb-4">
             Join Kenya&apos;s<br />fastest-growing<br />marketplace.
           </h1>
-          <p className="text-white/70 text-lg">Buy from thousands of verified sellers — or become one.</p>
+          <p className="text-white/70 text-lg">Buy from thousands of verified sellers, or become one.</p>
         </div>
         <p className="text-sm text-white/50">© {new Date().getFullYear()} Ekshop</p>
       </div>
@@ -75,6 +70,17 @@ export default function RegisterPage() {
       {/* Form */}
       <div className="flex-1 flex items-center justify-center px-6 py-12 overflow-y-auto">
         <div className="w-full max-w-sm">
+        {registeredEmail ? (
+          <>
+            <h2 className="text-3xl font-bold mb-2">Check your inbox</h2>
+            <p className="text-muted text-sm mb-6">
+              We sent a verification link to <strong>{registeredEmail}</strong>. Click it to
+              activate your account, then sign in.
+            </p>
+            <Link href="/login" className="btn-accent inline-block">Go to sign in →</Link>
+          </>
+        ) : (
+        <>
           <h2 className="text-3xl font-bold mb-1">Create account</h2>
           <p className="text-muted text-sm mb-6">
             Already have one?{" "}
@@ -100,7 +106,7 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">First name</label>
                 <input {...register("first_name")} className="input-field" placeholder="John" />
@@ -137,6 +143,12 @@ export default function RegisterPage() {
               {errors.password && <p className="text-danger text-xs mt-1">{errors.password.message}</p>}
             </div>
 
+            <p className="text-xs text-muted">
+              By creating an account, you agree to Ekshop&apos;s{" "}
+              <Link href="/terms" className="text-amber underline underline-offset-2">Terms of Service</Link> and{" "}
+              <Link href="/privacy" className="text-amber underline underline-offset-2">Privacy Policy</Link>.
+            </p>
+
             <button
               type="submit"
               disabled={loading}
@@ -145,6 +157,8 @@ export default function RegisterPage() {
               {loading ? "Creating account..." : `Create ${role === "seller" ? "seller" : ""} account`}
             </button>
           </form>
+        </>
+        )}
         </div>
       </div>
     </div>

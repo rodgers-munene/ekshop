@@ -153,6 +153,76 @@ export interface Delivery {
   events: DeliveryEvent[];
 }
 
+export interface DeliveryAgent {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  status: string;
+  total_deliveries: number;
+  rating_avg: string;
+  created_at: string;
+}
+
+// Messaging
+export interface Message {
+  id: string;
+  sender_id?: string;
+  body: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  buyer_id: string;
+  shop_id: string;
+  last_message_at: string;
+  messages: Message[];
+}
+
+export interface ConversationSummary {
+  id: string;
+  buyer_id: string;
+  shop_id: string;
+  shop_name?: string;
+  buyer_name?: string;
+  last_message_at: string;
+  last_message_body?: string;
+  unread_count: number;
+}
+
+// Admin
+export interface AdminStats {
+  total_users: number;
+  total_buyers: number;
+  total_sellers: number;
+  new_users_7d: number;
+  total_shops: number;
+  shops_pending_verification: number;
+  total_products: number;
+  total_orders: number;
+  orders_7d: number;
+  revenue_total: string;
+  revenue_7d: string;
+}
+
+export interface AdminTrendPoint {
+  label: string;
+  revenue: number;
+  orders: number;
+}
+
+export interface HeroSlide {
+  id: string;
+  image_url: string;
+  title?: string;
+  link_url?: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
 // Addresses
 export interface UserAddress {
   id: string;

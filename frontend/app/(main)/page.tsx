@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   Smartphone,
   Truck,
@@ -6,24 +7,23 @@ import {
   RotateCcw,
   BadgeCheck,
   Star,
-  LayoutDashboard,
-  Wifi,
-  Signal,
-  BatteryFull,
+  ArrowUpRight,
   TrendingUp,
   Package,
   Receipt,
 } from "lucide-react";
 import { serverFetch } from "@/lib/server-api";
 import { resolveImageUrl } from "@/lib/utils";
-import { Product, Category, ProductListResponse, ShopSummary } from "@/types/interface";
+import { Product, Category, ProductListResponse, ShopSummary, HeroSlide } from "@/types/interface";
 import ProductRail from "@/components/ProductRail";
+import HeroSlideshow from "@/components/HeroSlideshow";
 
 export default async function HomePage() {
-  const [trending, categories, newArrivalsRes] = await Promise.all([
+  const [trending, categories, newArrivalsRes, heroSlides] = await Promise.all([
     serverFetch<Product[]>("/recommendations?limit=20").catch(() => []),
     serverFetch<Category[]>("/categories/").catch(() => []),
     serverFetch<ProductListResponse>("/products/?limit=8").catch(() => null),
+    serverFetch<HeroSlide[]>("/hero-slides").catch(() => []),
   ]);
 
   const featuredProduct = trending[0] ?? null;
@@ -64,44 +64,13 @@ export default async function HomePage() {
     <div className="w-full">
 
       {/* ── Full-bleed hero ─────────────────────────────────── */}
-      <section className="relative h-[360px] md:h-[420px] overflow-hidden">
-        {featuredProduct?.images?.[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={resolveImageUrl(featuredProduct.images[0].url)}
-            alt=""
-            loading="eager"
-            decoding="async"
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-navy" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/40 to-transparent" />
-
-        <div className="relative h-full flex flex-col justify-center px-6 md:px-12 max-w-xl">
-          <span className="text-xs font-medium tracking-widest uppercase text-white/70 mb-3">
-            Kenya&apos;s Marketplace
-          </span>
-          <h1 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4 text-white">
-            Everything you need, <span className="text-amber">delivered.</span>
-          </h1>
-          <p className="text-white/80 text-sm mb-6 max-w-xs">
-            Thousands of verified sellers. One seamless experience.
-          </p>
-          <div>
-            <Link href="/products" className="btn-accent">
-              Shop Deals →
-            </Link>
-          </div>
-        </div>
-      </section>
+      <HeroSlideshow slides={heroSlides} fallbackImageUrl={featuredProduct?.images?.[0]?.url} />
 
       {/* ── Quick-link card row (overlaps hero) ──────────────── */}
       <section className="relative z-10 px-4 md:px-6 -mt-10 md:-mt-14 pb-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
 
-          {/* Card A — category quick grid */}
+          {/* Card A: category quick grid */}
           {quickCategoriesA.length > 0 && (
             <div className="card p-4 flex flex-col">
               <h3 className="font-bold text-sm mb-3">Keep shopping for...</h3>
@@ -137,7 +106,7 @@ export default async function HomePage() {
             </div>
           )}
 
-          {/* Card B — deal highlight */}
+          {/* Card B: deal highlight */}
           {dealHighlight && (
             <div className="card p-4 flex flex-col">
               <h3 className="font-bold text-sm mb-3">Today&apos;s Deals</h3>
@@ -160,7 +129,7 @@ export default async function HomePage() {
             </div>
           )}
 
-          {/* Card C — second category quick grid */}
+          {/* Card C: second category quick grid */}
           {quickCategoriesB.length > 0 && (
             <div className="card p-4 flex flex-col">
               <h3 className="font-bold text-sm mb-3">Browse Categories</h3>
@@ -196,7 +165,7 @@ export default async function HomePage() {
             </div>
           )}
 
-          {/* Card D — new arrivals highlight */}
+          {/* Card D: new arrivals highlight */}
           {arrivalHighlight && (
             <div className="card p-4 flex flex-col">
               <h3 className="font-bold text-sm mb-3">New Arrivals</h3>
@@ -293,7 +262,7 @@ export default async function HomePage() {
               Turn your hustle into a shop.
             </h2>
             <p className="text-white/70 text-sm max-w-md">
-              List your products, reach buyers across Kenya, and get paid via M-Pesa — no setup fees.
+              List your products, reach buyers across Kenya, and get paid via M-Pesa, no setup fees.
             </p>
           </div>
           <div className="shrink-0 flex gap-3">
@@ -317,74 +286,57 @@ export default async function HomePage() {
           <div className="absolute -top-16 -left-16 w-64 h-64 bg-amber/20 rounded-full blur-3xl" />
           <div className="absolute -bottom-20 -right-10 w-72 h-72 bg-navy-light/60 rounded-full blur-3xl" />
 
-          <div className="relative px-4 md:px-10 py-12 flex flex-col md:flex-row items-center gap-10">
+          <div className="relative px-4 md:px-10 py-10 md:py-14 flex flex-col md:flex-row items-center gap-10 md:gap-16">
             {/* Text */}
-            <div className="flex-1 order-2 md:order-1">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="flex-1 order-2 md:order-1 text-center md:text-left">
+              <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
                 <p className="text-2xl md:text-3xl font-extrabold">Tara POS</p>
-                <span className="text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 bg-amber text-ink rounded-full">
-                  Coming Soon
+                <span className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 bg-amber text-ink rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-ink/70" /> Live now
                 </span>
               </div>
-              <p className="text-white/80 text-sm max-w-md mb-4">
-                One dashboard for your whole business. Soon, sellers will connect their Ekshop
-                shop to Tara POS and manage inventory, sales, and orders in real time — in-store
-                and online, perfectly in sync — right from your phone.
+              <p className="text-white/80 text-sm max-w-md mx-auto md:mx-0 mb-4">
+                One dashboard for your whole business. Connect your Ekshop shop to Tara POS
+                and manage inventory, sales, and orders in real time, in-store and online,
+                perfectly in sync, right from your phone.
               </p>
-              <div className="flex items-center gap-4 text-xs text-white/70">
+              <div className="flex items-center justify-center md:justify-start gap-4 text-xs text-white/70 mb-6">
                 <span className="flex items-center gap-1"><Package size={14} /> Inventory</span>
                 <span className="flex items-center gap-1"><Receipt size={14} /> Sales</span>
                 <span className="flex items-center gap-1"><TrendingUp size={14} /> Insights</span>
               </div>
+              <a
+                href="https://tara.ekshop.store"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-accent inline-flex items-center gap-1.5"
+              >
+                Open Tara POS <ArrowUpRight size={16} />
+              </a>
             </div>
 
-            {/* Phone mockup */}
-            <div className="order-1 md:order-2 shrink-0 w-44 select-none">
-              <div className="rounded-[2rem] bg-navy border-[3px] border-white/10 shadow-2xl p-2">
-                <div className="relative rounded-[1.5rem] overflow-hidden bg-gradient-to-b from-navy-light via-navy to-black h-[340px] flex flex-col">
-                  {/* status bar */}
-                  <div className="flex items-center justify-between px-4 pt-3 text-white/90">
-                    <span className="text-[10px] font-semibold">9:41</span>
-                    <div className="flex items-center gap-1">
-                      <Signal size={10} />
-                      <Wifi size={10} />
-                      <BatteryFull size={11} />
-                    </div>
-                  </div>
-                  {/* notch */}
-                  <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-1" />
+            {/* Screenshots */}
+            <div className="order-1 md:order-2 relative shrink-0 w-full max-w-[280px] sm:max-w-none sm:w-[380px] md:w-[440px] select-none">
+              {/* Desktop dashboard, hidden on the smallest screens to keep things legible */}
+              <div className="hidden sm:block sm:mr-14 md:mr-16 rounded-lg overflow-hidden shadow-2xl ring-1 ring-white/10">
+                <Image
+                  src="/tara_dashboard.png"
+                  alt="Tara POS inventory dashboard"
+                  width={1364}
+                  height={655}
+                  className="w-full h-auto"
+                />
+              </div>
 
-                  {/* app content */}
-                  <div className="px-3 pt-3 flex-1 flex flex-col gap-2">
-                    <div className="flex items-center gap-1.5 text-white">
-                      <LayoutDashboard size={14} />
-                      <span className="text-xs font-semibold">Tara POS</span>
-                    </div>
-
-                    <div className="bg-white/95 rounded-lg p-2.5 text-ink">
-                      <p className="text-[9px] text-muted uppercase tracking-wide">Today&apos;s Sales</p>
-                      <p className="text-lg font-bold leading-tight">KES 24,580</p>
-                      <div className="flex items-end gap-1 h-9 mt-1.5">
-                        {[40, 65, 35, 80, 55, 95, 70].map((h, i) => (
-                          <div
-                            key={i}
-                            style={{ height: `${h}%` }}
-                            className="flex-1 bg-amber rounded-t-sm"
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-white/10 rounded-lg px-2.5 py-2 flex items-center justify-between text-white">
-                      <span className="flex items-center gap-1.5 text-[10px]"><Receipt size={12} /> Orders</span>
-                      <span className="text-[10px] font-semibold">12 new</span>
-                    </div>
-                    <div className="bg-white/10 rounded-lg px-2.5 py-2 flex items-center justify-between text-white">
-                      <span className="flex items-center gap-1.5 text-[10px]"><Package size={12} /> Inventory</span>
-                      <span className="text-[10px] font-semibold">340 items</span>
-                    </div>
-                  </div>
-                </div>
+              {/* Phone app, overlapping the dashboard on larger screens */}
+              <div className="w-32 sm:w-36 md:w-40 mx-auto sm:absolute sm:-bottom-4 sm:-right-2 md:-right-6 drop-shadow-2xl">
+                <Image
+                  src="/tara_phone_dash.png"
+                  alt="Tara POS mobile app"
+                  width={744}
+                  height={1510}
+                  className="w-full h-auto"
+                />
               </div>
             </div>
           </div>

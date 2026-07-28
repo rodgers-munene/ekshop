@@ -19,6 +19,7 @@ from app.schemas.commerce import (
     OrderRead,
     OrderStatusUpdate,
 )
+from app.services.notifications import create_notification
 
 cart_router = APIRouter(prefix="/cart", tags=["cart"])
 checkout_router = APIRouter(prefix="/checkout", tags=["checkout"])
@@ -177,7 +178,7 @@ def clear_cart(
     "/",
     response_model=OrderGroupRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Checkout — convert cart into orders",
+    summary="Checkout: convert cart into orders",
 )
 def checkout(
     payload: CheckoutCreate,
@@ -298,7 +299,7 @@ def checkout(
     # clear the cart
     db.execute(delete(CartItem).where(CartItem.cart_id == cart.id))
 
-    # single commit — all or nothing
+    # single commit, all or nothing
     db.commit()
     db.refresh(order_group)
 
@@ -387,6 +388,16 @@ def update_order_status(
         )
 
     order.status = payload.status
+
+    create_notification(
+        db,
+        user_id=order.buyer_id,
+        type="order_status",
+        title=f"Order update: {shop.name}",
+        body=f"Your order is now '{payload.status.value}'.",
+        data={"order_id": str(order.id), "status": payload.status.value},
+    )
+
     db.commit()
     db.refresh(order)
 
@@ -427,6 +438,16 @@ def cancel_order(
                 product.stock_qty += item.quantity
 
     order.status = "cancelled"
+
+    create_notification(
+        db,
+        user_id=order.shop.seller_id,
+        type="order_cancelled",
+        title="Order cancelled",
+        body=f"{current_user.first_name} cancelled an order.",
+        data={"order_id": str(order.id)},
+    )
+
     db.commit()
     db.refresh(order)
 

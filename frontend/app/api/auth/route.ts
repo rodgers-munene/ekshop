@@ -10,6 +10,17 @@ export async function POST(req: NextRequest) {
   // logout
   if (action === "logout") {
     const cookieStore = await cookies();
+    const accessToken = cookieStore.get("ekshop_token")?.value;
+    const refreshToken = cookieStore.get("ekshop_refresh")?.value;
+
+    if (accessToken && refreshToken) {
+      // Best-effort: revoke the refresh token server-side so it can't be replayed.
+      await fetch(`${BASE_URL}/auth/logout?raw_token=${encodeURIComponent(refreshToken)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => {});
+    }
+
     cookieStore.delete("ekshop_token");
     cookieStore.delete("ekshop_refresh");
     return NextResponse.json({ ok: true });
@@ -27,7 +38,38 @@ export async function POST(req: NextRequest) {
       const error = await registerRes.json().catch(() => ({}));
       return NextResponse.json({ detail: error.detail ?? "Registration failed" }, { status: registerRes.status });
     }
-    // auto-login after register
+    // Accounts start as "pending" until the verification email is confirmed;
+    // logging in immediately would 403, so stop here instead of falling through.
+    return NextResponse.json({ pending_verification: true });
+  }
+
+  // verify email
+  if (action === "verify-email") {
+    const { token } = body;
+    const res = await fetch(`${BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return NextResponse.json({ detail: data.detail ?? "Verification failed" }, { status: res.status });
+    return NextResponse.json(data);
+  }
+
+  // forgot password
+  if (action === "forgot-password") {
+    const res = await fetch(`${BASE_URL}/auth/forgot-password?email=${encodeURIComponent(email)}`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    return NextResponse.json(data, { status: res.status });
+  }
+
+  // reset password
+  if (action === "reset-password") {
+    const { token, new_password } = body;
+    const res = await fetch(`${BASE_URL}/auth/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, new_password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return NextResponse.json({ detail: data.detail ?? "Reset failed" }, { status: res.status });
+    return NextResponse.json(data);
   }
 
   // login

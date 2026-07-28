@@ -7,20 +7,20 @@ import HeaderAccountMenu from "./HeaderAccountMenu";
 export default function DashboardHeader({ user, shop }: { user: User; shop: Shop }) {
   return (
     <header className="bg-navy border-b border-white/10">
-      <div className="px-4 md:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-lg overflow-hidden bg-navy-light ring-1 ring-white/10 shrink-0 flex items-center justify-center">
+      <div className="px-4 md:px-8 py-2 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg overflow-hidden bg-navy-light ring-1 ring-white/10 shrink-0 flex items-center justify-center">
             {shop.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={resolveImageUrl(shop.logo_url)} alt={shop.name} className="w-full h-full object-cover" />
             ) : (
-              <Store size={18} className="text-white" />
+              <Store size={15} className="text-white" />
             )}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <p className="font-bold text-white truncate">{shop.name}</p>
-              {shop.is_verified && <BadgeCheck size={15} className="text-info shrink-0" />}
+              <p className="font-bold text-white text-sm truncate">{shop.name}</p>
+              {shop.is_verified && <BadgeCheck size={13} className="text-info shrink-0" />}
             </div>
             <div className="flex items-center gap-3 text-xs text-white/60">
               {shop.county && (

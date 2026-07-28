@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status, Query
+from fastapi import APIRouter, File, Form, HTTPException, Depends, UploadFile, status, Query
 import uuid
 from typing import Optional
 
@@ -7,15 +7,17 @@ from sqlalchemy import cast, Numeric, update, delete
 
 from app.models.user import User
 from app.dependencies.database import get_db
-from app.dependencies.auth import get_current_active_user
+from app.dependencies.auth import get_current_active_user, require_admin
 from app.schemas.catalog import (
     CategoryRead,
+    CategoryCreate,
+    CategoryUpdate,
     ProductRead,
     ProductCreate,
     ProductUpdate,
     ProductStatus,
     ProductListResponse,
-    ProductImageCreate,
+    CategoryListResponse,
     ProductImageRead,
     ProductVariantCreate,
     ProductVariantUpdate,
@@ -25,6 +27,7 @@ from app.schemas.catalog import (
 )
 from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview
 from app.models.shop import Shop
+from app.services import storage
 
 categories_router = APIRouter(prefix="/categories", tags=["categories"])
 products_router = APIRouter(prefix="/products", tags=["products"])
@@ -59,8 +62,92 @@ def get_single_category(category_id: uuid.UUID, db: Session = Depends(get_db)):
     
     if not category:
         raise HTTPException(status_code=404, detail="Category not found or inactive")
-    
+
     return category
+
+
+# admin: list all categories including inactive ones, for management
+@categories_router.get(
+    "/admin/all",
+    response_model=CategoryListResponse,
+    summary="List all categories including inactive (admin only)",
+)
+def list_all_categories(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    query = db.query(Category).filter(Category.parent_id == None)
+    total = query.count()
+    skip = (page - 1) * limit
+    results = query.order_by(Category.sort_order).offset(skip).limit(limit).all()
+    return CategoryListResponse(total=total, page=page, limit=limit, results=results)
+
+
+# admin: create a category
+@categories_router.post(
+    "/",
+    response_model=CategoryRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a category (admin only)",
+)
+def create_category(
+    payload: CategoryCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    if db.query(Category).filter(Category.slug == payload.slug).first():
+        raise HTTPException(status_code=409, detail="A category with this slug already exists")
+
+    category = Category(**payload.model_dump())
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return category
+
+
+# admin: update a category
+@categories_router.patch(
+    "/{category_id}",
+    response_model=CategoryRead,
+    summary="Update a category (admin only)",
+)
+def update_category(
+    category_id: uuid.UUID,
+    payload: CategoryUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(category, field, value)
+
+    db.commit()
+    db.refresh(category)
+    return category
+
+
+# admin: delete a category
+@categories_router.delete(
+    "/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a category (admin only)",
+)
+def delete_category(
+    category_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    db.delete(category)
+    db.commit()
 
 
 # PRODUCTS
@@ -238,11 +325,14 @@ def delete_product(slug: str, db: Session = Depends(get_db), current_user: User 
     "/{product_id}/images",
     response_model=ProductImageRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Add an image to a product",
+    summary="Upload an image to a product",
 )
 def add_product_image(
     product_id: uuid.UUID,
-    payload: ProductImageCreate,
+    file: UploadFile = File(...),
+    alt_text: Optional[str] = Form(None),
+    sort_order: int = Form(0),
+    is_primary: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -257,7 +347,23 @@ def add_product_image(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    image = ProductImage(**payload.model_dump(), product_id=product.id)
+    try:
+        url = storage.upload_product_image(
+            product_id=product.id,
+            filename=file.filename or "image.jpg",
+            content_type=file.content_type or "application/octet-stream",
+            data=file.file.read(),
+        )
+    except storage.StorageError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    image = ProductImage(
+        product_id=product.id,
+        url=url,
+        alt_text=alt_text,
+        sort_order=sort_order,
+        is_primary=is_primary,
+    )
     db.add(image)
     db.commit()
     db.refresh(image)
@@ -295,6 +401,7 @@ def delete_product_image(
     if not product:
         raise HTTPException(status_code=403, detail="Not your product")
 
+    storage.delete_product_image(image.url)
     db.delete(image)
     db.commit()
 

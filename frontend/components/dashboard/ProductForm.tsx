@@ -17,7 +17,7 @@ interface VariantRow {
 
 function flattenCategories(categories: Category[], depth = 0): { id: string; label: string }[] {
   return categories.flatMap((c) => [
-    { id: c.id, label: `${"— ".repeat(depth)}${c.name}` },
+    { id: c.id, label: `${"  ".repeat(depth)}${depth > 0 ? "› " : ""}${c.name}` },
     ...flattenCategories(c.children ?? [], depth + 1),
   ]);
 }
@@ -55,8 +55,7 @@ export default function ProductForm({
   const [tags, setTags] = useState((product?.tags ?? []).join(", "));
 
   const [variants, setVariants] = useState<VariantRow[]>([]);
-  const [newImageUrl, setNewImageUrl] = useState("");
-  const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState(product?.images ?? []);
 
   const flatCategories = flattenCategories(categories ?? []);
@@ -73,14 +72,27 @@ export default function ProductForm({
     setVariants((v) => v.filter((_, i) => i !== index));
   }
 
-  function addPendingImage() {
-    if (!newImageUrl.trim()) return;
-    setPendingImages((imgs) => [...imgs, newImageUrl.trim()]);
-    setNewImageUrl("");
+  function addPendingFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setPendingImages((imgs) => [...imgs, ...Array.from(fileList)]);
   }
 
   function removePendingImage(index: number) {
     setPendingImages((imgs) => imgs.filter((_, i) => i !== index));
+  }
+
+  async function uploadImage(productId: string, file: File, isPrimary: boolean) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("is_primary", String(isPrimary));
+    const res = await fetch(`/api/dashboard/products/${productId}/images`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.detail ?? `Could not upload ${file.name}`);
+    }
   }
 
   async function removeExistingImage(imageId: string) {
@@ -132,12 +144,8 @@ export default function ProductForm({
           return;
         }
 
-        for (const [i, url] of pendingImages.entries()) {
-          await fetch(`/api/dashboard/products/${created.id}/images`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url, is_primary: i === 0 }),
-          });
+        for (const [i, file] of pendingImages.entries()) {
+          await uploadImage(created.id, file, i === 0);
         }
 
         toast.success("Product created!");
@@ -165,12 +173,8 @@ export default function ProductForm({
           return;
         }
 
-        for (const [i, url] of pendingImages.entries()) {
-          await fetch(`/api/dashboard/products/${product.id}/images`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url, is_primary: existingImages.length === 0 && i === 0 }),
-          });
+        for (const [i, file] of pendingImages.entries()) {
+          await uploadImage(product.id, file, existingImages.length === 0 && i === 0);
         }
 
         for (const v of variants) {
@@ -227,7 +231,7 @@ export default function ProductForm({
           <textarea className="input-field" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Price (KES)</label>
             <input className="input-field" value={price} onChange={(e) => setPrice(e.target.value)} required />
@@ -238,7 +242,7 @@ export default function ProductForm({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Stock quantity</label>
             <input type="number" className="input-field" value={stockQty} onChange={(e) => setStockQty(e.target.value)} />
@@ -255,7 +259,7 @@ export default function ProductForm({
 
         {mode === "create" && (
           <>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">SKU</label>
                 <input className="input-field" value={sku} onChange={(e) => setSku(e.target.value)} />
@@ -291,10 +295,10 @@ export default function ProductForm({
       {/* Images */}
       <div className="card p-5">
         <h2 className="font-semibold mb-3">Images</h2>
-        <p className="text-xs text-muted mb-3">Paste a link to an already-hosted image. File upload isn&apos;t supported yet.</p>
+        <p className="text-xs text-muted mb-3">JPEG, PNG or WebP, up to 5MB each. First image is the primary photo.</p>
 
-        {existingImages.length > 0 && (
-          <div className="grid grid-cols-4 gap-2 mb-3">
+        {(existingImages.length > 0 || pendingImages.length > 0) && (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
             {existingImages.map((img) => (
               <div key={img.id} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -308,33 +312,35 @@ export default function ProductForm({
                 </button>
               </div>
             ))}
+            {pendingImages.map((file, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={URL.createObjectURL(file)} alt="" className="w-full aspect-square object-cover rounded border border-border" />
+                <button
+                  type="button"
+                  onClick={() => removePendingImage(i)}
+                  className="absolute top-1 right-1 bg-white/90 rounded-full p-1 shadow-sm"
+                >
+                  <Trash2 size={12} className="text-danger" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
-        {pendingImages.length > 0 && (
-          <ul className="text-sm mb-3 space-y-1">
-            {pendingImages.map((url, i) => (
-              <li key={i} className="flex items-center justify-between bg-surface rounded px-3 py-1.5">
-                <span className="truncate">{url}</span>
-                <button type="button" onClick={() => removePendingImage(i)} className="text-danger text-xs shrink-0 ml-2">
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="flex gap-2">
+        <label className="btn-navy inline-block cursor-pointer">
+          Choose images
           <input
-            className="input-field"
-            placeholder="https://example.com/image.jpg"
-            value={newImageUrl}
-            onChange={(e) => setNewImageUrl(e.target.value)}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              addPendingFiles(e.target.files);
+              e.target.value = "";
+            }}
           />
-          <button type="button" onClick={addPendingImage} className="btn-navy shrink-0">
-            Add
-          </button>
-        </div>
+        </label>
       </div>
 
       {/* Variants */}
@@ -342,8 +348,8 @@ export default function ProductForm({
         <h2 className="font-semibold mb-1">Variants</h2>
         <p className="text-xs text-muted mb-3">
           {mode === "edit" && product?.variants?.length
-            ? "Existing variants can't be edited yet — only new ones can be added."
-            : "Optional — e.g. size or color."}
+            ? "Existing variants can't be edited yet. Only new ones can be added."
+            : "Optional, e.g. size or color."}
         </p>
 
         {mode === "edit" && product?.variants && product.variants.length > 0 && (
@@ -357,12 +363,12 @@ export default function ProductForm({
         )}
 
         {variants.map((row, i) => (
-          <div key={i} className="grid grid-cols-5 gap-2 mb-2 items-center">
+          <div key={i} className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-2 sm:items-center">
             <input className="input-field" placeholder="Name (e.g. Size)" value={row.name} onChange={(e) => updateVariantRow(i, "name", e.target.value)} />
             <input className="input-field" placeholder="Value (e.g. M)" value={row.value} onChange={(e) => updateVariantRow(i, "value", e.target.value)} />
             <input className="input-field" placeholder="Price delta" value={row.price_delta} onChange={(e) => updateVariantRow(i, "price_delta", e.target.value)} />
             <input className="input-field" placeholder="Stock" value={row.stock_qty} onChange={(e) => updateVariantRow(i, "stock_qty", e.target.value)} />
-            <button type="button" onClick={() => removeVariantRow(i)} className="text-danger text-xs justify-self-start">
+            <button type="button" onClick={() => removeVariantRow(i)} className="col-span-2 sm:col-span-1 text-danger text-xs justify-self-start">
               Remove
             </button>
           </div>

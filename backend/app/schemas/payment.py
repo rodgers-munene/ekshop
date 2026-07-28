@@ -30,7 +30,21 @@ class PaymentRead(BaseModel):
 class StkPushRequest(BaseModel):
     order_group_id: uuid.UUID # which order is being paid for
     phone: str
-    
+
 class StkPushResponse(BaseModel):
     message: str
     checkout_request_id: str
+
+
+class PaystackInitRequest(BaseModel):
+    order_group_id: uuid.UUID
+
+
+class PaystackInitResponse(BaseModel):
+    authorization_url: str
+    reference: str
+
+
+class PaystackVerifyResponse(BaseModel):
+    status: PaymentStatus
+    order_group_id: uuid.UUID

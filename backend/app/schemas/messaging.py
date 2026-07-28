@@ -26,3 +26,20 @@ class ConversationRead(BaseModel):
     messages: List[MessageRead] = []
 
     model_config = {"from_attributes": True}
+
+
+class ConversationCreate(BaseModel):
+    shop_id: uuid.UUID
+
+
+class ConversationSummary(BaseModel):
+    id: uuid.UUID
+    buyer_id: uuid.UUID
+    shop_id: uuid.UUID
+    shop_name: Optional[str] = None
+    buyer_name: Optional[str] = None
+    last_message_at: datetime
+    last_message_body: Optional[str] = None
+    unread_count: int = 0
+
+    model_config = {"from_attributes": True}

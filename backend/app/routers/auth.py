@@ -1,10 +1,12 @@
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.config import ACCESS_TOKEN_EXPIRE_DAYS, REFRESH_TOKEN_EXPIRE_DAYS
+from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -15,6 +17,7 @@ from app.core.security import (
 )
 from app.dependencies.auth import bearer_scheme, get_current_user
 from app.dependencies.database import get_db
+from app.services import email as email_service
 from app.models.user import (
     EmailVerification,
     EmailVerificationPurpose,
@@ -23,9 +26,10 @@ from app.models.user import (
     User,
     UserStatus,
 )
-from app.schemas.user import LoginRequest, TokenResponse, UserCreate, UserRead
+from app.schemas.user import LoginRequest, ResetPasswordRequest, TokenResponse, UserCreate, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -46,7 +50,8 @@ Create a new buyer or seller account.
 The account remains `pending` until `/auth/verify-email` is called with the token.
 """,
 )
-def register(payload: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, payload: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -72,8 +77,10 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    # TODO: replace with email service (SendGrid / Resend / SES)
-    print(f"[DEV] Verify token for {user.email}: {verification.token}")
+    try:
+        email_service.send_verification_email(user.email, verification.token)
+    except Exception as e:
+        logger.warning("Failed to send verification email to %s: %s", user.email, e)
 
     return user
 
@@ -85,7 +92,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 Activate an account using the token sent during registration.
 
 **Flow:**
-1. Looks up the token in `email_verifications` — must be unused and not expired.
+1. Looks up the token in `email_verifications`: must be unused and not expired.
 2. Sets the user's status from `pending` → `active`.
 3. Marks the token as used (one-time use).
 
@@ -126,7 +133,7 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 Authenticate with email and password.
 
 **Flow:**
-1. Looks up the user by email (case-insensitive — email is normalised on input).
+1. Looks up the user by email (case-insensitive; email is normalised on input).
 2. Verifies the password against the bcrypt hash.
 3. Rejects `pending` (unverified) and `suspended` accounts with distinct 403 messages.
 4. Issues a short-lived **access token** (JWT, default 15 min).
@@ -140,7 +147,8 @@ Authenticate with email and password.
 - Use the refresh token with `/auth/refresh` to get a new pair before the access token expires.
 """,
 )
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
 
     if not user or not verify_password(payload.password, user.password_hash):
@@ -154,14 +162,14 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     access_token = create_access_token(
         data={"sub": str(user.id), "role": user.role.value},
-        expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS),
+        expires_delta=timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS),
     )
 
     raw_refresh = generate_refresh_token()
     db.add(RefreshToken(
         user_id=user.id,
         token_hash=hash_refresh_token(raw_refresh),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     ))
 
     user.last_login_at = datetime.now(timezone.utc)
@@ -180,7 +188,7 @@ Exchange a valid refresh token for a new access + refresh token pair.
 **Flow:**
 1. Hashes the incoming raw token with SHA-256 and looks it up in `refresh_tokens`.
 2. Validates it is not revoked and not expired.
-3. Revokes the old refresh token immediately (**token rotation** — each refresh
+3. Revokes the old refresh token immediately (**token rotation**: each refresh
    token can only be used once, preventing replay attacks).
 4. Issues a fresh access token and a new refresh token.
 
@@ -206,13 +214,13 @@ def refresh(raw_token: str, db: Session = Depends(get_db)):
 
     new_access = create_access_token(
         data={"sub": str(user.id), "role": user.role.value},
-        expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS),
+        expires_delta=timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS),
     )
     new_raw_refresh = generate_refresh_token()
     db.add(RefreshToken(
         user_id=user.id,
         token_hash=hash_refresh_token(new_raw_refresh),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     ))
     db.commit()
 
@@ -262,7 +270,7 @@ def logout(
 Send a password reset email to the given address.
 
 **Flow:**
-1. Looks up the user silently — **always returns the same response** regardless of
+1. Looks up the user silently; **always returns the same response** regardless of
    whether the email exists. This prevents user enumeration attacks.
 2. If the user exists, generates a 1-hour reset token and stores it in `password_resets`.
 3. (Production) Sends an email with a link containing the token.
@@ -270,7 +278,8 @@ Send a password reset email to the given address.
 In dev, the token is printed to the terminal.
 """,
 )
-def forgot_password(email: str, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def forgot_password(request: Request, email: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == email).first()
 
     if user:
@@ -282,8 +291,10 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
         db.add(reset)
         db.commit()
 
-        # TODO: replace with email service (SendGrid / Resend / SES)
-        print(f"[DEV] Password reset token for {email}: {reset.token}")
+        try:
+            email_service.send_password_reset_email(email, reset.token)
+        except Exception as e:
+            logger.warning("Failed to send password reset email to %s: %s", email, e)
 
     return {"message": "If that email is registered you will receive a reset link"}
 
@@ -295,18 +306,18 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
 Complete a password reset initiated via `/auth/forgot-password`.
 
 **Flow:**
-1. Validates the reset token — must exist, be unused, and not expired (1-hour TTL).
+1. Validates the reset token: must exist, be unused, and not expired (1-hour TTL).
 2. Hashes the new password and updates the user record.
 3. Marks the reset token as used (one-time use only).
-4. **Revokes all active refresh tokens** for this user — forces re-login on all
+4. **Revokes all active refresh tokens** for this user, forcing re-login on all
    devices, a standard security practice after a credential change.
 """,
 )
-def reset_password(token: str, new_password: str, db: Session = Depends(get_db)):
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
     reset = (
         db.query(PasswordReset)
         .filter(
-            PasswordReset.token == token,
+            PasswordReset.token == payload.token,
             PasswordReset.used_at.is_(None),
         )
         .first()
@@ -316,7 +327,7 @@ def reset_password(token: str, new_password: str, db: Session = Depends(get_db))
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     user = db.query(User).filter(User.id == reset.user_id).first()
-    user.password_hash = hash_password(new_password)
+    user.password_hash = hash_password(payload.new_password)
     reset.used_at = datetime.now(timezone.utc)
 
     db.query(RefreshToken).filter(

@@ -19,9 +19,9 @@ const COLUMNS = [
     ],
   },
   {
-    title: "Pay with M-Pesa",
+    title: "Shop with Confidence",
     links: [
-      { label: "How M-Pesa Checkout Works", href: "/checkout" },
+      { label: "Secure Checkout with Paystack", href: "/checkout" },
       { label: "Order Tracking", href: "/orders" },
       { label: "Delivery Areas", href: "/products" },
     ],
@@ -30,8 +30,16 @@ const COLUMNS = [
     title: "Let Us Help You",
     links: [
       { label: "Your Account", href: "/account" },
-      { label: "Your Orders", href: "/orders" },
+      { label: "Returns & Orders", href: "/orders" },
       { label: "Wishlist", href: "/wishlist" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Terms of Service", href: "/terms" },
+      { label: "Privacy Policy", href: "/privacy" },
+      { label: "Refund Policy", href: "/refund-policy" },
     ],
   },
 ];
@@ -39,7 +47,7 @@ const COLUMNS = [
 export default function Footer() {
   return (
     <footer className="bg-navy text-white/80 mt-8">
-      <div className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-2 md:grid-cols-4 gap-8">
+      <div className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-2 md:grid-cols-5 gap-8">
         {COLUMNS.map((col) => (
           <div key={col.title}>
             <h3 className="text-white font-semibold text-sm mb-3">{col.title}</h3>

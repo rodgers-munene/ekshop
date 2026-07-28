@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { toast } from "sonner";
@@ -9,21 +9,20 @@ import { useCartStore } from "@/store/cartStore";
 import ProductCard from "@/components/ProductCard";
 
 export default function WishlistPage() {
-  const [items, setItems] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const addItem = useCartStore((s) => s.addItem);
 
-  useEffect(() => {
-    fetch("/api/wishlist")
-      .then((r) => r.json())
-      .then((data) => setItems(Array.isArray(data) ? data : []))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: items = [], isPending: loading } = useQuery({
+    queryKey: ["wishlist"],
+    queryFn: () =>
+      fetch("/api/wishlist")
+        .then((r) => r.json())
+        .then((data) => (Array.isArray(data) ? (data as Product[]) : [])),
+  });
 
   async function removeFromWishlist(productId: string) {
     await fetch(`/api/wishlist/${productId}`, { method: "DELETE" });
-    setItems((prev) => prev.filter((p) => p.id !== productId));
+    queryClient.setQueryData<Product[]>(["wishlist"], (prev) => (prev ?? []).filter((p) => p.id !== productId));
     toast.success("Removed from wishlist");
   }
 

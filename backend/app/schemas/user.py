@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from app.models.user import UserRole, UserStatus
 
 
@@ -57,8 +57,14 @@ class LoginRequest(BaseModel):
     @classmethod
     def email_lowercase(cls, v: str) -> str:
         return v.strip().lower()
-    
-    
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8)
+
+
+
 class Notification(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

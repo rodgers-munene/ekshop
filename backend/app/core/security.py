@@ -6,7 +6,7 @@ from typing import Optional
 import bcrypt
 from jose import jwt
 
-from app.core.config import SECRET_KEY, ALGORITHM
+from app.core.config import settings
 
 
 def hash_password(password: str) -> str:
@@ -20,10 +20,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None, t
     payload = data.copy()
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
     payload.update({"exp": expire, "type": token_type})
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 def decode_access_token(token: str) -> dict:
-    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
 def generate_refresh_token() -> str:
     return secrets.token_urlsafe(64)

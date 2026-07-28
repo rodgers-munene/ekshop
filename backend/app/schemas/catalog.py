@@ -20,12 +20,28 @@ class CategoryRead(BaseModel):
 CategoryRead.model_rebuild()
 
 
-class ProductImageCreate(BaseModel):
-    url: str
-    thumbnail_url: Optional[str] = None
-    alt_text: Optional[str] = None
+class CategoryListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[CategoryRead]
+
+
+class CategoryCreate(BaseModel):
+    name: str
+    slug: str
+    parent_id: Optional[uuid.UUID] = None
+    icon_url: Optional[str] = None
     sort_order: int = 0
-    is_primary: bool = False
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    parent_id: Optional[uuid.UUID] = None
+    icon_url: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 class ProductImageRead(BaseModel):

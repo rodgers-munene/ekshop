@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timezone, timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -16,9 +16,10 @@ from app.models.commerce import Order, OrderStatus
 from app.models.user import User
 from app.schemas.delivery import (
     AgentLoginRequest, AgentTokenResponse,
-    DeliveryAgentCreate, DeliveryAgentRead,
+    DeliveryAgentCreate, DeliveryAgentRead, DeliveryAgentListResponse,
     DeliveryRead, DeliveryStatusUpdate,
 )
+from app.services.notifications import create_notification
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -99,9 +100,18 @@ def create_agent(
     return agent
 
 
-@router.get("/agents", response_model=List[DeliveryAgentRead])
-def list_agents(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    return db.query(DeliveryAgent).all()
+@router.get("/agents", response_model=DeliveryAgentListResponse)
+def list_agents(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    query = db.query(DeliveryAgent)
+    total = query.count()
+    skip = (page - 1) * limit
+    results = query.order_by(DeliveryAgent.created_at.desc()).offset(skip).limit(limit).all()
+    return DeliveryAgentListResponse(total=total, page=page, limit=limit, results=results)
 
 
 # ── Admin: assign delivery ────────────────────────────────────────────────────
@@ -153,6 +163,15 @@ def assign_delivery(
     agent.status = DeliveryAgentStatus.busy
     agent.current_order_id = order_id
 
+    create_notification(
+        db,
+        user_id=order.buyer_id,
+        type="delivery_status",
+        title="Delivery assigned",
+        body=f"A delivery agent has been assigned to your order. Tracking: {delivery.tracking_number}.",
+        data={"delivery_id": str(delivery.id), "tracking_number": delivery.tracking_number},
+    )
+
     db.commit()
     db.refresh(delivery)
     return delivery
@@ -198,6 +217,16 @@ def update_delivery_status(
         notes=payload.notes,
     )
     db.add(event)
+
+    create_notification(
+        db,
+        user_id=delivery.order.buyer_id,
+        type="delivery_status",
+        title="Delivery update",
+        body=f"Your delivery is now '{payload.status.value}'.",
+        data={"delivery_id": str(delivery.id), "status": payload.status.value},
+    )
+
     db.commit()
     db.refresh(delivery)
     return delivery

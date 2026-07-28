@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -17,8 +17,9 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setUser } = useAuthStore();
   const [loading, setLoading] = useState(false);
 
@@ -49,8 +50,10 @@ export default function LoginPage() {
       setUser(json.user as AuthUser);
       toast.success(`Welcome back, ${json.user.first_name}!`);
 
-      // Redirect based on role
-      if (json.user.role === "seller" || json.user.role === "admin") {
+      const next = searchParams.get("next");
+      if (next) {
+        router.push(next);
+      } else if (json.user.role === "seller" || json.user.role === "admin") {
         router.push("/dashboard");
       } else {
         router.push("/");
@@ -65,7 +68,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
 
-      {/* Left — decorative panel */}
+      {/* Left: decorative panel */}
       <div className="hidden lg:flex w-1/2 bg-navy text-white flex-col justify-between p-12">
         <span className="text-2xl font-bold">
           EK<span className="text-amber">SHOP</span>
@@ -81,7 +84,7 @@ export default function LoginPage() {
         <p className="text-sm text-white/50">© {new Date().getFullYear()} Ekshop</p>
       </div>
 
-      {/* Right — form */}
+      {/* Right: form */}
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
           <h2 className="text-3xl font-bold mb-1">Sign in</h2>
@@ -110,7 +113,12 @@ export default function LoginPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium mb-1">Password</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium">Password</label>
+                <Link href="/forgot-password" className="text-xs text-amber underline underline-offset-2">
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 {...register("password")}
@@ -133,5 +141,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

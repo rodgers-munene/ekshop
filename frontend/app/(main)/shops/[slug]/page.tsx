@@ -4,6 +4,7 @@ import { serverFetch } from "@/lib/server-api";
 import { resolveImageUrl } from "@/lib/utils";
 import { Shop, ProductListResponse } from "@/types/interface";
 import ProductCard from "@/components/ProductCard";
+import MessageSellerButton from "./MessageSellerButton";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -86,11 +87,12 @@ export default async function ShopPage({ params }: Props) {
         </div>
       </section>
 
-      {shop.description && (
-        <div className="px-6 md:px-12 py-5 border-b border-border text-sm text-muted max-w-2xl">
-          {shop.description}
-        </div>
-      )}
+      <div className="px-6 md:px-12 py-5 border-b border-border flex items-center justify-between gap-4 flex-wrap">
+        {shop.description ? (
+          <p className="text-sm text-muted max-w-2xl">{shop.description}</p>
+        ) : <span />}
+        <MessageSellerButton shopId={shop.id} />
+      </div>
 
       {/* ── Products ─────────────────────────────────────────── */}
       <div className="px-4 md:px-6 py-8">

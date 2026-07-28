@@ -1,0 +1,43 @@
+# Copy to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit it (it holds secrets).
+
+aws_region        = "eu-west-1"
+project_name      = "ekshop"
+github_repository = "rodgers-munene/ekshop"
+github_branch     = "main"
+
+ec2_instance_type = "t3.micro"
+
+# Non-sensitive — merged with secret_env below into one Secrets Manager
+# secret, since a plain EC2 instance has no separate "non-secret env var"
+# injection channel the way App Runner did.
+plain_env = {
+  ALGORITHM                 = "HS256"
+  ACCESS_TOKEN_EXPIRE_DAYS  = "15"
+  REFRESH_TOKEN_EXPIRE_DAYS = "7"
+  CORS_ORIGINS              = "https://ekshop.co.ke,https://www.ekshop.co.ke"
+  FRONTEND_URL               = "https://ekshop.co.ke"
+  PAYSTACK_PUBLIC_KEY        = "pk_live_xxx"
+  EMAIL_FROM                 = "Ekshop <no-reply@ekshop.co.ke>"
+  MPESA_SHORTCODE             = "174379"
+  MPESA_ENVIRONMENT           = "sandbox"
+  # Fill this in with the EC2 Elastic IP (`terraform output backend_url`)
+  # once the instance exists, then re-apply.
+  MPESA_CALLBACK_URL          = "http://your-elastic-ip/payments/mpesa/callback"
+  AWS_REGION                  = "eu-west-1"
+  AWS_S3_BUCKET                = ""
+  AWS_S3_PUBLIC_URL            = ""
+}
+
+# Sensitive — stored in AWS Secrets Manager.
+secret_env = {
+  DATABASE_URL          = "postgresql+psycopg://user:password@host:5432/dbname"
+  SECRET_KEY            = "generate-with-python -c 'import secrets; print(secrets.token_hex(32))'"
+  PAYSTACK_SECRET_KEY   = "sk_live_xxx"
+  RESEND_API_KEY        = "your_resend_api_key"
+  MPESA_CONSUMER_KEY    = "your_consumer_key"
+  MPESA_CONSUMER_SECRET = "your_consumer_secret"
+  MPESA_PASSKEY         = "your_passkey"
+  AWS_ACCESS_KEY_ID     = ""
+  AWS_SECRET_ACCESS_KEY = ""
+}

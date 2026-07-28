@@ -9,11 +9,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
   const token = cookieStore.get("ekshop_token")?.value;
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
-  const body = await req.json();
+  const formData = await req.formData();
   const res = await fetch(`${BASE_URL}/products/${productKey}/images`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
   });
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });

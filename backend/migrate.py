@@ -150,7 +150,7 @@ def run(mysql_cfg: dict, postgres_url: str):
         # load existing categories into maps
         for row in db.execute(text("SELECT id, slug, parent_id FROM categories")).fetchall():
             if row[2] is None:
-                # it's a parent — reverse-map slug back to original key
+                # it's a parent, reverse-map slug back to original key
                 parent_cat_map[row[1].replace("-", "_")] = row[0]
             else:
                 cat_map[row[1].replace("-", "_")] = row[0]

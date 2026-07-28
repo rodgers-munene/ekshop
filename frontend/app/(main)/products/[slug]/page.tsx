@@ -50,7 +50,7 @@ export default async function ProductDetailPage({ params }: Props) {
       {/* Main product section */}
       <div className="card grid grid-cols-1 md:grid-cols-2 gap-0 md:items-start overflow-hidden">
 
-        {/* Images — sticky on desktop */}
+        {/* Images: sticky on desktop */}
         <div className="border-b md:border-b-0 md:border-r border-border md:sticky md:top-20">
           <ProductImageGallery
             images={product.images ?? []}

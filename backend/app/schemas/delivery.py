@@ -35,6 +35,13 @@ class DeliveryAgentRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DeliveryAgentListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[DeliveryAgentRead]
+
+
 class DeliveryEventRead(BaseModel):
     id: uuid.UUID
     status: DeliveryStatus

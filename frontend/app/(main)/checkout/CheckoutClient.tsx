@@ -7,7 +7,7 @@ import { useCartStore } from "@/store/cartStore";
 import { UserAddress } from "@/types/interface";
 import { formatKES, resolveImageUrl as resolveImg } from "@/lib/utils";
 
-type Step = "review" | "address" | "payment" | "pending";
+type Step = "review" | "address" | "payment" | "redirecting";
 
 export default function CheckoutClient({ addresses }: { addresses: UserAddress[] }) {
   const router = useRouter();
@@ -16,7 +16,6 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
   const [selectedAddressId, setSelectedAddressId] = useState<string>(
     addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? ""
   );
-  const [mpesaPhone, setMpesaPhone] = useState("");
   const [loading, setLoading] = useState(false);
 
   const subtotal = totalPrice();
@@ -25,7 +24,6 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
 
   async function placeOrder() {
     if (!selectedAddressId) { toast.error("Select a delivery address"); return; }
-    if (!mpesaPhone.trim()) { toast.error("Enter your M-Pesa phone number"); return; }
 
     setLoading(true);
     try {
@@ -38,17 +36,18 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
       const orderJson = await orderRes.json();
       if (!orderRes.ok) { toast.error(orderJson.detail ?? "Failed to place order"); return; }
 
-      // 2. Trigger M-Pesa STK push
-      const mpesaRes = await fetch("/api/mpesa", {
+      // 2. Start a Paystack transaction and get the hosted checkout URL
+      const paystackRes = await fetch("/api/paystack", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_group_id: orderJson.id, phone: mpesaPhone.trim() }),
+        body: JSON.stringify({ order_group_id: orderJson.id }),
       });
-      const mpesaJson = await mpesaRes.json();
-      if (!mpesaRes.ok) { toast.error(mpesaJson.detail ?? "M-Pesa request failed"); return; }
+      const paystackJson = await paystackRes.json();
+      if (!paystackRes.ok) { toast.error(paystackJson.detail ?? "Could not start payment"); return; }
 
       clearCart();
-      setStep("pending");
+      setStep("redirecting");
+      window.location.href = paystackJson.authorization_url;
     } catch {
       toast.error("Something went wrong. Try again.");
     } finally {
@@ -56,22 +55,19 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
     }
   }
 
-  if (items.length === 0 && step !== "pending") {
+  if (items.length === 0 && step !== "redirecting") {
     router.replace("/cart");
     return null;
   }
 
-  if (step === "pending") {
+  if (step === "redirecting") {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 py-16">
-        <div className="text-5xl mb-4">📱</div>
-        <h2 className="text-2xl font-extrabold mb-2">Check your phone</h2>
+        <div className="text-5xl mb-4">💳</div>
+        <h2 className="text-2xl font-extrabold mb-2">Taking you to Paystack…</h2>
         <p className="text-muted text-sm max-w-xs mb-6">
-          An M-Pesa prompt has been sent to <strong>{mpesaPhone}</strong>. Enter your PIN to complete payment.
+          Complete your payment on the secure Paystack checkout page. You&apos;ll be redirected back here once it&apos;s done.
         </p>
-        <button onClick={() => router.push("/orders")} className="btn-accent">
-          View My Orders →
-        </button>
       </div>
     );
   }
@@ -82,7 +78,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Left — steps */}
+        {/* Left: steps */}
         <div className="lg:col-span-2 space-y-4">
 
           {/* Step 1: Cart review */}
@@ -138,25 +134,20 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
             </div>
           </section>
 
-          {/* Step 3: M-Pesa */}
+          {/* Step 3: Payment */}
           <section className="card overflow-hidden">
             <div className="px-5 py-3 border-b border-border bg-surface">
-              <h2 className="font-semibold">3. Pay with M-Pesa</h2>
+              <h2 className="font-semibold">3. Payment</h2>
             </div>
             <div className="p-4">
-              <p className="text-xs text-muted mb-3">Enter the M-Pesa number to receive the payment prompt.</p>
-              <input
-                type="tel"
-                value={mpesaPhone}
-                onChange={(e) => setMpesaPhone(e.target.value)}
-                placeholder="e.g. 0712 345 678"
-                className="input-field max-w-xs"
-              />
+              <p className="text-xs text-muted">
+                You&apos;ll be redirected to Paystack&apos;s secure checkout to pay by card or bank.
+              </p>
             </div>
           </section>
         </div>
 
-        {/* Right — summary */}
+        {/* Right: summary */}
         <div className="lg:col-span-1">
           <div className="card p-6 flex flex-col gap-4 lg:sticky lg:top-20">
             <h2 className="text-lg font-bold border-b border-border pb-3">Summary</h2>
@@ -174,10 +165,10 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
             </div>
             <button
               onClick={placeOrder}
-              disabled={loading || !selectedAddressId || !mpesaPhone.trim()}
+              disabled={loading || !selectedAddressId}
               className="btn-accent w-full disabled:opacity-40 mt-2"
             >
-              {loading ? "Processing..." : "Pay with M-Pesa →"}
+              {loading ? "Processing..." : "Pay with Paystack →"}
             </button>
           </div>
         </div>

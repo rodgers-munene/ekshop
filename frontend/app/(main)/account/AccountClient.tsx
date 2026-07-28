@@ -83,7 +83,7 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
         {/* Profile tab */}
         {tab === "profile" && (
           <div className="space-y-5 max-w-sm">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">First name</label>
                 <input value={profile.first_name} onChange={(e) => setProfile((p) => ({ ...p, first_name: e.target.value }))} className="input-field" />
@@ -133,7 +133,7 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
             ) : (
               <div className="rounded-lg border border-border p-5 space-y-4">
                 <h3 className="font-semibold">New Address</h3>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium block mb-1">First name</label>
                     <input value={newAddr.first_name} onChange={(e) => setNewAddr((a) => ({ ...a, first_name: e.target.value }))} className="input-field" />
@@ -143,7 +143,7 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
                     <input value={newAddr.last_name} onChange={(e) => setNewAddr((a) => ({ ...a, last_name: e.target.value }))} className="input-field" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium block mb-1">Phone</label>
                     <input value={newAddr.phone} onChange={(e) => setNewAddr((a) => ({ ...a, phone: e.target.value }))} className="input-field" placeholder="0712 345 678" />
@@ -153,7 +153,7 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
                     <input value={newAddr.label} onChange={(e) => setNewAddr((a) => ({ ...a, label: e.target.value }))} className="input-field" placeholder="Home / Work" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium block mb-1">Town</label>
                     <input value={newAddr.town} onChange={(e) => setNewAddr((a) => ({ ...a, town: e.target.value }))} className="input-field" />

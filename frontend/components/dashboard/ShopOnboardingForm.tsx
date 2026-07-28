@@ -91,7 +91,7 @@ export default function ShopOnboardingForm() {
           <textarea {...register("description")} className="input-field" rows={3} placeholder="What do you sell?" />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">County</label>
             <input {...register("county")} className="input-field" placeholder="Nairobi" />
