@@ -143,6 +143,43 @@ def update_category(
     return category
 
 
+# admin: upload a category's icon image
+@categories_router.post(
+    "/{category_id}/icon",
+    response_model=CategoryRead,
+    summary="Upload a category icon image (admin only)",
+)
+def upload_category_icon(
+    category_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    try:
+        url = storage.upload_category_icon(
+            category_id=category_id,
+            filename=file.filename or "icon.jpg",
+            content_type=file.content_type or "application/octet-stream",
+            data=file.file.read(),
+        )
+    except storage.StorageError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    old_url = category.icon_url
+    category.icon_url = url
+    db.commit()
+    db.refresh(category)
+
+    if old_url:
+        storage.delete_category_icon(old_url)
+
+    return category
+
+
 # admin: delete a category
 @categories_router.delete(
     "/{category_id}",

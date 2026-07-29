@@ -108,3 +108,35 @@ def delete_hero_image(url: str) -> None:
         _client().delete_object(Bucket=settings.AWS_S3_BUCKET, Key=key)
     except (BotoCoreError, ClientError, StorageError) as e:
         logger.warning("Failed to delete S3 object for %s: %s", url, e)
+
+
+def upload_category_icon(*, category_id: uuid.UUID, filename: str, content_type: str, data: bytes) -> str:
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        raise StorageError(f"Unsupported image type: {content_type}")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise StorageError("Image exceeds the 5MB size limit")
+
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+    key = f"categories/{category_id}/{uuid.uuid4().hex}.{extension}"
+
+    try:
+        _client().put_object(
+            Bucket=settings.AWS_S3_BUCKET,
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+        )
+    except (BotoCoreError, ClientError) as e:
+        raise StorageError(f"Upload failed: {e}") from e
+
+    return _public_url(key)
+
+
+def delete_category_icon(url: str) -> None:
+    key = key_from_url(url)
+    if not key:
+        return
+    try:
+        _client().delete_object(Bucket=settings.AWS_S3_BUCKET, Key=key)
+    except (BotoCoreError, ClientError, StorageError) as e:
+        logger.warning("Failed to delete S3 object for %s: %s", url, e)
