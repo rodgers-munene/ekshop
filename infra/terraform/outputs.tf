@@ -2,6 +2,16 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.backend.repository_url
 }
 
+output "product_images_bucket" {
+  description = "Put this in AWS_S3_BUCKET"
+  value       = aws_s3_bucket.product_images.id
+}
+
+output "product_images_public_url" {
+  description = "Put this in AWS_S3_PUBLIC_URL"
+  value       = "https://${aws_s3_bucket.product_images.bucket_regional_domain_name}"
+}
+
 output "backend_url" {
   description = "Public HTTPS URL of the backend, via sslip.io (no domain purchased — see README)"
   value       = "https://${replace(aws_eip.backend.public_ip, ".", "-")}.sslip.io"

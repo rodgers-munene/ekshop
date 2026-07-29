@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useCartStore } from "@/store/cartStore";
 import { UserAddress } from "@/types/interface";
-import { formatKES, resolveImageUrl as resolveImg } from "@/lib/utils";
+import { formatKES, resolveImageUrl as resolveImg, decodeHtml } from "@/lib/utils";
 
 type Step = "review" | "address" | "payment" | "redirecting";
 
@@ -96,8 +96,8 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
                       : <div className="w-full h-full flex items-center justify-center text-lg">🛍️</div>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium line-clamp-1">{item.product_name}</p>
-                    <p className="text-xs text-muted">{item.shop_name} · qty {item.quantity}</p>
+                    <p className="text-sm font-medium line-clamp-1">{decodeHtml(item.product_name)}</p>
+                    <p className="text-xs text-muted">{decodeHtml(item.shop_name)} · qty {item.quantity}</p>
                   </div>
                   <p className="text-sm font-bold text-ink shrink-0">{formatKES(item.unit_price * item.quantity)}</p>
                 </div>

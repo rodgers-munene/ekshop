@@ -2,19 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { serverFetch } from "@/lib/server-api";
 import { Product } from "@/types/interface";
-import { formatKES } from "@/lib/utils";
+import { formatKES, decodeHtml } from "@/lib/utils";
 import AddToCart from "./AddToCart";
 import ProductCard from "@/components/ProductCard";
 import ProductImageGallery from "./ProductImageGallery";
-
-function decodeHtml(str: string): string {
-  return str
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
 
 interface Props {
   params: Promise<{ slug: string }>;

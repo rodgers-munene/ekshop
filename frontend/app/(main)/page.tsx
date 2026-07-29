@@ -13,7 +13,7 @@ import {
   Receipt,
 } from "lucide-react";
 import { serverFetch } from "@/lib/server-api";
-import { resolveImageUrl } from "@/lib/utils";
+import { resolveImageUrl, decodeHtml } from "@/lib/utils";
 import { Product, Category, ProductListResponse, ShopSummary, HeroSlide } from "@/types/interface";
 import ProductRail from "@/components/ProductRail";
 import HeroSlideshow from "@/components/HeroSlideshow";
@@ -224,12 +224,12 @@ export default async function HomePage() {
                   className="group flex flex-col items-center gap-2 rounded-lg border border-border px-4 py-6 hover:border-amber hover:shadow-sm transition-all"
                 >
                   <div className="w-14 h-14 rounded-full bg-surface flex items-center justify-center text-xl font-bold text-muted">
-                    {shop.name.charAt(0)}
+                    {decodeHtml(shop.name).charAt(0)}
                   </div>
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-1">
                       <span className="font-semibold text-sm leading-tight">
-                        {shop.name}
+                        {decodeHtml(shop.name)}
                       </span>
                       {shop.is_verified && (
                         <BadgeCheck size={14} className="text-amber shrink-0" />
@@ -265,11 +265,11 @@ export default async function HomePage() {
               List your products, reach buyers across Kenya, and get paid via M-Pesa, no setup fees.
             </p>
           </div>
-          <div className="shrink-0 flex gap-3">
-            <Link href="/register" className="btn-accent">
+          <div className="shrink-0 flex gap-2 sm:gap-3">
+            <Link href="/register" className="btn-accent px-4! py-2! text-xs sm:px-6! sm:py-2.5! sm:text-base">
               Start Selling →
             </Link>
-            <Link href="/products" className="btn-outline-dark">
+            <Link href="/products" className="btn-outline-dark px-4! py-2! text-xs sm:px-6! sm:py-2.5! sm:text-base">
               Learn more
             </Link>
           </div>

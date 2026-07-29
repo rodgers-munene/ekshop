@@ -1,9 +1,10 @@
 from fastapi import APIRouter, File, Form, HTTPException, Depends, UploadFile, status, Query
+import re
 import uuid
 from typing import Optional
 
-from sqlalchemy.orm import Session
-from sqlalchemy import cast, Numeric, update, delete
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import cast, Numeric, update, delete, func, desc
 
 from app.models.user import User
 from app.dependencies.database import get_db
@@ -31,6 +32,17 @@ from app.services import storage
 
 categories_router = APIRouter(prefix="/categories", tags=["categories"])
 products_router = APIRouter(prefix="/products", tags=["products"])
+
+
+def _build_prefix_tsquery(term: str) -> Optional[str]:
+    """Turn free-text search input into a tsquery string that AND-matches
+    each word and prefix-matches the last one (so live-suggestion typing
+    like "run sho" behaves like "run* & sho*")."""
+    tokens = re.findall(r"\w+", term)
+    if not tokens:
+        return None
+    tokens[-1] = tokens[-1] + ":*"
+    return " & ".join(tokens)
 
 # get all categories and their children
 @categories_router.get(
@@ -202,7 +214,7 @@ def get_products(
     limit: int = Query(20, le=100),
     db: Session = Depends(get_db)
 ):
-    query = db.query(Product).filter(
+    base_query = db.query(Product).filter(
         Product.status == ProductStatus.active
     )
 
@@ -211,25 +223,56 @@ def get_products(
         if cat:
             child_ids = [c.id for c in (cat.children or [])]
             all_ids = [cat.id] + child_ids
-            query = query.filter(Product.category_id.in_(all_ids))
+            base_query = base_query.filter(Product.category_id.in_(all_ids))
     elif category_id:
-        query = query.filter(Product.category_id == category_id)
-        
-    term = search or q
-    if term:
-        query = query.filter(Product.name.ilike(f"%{term}%"))
-    
+        base_query = base_query.filter(Product.category_id == category_id)
+
     if min_price:
-        query = query.filter(cast(Product.price, Numeric) >= min_price)
-        
+        base_query = base_query.filter(cast(Product.price, Numeric) >= min_price)
+
     if max_price:
-        query = query.filter(cast(Product.price, Numeric) <= max_price)
-        
-        
-    total = query.count()
+        base_query = base_query.filter(cast(Product.price, Numeric) <= max_price)
+
+    term = search or q
+    relevance = None
+    query = base_query
+
+    if term:
+        tsquery_str = _build_prefix_tsquery(term)
+        if tsquery_str:
+            ts_query = func.to_tsquery("english", tsquery_str)
+            relevance = func.ts_rank_cd(Product.search_vector, ts_query)
+            query = base_query.filter(Product.search_vector.op("@@")(ts_query))
+            total = query.count()
+
+            # no word/stem/prefix match at all (likely a typo) -- fall back
+            # to trigram similarity instead of showing "no results".
+            # word_similarity (vs. similarity) scores how well the query matches
+            # the best substring of name, so it isn't diluted by long product titles
+            if total == 0:
+                name_similarity = func.word_similarity(term, Product.name)
+                relevance = name_similarity
+                query = base_query.filter(name_similarity > 0.4)
+                total = query.count()
+        else:
+            query = base_query.filter(Product.name.ilike(f"%{term}%"))
+            total = query.count()
+    else:
+        total = query.count()
+
     skip = (page - 1) * limit
-    
-    products = query.order_by(Product.created_at.desc()).offset(skip).limit(limit).all()
+
+    if relevance is not None:
+        query = query.order_by(desc(relevance), Product.popularity.desc(), Product.created_at.desc())
+    else:
+        query = query.order_by(Product.created_at.desc())
+
+    products = (
+        query.options(selectinload(Product.images), selectinload(Product.variants), selectinload(Product.shop))
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     
     return ProductListResponse(
         total=total,

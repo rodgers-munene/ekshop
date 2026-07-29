@@ -10,7 +10,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 import { AnimatePresence, motion } from "motion/react"
 import { Product, ProductListResponse } from "@/types/interface";
-import { formatKES, resolveImageUrl } from "@/lib/utils";
+import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -131,38 +131,40 @@ export default function Navbar() {
         <form
           ref={searchRef}
           onSubmit={handleSearch}
-          className="relative flex-1 min-w-0 max-w-lg h-9 md:h-10 flex items-stretch rounded-full overflow-hidden ring-1 ring-inset ring-black/5 focus-within:ring-2 focus-within:ring-amber transition-shadow"
+          className="relative flex-1 min-w-0 max-w-lg"
         >
-          <div className="relative flex-1 bg-white">
-            <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => setShowSuggestions(true)}
-            className="w-full h-full pl-6 md:pl-7 pr-3 bg-transparent text-sm text-ink outline-none"
-          />
-          {!query && (
-            <AnimatePresence mode="wait">
-                <motion.span
-                key={searchPlaceholder}
-                initial={{ y: 15, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -15, opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="absolute left-6 md:left-7 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 hidden sm:block"
-                >
-                    {searchPlaceholder}
-                </motion.span>
-            </AnimatePresence>
-          )}
+          <div className="h-9 md:h-10 flex items-stretch rounded-full overflow-hidden ring-1 ring-inset ring-black/5 focus-within:ring-2 focus-within:ring-amber transition-shadow">
+            <div className="relative flex-1 bg-white">
+              <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setShowSuggestions(true)}
+              className="w-full h-full pl-6 md:pl-7 pr-3 bg-transparent text-sm text-ink outline-none"
+            />
+            {!query && (
+              <AnimatePresence mode="wait">
+                  <motion.span
+                  key={searchPlaceholder}
+                  initial={{ y: 15, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -15, opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute left-6 md:left-7 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 hidden sm:block"
+                  >
+                      {searchPlaceholder}
+                  </motion.span>
+              </AnimatePresence>
+            )}
+            </div>
+            <button
+              type="submit"
+              aria-label="Search"
+              className="px-4 md:px-5 flex items-center justify-center bg-amber hover:bg-amber-hover text-ink transition-colors shrink-0"
+            >
+              <Search size={18} />
+            </button>
           </div>
-          <button
-            type="submit"
-            aria-label="Search"
-            className="px-4 md:px-5 flex items-center justify-center bg-amber hover:bg-amber-hover text-ink transition-colors shrink-0"
-          >
-            <Search size={18} />
-          </button>
 
           {/* Suggestions dropdown */}
           {showSuggestions && query.trim().length >= 2 && (
@@ -191,7 +193,7 @@ export default function Navbar() {
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm truncate">{product.name}</p>
+                            <p className="text-sm truncate">{decodeHtml(product.name)}</p>
                             <p className="text-xs text-muted">{formatKES(product.price)}</p>
                           </div>
                         </button>

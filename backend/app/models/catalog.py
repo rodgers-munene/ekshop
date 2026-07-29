@@ -5,7 +5,7 @@ from sqlalchemy import (
     Column, String, DateTime, Boolean, Enum, ForeignKey,
     Integer, SmallInteger, Text, UniqueConstraint, Index
 )
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, TSVECTOR
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -66,8 +66,16 @@ class Product(Base):
     popularity = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    # maintained by a DB trigger (see migration 3aa77bcd1dc3) rather than a
+    # generated column, because array_to_string() is STABLE not IMMUTABLE
+    # and Postgres generated columns require immutable expressions
+    search_vector = Column(TSVECTOR)
 
-    __table_args__ = (UniqueConstraint("shop_id", "slug", name="uq_product_shop_slug"),)
+    __table_args__ = (
+        UniqueConstraint("shop_id", "slug", name="uq_product_shop_slug"),
+        Index("ix_products_search_vector", "search_vector", postgresql_using="gin"),
+        Index("ix_products_name_trgm", "name", postgresql_using="gin", postgresql_ops={"name": "gin_trgm_ops"}),
+    )
 
     shop = relationship("Shop", back_populates="products")
     category = relationship("Category", back_populates="products")

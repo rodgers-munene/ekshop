@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { BadgeCheck, MapPin, Star } from "lucide-react";
 import { serverFetch } from "@/lib/server-api";
-import { resolveImageUrl } from "@/lib/utils";
+import { resolveImageUrl, decodeHtml } from "@/lib/utils";
 import { Shop, ProductListResponse } from "@/types/interface";
 import ProductCard from "@/components/ProductCard";
 import MessageSellerButton from "./MessageSellerButton";
@@ -55,18 +55,18 @@ export default async function ShopPage({ params }: Props) {
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={resolveImageUrl(shop.logo_url)}
-                alt={shop.name}
+                alt={decodeHtml(shop.name)}
                 className="w-full h-full object-cover"
               />
             ) : (
               <span className="text-2xl font-bold text-ink">
-                {shop.name.charAt(0)}
+                {decodeHtml(shop.name).charAt(0)}
               </span>
             )}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-white">{shop.name}</h1>
+              <h1 className="text-2xl font-bold text-white">{decodeHtml(shop.name)}</h1>
               {shop.is_verified && <BadgeCheck size={18} className="text-amber" />}
             </div>
             <div className="flex items-center gap-3 mt-1 text-white/80 text-xs">
@@ -97,7 +97,7 @@ export default async function ShopPage({ params }: Props) {
       {/* ── Products ─────────────────────────────────────────── */}
       <div className="px-4 md:px-6 py-8">
         <div className="card p-5">
-          <h2 className="text-lg font-bold mb-5">Products from {shop.name}</h2>
+          <h2 className="text-lg font-bold mb-5">Products from {decodeHtml(shop.name)}</h2>
           {products.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {products.map((product) => (

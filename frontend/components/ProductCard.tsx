@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Star } from "lucide-react";
 import { Product } from "@/types/interface";
-import { formatKES, resolveImageUrl } from "@/lib/utils";
+import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
 
 function ProductImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
@@ -41,7 +41,7 @@ export default function ProductCard({ product }: { product: Product }) {
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group flex flex-col card overflow-hidden hover:shadow-md transition-shadow duration-200"
+      className="group flex flex-col card overflow-hidden hover:shadow-md transition-shadow duration-200 min-w-0"
     >
       {/* Image */}
       <div className="relative w-full aspect-square overflow-hidden bg-white border-b border-border">
@@ -58,12 +58,12 @@ export default function ProductCard({ product }: { product: Product }) {
       </div>
 
       {/* Details */}
-      <div className="p-3 flex flex-col gap-1 flex-1">
+      <div className="p-3 flex flex-col gap-1 flex-1 min-w-0">
         {product.shop?.name && (
-          <p className="text-xs text-muted truncate">{product.shop.name}</p>
+          <p className="text-xs text-muted truncate">{decodeHtml(product.shop.name)}</p>
         )}
         <h3 className="text-sm font-medium leading-tight line-clamp-2">
-          {product.name}
+          {decodeHtml(product.name)}
         </h3>
 
         {ratingAvg > 0 && (
@@ -81,12 +81,12 @@ export default function ProductCard({ product }: { product: Product }) {
           </div>
         )}
 
-        <div className="flex items-baseline gap-2 mt-auto pt-2">
-          <span className="text-ink font-bold text-base">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0 mt-auto pt-2 min-w-0">
+          <span className="text-ink font-bold text-base whitespace-nowrap">
             {formatKES(product.price)}
           </span>
           {hasDiscount && (
-            <span className="text-muted text-xs line-through">
+            <span className="text-muted text-xs line-through whitespace-nowrap">
               {formatKES(product.compare_price!)}
             </span>
           )}

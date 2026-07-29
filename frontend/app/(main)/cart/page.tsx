@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCartStore } from "@/store/cartStore";
-import { formatKES, resolveImageUrl } from "@/lib/utils";
+import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
 
 export default function CartPage() {
   const { items, updateQuantity, removeItem, clearCart, totalPrice } = useCartStore();
@@ -64,12 +64,12 @@ export default function CartPage() {
               {/* Details */}
               <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>
-                  <p className="text-xs text-muted mb-0.5">{item.shop_name}</p>
+                  <p className="text-xs text-muted mb-0.5">{decodeHtml(item.shop_name)}</p>
                   <Link
                     href={`/products/${item.product_slug}`}
                     className="font-semibold text-sm leading-tight hover:text-amber transition-colors line-clamp-2"
                   >
-                    {item.product_name}
+                    {decodeHtml(item.product_name)}
                   </Link>
                 </div>
 
