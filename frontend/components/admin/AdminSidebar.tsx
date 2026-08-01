@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Store, Users, FolderTree, Truck, GalleryHorizontal } from "lucide-react";
+import { LayoutDashboard, Store, Users, FolderTree, Truck, GalleryHorizontal, Tag } from "lucide-react";
 
 const LINKS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/deliveries", label: "Deliveries", icon: Truck },
   { href: "/admin/hero-slides", label: "Hero Slides", icon: GalleryHorizontal },
+  { href: "/admin/deals", label: "Deals", icon: Tag },
 ];
 
 export default function AdminSidebar() {

@@ -27,6 +27,27 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
 
     setLoading(true);
     try {
+      // 0. Sync the local cart to the server cart so the backend (which
+      // checks out from the server-side cart, not the request body) sees
+      // the same items the user is looking at.
+      await fetch("/api/cart", { method: "DELETE" });
+      for (const item of items) {
+        const syncRes = await fetch("/api/cart/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product_id: item.product_id,
+            variant_id: item.variant_id,
+            quantity: item.quantity,
+          }),
+        });
+        if (!syncRes.ok) {
+          const syncJson = await syncRes.json().catch(() => ({}));
+          toast.error(syncJson.detail ?? "Could not sync your cart. Try again.");
+          return;
+        }
+      }
+
       // 1. Create order
       const orderRes = await fetch("/api/checkout", {
         method: "POST",
@@ -168,7 +189,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
               disabled={loading || !selectedAddressId}
               className="btn-accent w-full disabled:opacity-40 mt-2"
             >
-              {loading ? "Processing..." : "Pay with Paystack →"}
+              {loading ? "Processing..." : "Pay →"}
             </button>
           </div>
         </div>

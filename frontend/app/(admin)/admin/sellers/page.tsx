@@ -54,6 +54,13 @@ export default function AdminSellersPage() {
     refresh();
   }
 
+  async function feature(shopId: string, currentlyFeatured: boolean) {
+    const res = await fetch(`/api/admin/shops/${shopId}/feature`, { method: "PATCH" });
+    if (!res.ok) { toast.error("Could not update featured status"); return; }
+    toast.success(currentlyFeatured ? "Shop unfeatured" : "Shop featured");
+    refresh();
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Sellers</h1>
@@ -93,6 +100,16 @@ export default function AdminSellersPage() {
                     Verify
                   </button>
                 )}
+                <button
+                  onClick={() => feature(shop.id, shop.is_featured)}
+                  className={`text-xs py-1.5 px-3 rounded-md border ${
+                    shop.is_featured
+                      ? "border-accent text-accent hover:bg-accent/5"
+                      : "border-border text-muted hover:bg-ink/5"
+                  }`}
+                >
+                  {shop.is_featured ? "Unfeature" : "Feature"}
+                </button>
                 <button onClick={() => suspend(shop.id)} className="text-xs py-1.5 px-3 rounded-md border border-danger text-danger hover:bg-danger/5">
                   Suspend
                 </button>

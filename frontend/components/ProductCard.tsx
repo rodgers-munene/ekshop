@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Star } from "lucide-react";
+import { Star, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Product } from "@/types/interface";
+import { useCartStore } from "@/store/cartStore";
 import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
 
 function ProductImage({ src, alt }: { src: string; alt: string }) {
@@ -37,6 +39,23 @@ export default function ProductCard({ product }: { product: Product }) {
     product.compare_price &&
     parseFloat(product.compare_price) > parseFloat(product.price);
   const ratingAvg = product.rating_avg ? parseFloat(product.rating_avg) : 0;
+  const addItem = useCartStore((state) => state.addItem);
+
+  function handleQuickAdd(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    addItem({
+      product_id: product.id,
+      product_name: product.name,
+      product_slug: product.slug,
+      product_image: primaryImage?.url ?? "",
+      shop_id: product.shop_id,
+      shop_name: product.shop?.name ?? "",
+      unit_price: parseFloat(product.price),
+      quantity: 1,
+    });
+    toast.success(`${product.name} added to cart`);
+  }
 
   return (
     <Link
@@ -55,6 +74,15 @@ export default function ProductCard({ product }: { product: Product }) {
             Deal
           </span>
         )}
+
+        <button
+          onClick={handleQuickAdd}
+          disabled={product.stock_qty === 0}
+          aria-label="Add to cart"
+          className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-white shadow-md text-ink hover:bg-amber hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Plus size={16} />
+        </button>
       </div>
 
       {/* Details */}

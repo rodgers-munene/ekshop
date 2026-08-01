@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import Numeric, cast, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies.auth import require_admin
 from app.dependencies.database import get_db
@@ -14,7 +14,7 @@ from app.models.catalog import Product
 from app.models.delivery import Delivery
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
-from app.models.analytics import HeroSlide
+from app.models.analytics import HeroSlide, Promotion
 from app.schemas.admin import (
     AdminStatsRead,
     AdminTrendPoint,
@@ -22,6 +22,9 @@ from app.schemas.admin import (
     HeroSlideRead,
     HeroSlideUpdate,
     OrderListResponse,
+    PromotionCreate,
+    PromotionRead,
+    PromotionUpdate,
     ShopListResponse,
     UserListResponse,
 )
@@ -175,6 +178,17 @@ def suspend_shop(shop_id: uuid.UUID, db: Session = Depends(get_db), _: User = De
     return shop
 
 
+@router.patch("/shops/{shop_id}/feature", response_model=ShopRead)
+def toggle_shop_featured(shop_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    shop = db.query(Shop).filter(Shop.id == shop_id).first()
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    shop.is_featured = not shop.is_featured
+    db.commit()
+    db.refresh(shop)
+    return shop
+
+
 # ── Users ────────────────────────────────────────────────────────────────────
 
 @router.get("/users", response_model=UserListResponse)
@@ -290,4 +304,55 @@ def delete_hero_slide(slide_id: uuid.UUID, db: Session = Depends(get_db), _: Use
         raise HTTPException(404, "Hero slide not found")
     storage.delete_hero_image(slide.image_url)
     db.delete(slide)
+    db.commit()
+
+
+# ── Curated deals ────────────────────────────────────────────────────────────
+
+def _promotion_query(db: Session):
+    return db.query(Promotion).options(
+        selectinload(Promotion.product).selectinload(Product.images),
+        selectinload(Promotion.product).selectinload(Product.variants),
+        selectinload(Promotion.product).selectinload(Product.shop),
+    )
+
+
+@router.get("/deals", response_model=List[PromotionRead])
+def list_deals(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    return _promotion_query(db).order_by(Promotion.sort_order).all()
+
+
+@router.post("/deals", response_model=PromotionRead, status_code=status.HTTP_201_CREATED)
+def create_deal(payload: PromotionCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    product = db.query(Product).filter(Product.id == payload.product_id).first()
+    if not product:
+        raise HTTPException(404, "Product not found")
+    deal = Promotion(**payload.model_dump())
+    db.add(deal)
+    db.commit()
+    return _promotion_query(db).filter(Promotion.id == deal.id).first()
+
+
+@router.patch("/deals/{deal_id}", response_model=PromotionRead)
+def update_deal(
+    deal_id: uuid.UUID,
+    payload: PromotionUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    deal = db.query(Promotion).filter(Promotion.id == deal_id).first()
+    if not deal:
+        raise HTTPException(404, "Deal not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(deal, field, value)
+    db.commit()
+    return _promotion_query(db).filter(Promotion.id == deal_id).first()
+
+
+@router.delete("/deals/{deal_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_deal(deal_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    deal = db.query(Promotion).filter(Promotion.id == deal_id).first()
+    if not deal:
+        raise HTTPException(404, "Deal not found")
+    db.delete(deal)
     db.commit()

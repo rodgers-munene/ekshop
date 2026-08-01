@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.analytics import UserEvent, ProductScore, UserPreference, EventType, SearchTerm
 from app.models.catalog import Category, Product, ProductStatus
+from app.services.catalog import with_active_shop
 
 
 def log_event(
@@ -116,7 +117,7 @@ def get_recommendations(
                 )
                 preferred_categories = [c for c, _ in sorted_cats[:5]]
 
-        base = (
+        base = with_active_shop(
             db.query(Product)
             .outerjoin(ProductScore, Product.id == ProductScore.product_id)
             .filter(Product.status == ProductStatus.active)
@@ -165,9 +166,11 @@ def get_recommendations(
         child_ids = [c.id for c in (cat.children or [])]
         all_ids = [cat.id] + child_ids
         products = (
-            db.query(Product)
-            .outerjoin(ProductScore, Product.id == ProductScore.product_id)
-            .filter(Product.status == ProductStatus.active, Product.category_id.in_(all_ids))
+            with_active_shop(
+                db.query(Product)
+                .outerjoin(ProductScore, Product.id == ProductScore.product_id)
+                .filter(Product.status == ProductStatus.active, Product.category_id.in_(all_ids))
+            )
             .order_by(
                 cast(ProductScore.trending_score, NUMERIC).desc().nulls_last(),
                 Product.created_at.desc(),
@@ -183,9 +186,11 @@ def get_recommendations(
     # fill any remaining slots with trending products not yet included
     if len(results) < limit:
         extra = (
-            db.query(Product)
-            .outerjoin(ProductScore, Product.id == ProductScore.product_id)
-            .filter(Product.status == ProductStatus.active, ~Product.id.in_(seen))
+            with_active_shop(
+                db.query(Product)
+                .outerjoin(ProductScore, Product.id == ProductScore.product_id)
+                .filter(Product.status == ProductStatus.active, ~Product.id.in_(seen))
+            )
             .order_by(
                 cast(ProductScore.trending_score, NUMERIC).desc().nulls_last(),
                 Product.created_at.desc(),
@@ -200,9 +205,11 @@ def get_recommendations(
 
 def get_trending(db: Session, limit: int = 20) -> List[Product]:
     return (
-        db.query(Product)
-        .outerjoin(ProductScore, Product.id == ProductScore.product_id)
-        .filter(Product.status == ProductStatus.active)
+        with_active_shop(
+            db.query(Product)
+            .outerjoin(ProductScore, Product.id == ProductScore.product_id)
+            .filter(Product.status == ProductStatus.active)
+        )
         .order_by(
             cast(ProductScore.trending_score, NUMERIC).desc().nulls_last(),
             Product.created_at.desc(),

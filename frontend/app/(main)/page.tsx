@@ -14,39 +14,31 @@ import {
 } from "lucide-react";
 import { serverFetch } from "@/lib/server-api";
 import { resolveImageUrl, decodeHtml } from "@/lib/utils";
-import { Product, Category, ProductListResponse, ShopSummary, HeroSlide } from "@/types/interface";
+import { Product, Category, ProductListResponse, ShopSummary, HeroSlide, Promotion } from "@/types/interface";
 import ProductRail from "@/components/ProductRail";
 import HeroSlideshow from "@/components/HeroSlideshow";
+import DealsCardSlideshow from "@/components/DealsCardSlideshow";
 
 export default async function HomePage() {
-  const [trending, categories, newArrivalsRes, heroSlides] = await Promise.all([
+  const [trending, categories, newArrivalsRes, heroSlides, featuredShops, curatedDeals] = await Promise.all([
     serverFetch<Product[]>("/recommendations?limit=20").catch(() => []),
     serverFetch<Category[]>("/categories/").catch(() => []),
     serverFetch<ProductListResponse>("/products/?limit=8").catch(() => null),
     serverFetch<HeroSlide[]>("/hero-slides").catch(() => []),
+    serverFetch<ShopSummary[]>("/shops/?featured=true&limit=6").catch(() => []),
+    serverFetch<Promotion[]>("/deals/?limit=8").catch(() => []),
   ]);
 
   const featuredProduct = trending[0] ?? null;
   const trendingRail = trending.slice(1, 9);
-  const dealProducts = trending
-    .filter(
-      (p) => p.compare_price && parseFloat(p.compare_price) > parseFloat(p.price)
-    )
-    .slice(0, 8);
+  const dealProducts = curatedDeals.length > 0
+    ? (curatedDeals.map((d) => d.product).filter((p): p is Product => Boolean(p)))
+    : trending
+        .filter(
+          (p) => p.compare_price && parseFloat(p.compare_price) > parseFloat(p.price)
+        )
+        .slice(0, 8);
   const newArrivals = newArrivalsRes?.results ?? [];
-
-  const shopMap = new Map<string, ShopSummary>();
-  for (const product of trending) {
-    if (product.shop && !shopMap.has(product.shop.id)) {
-      shopMap.set(product.shop.id, product.shop);
-    }
-  }
-  const featuredShops = Array.from(shopMap.values())
-    .sort((a, b) => {
-      if (a.is_verified !== b.is_verified) return a.is_verified ? -1 : 1;
-      return parseFloat(b.rating_avg) - parseFloat(a.rating_avg);
-    })
-    .slice(0, 6);
 
   const categoryImages = new Map<string, string>();
   for (const product of [...trending, ...newArrivals]) {
@@ -107,7 +99,15 @@ export default async function HomePage() {
           )}
 
           {/* Card B: deal highlight */}
-          {dealHighlight && (
+          {curatedDeals.length > 0 ? (
+            <div className="card p-4 flex flex-col">
+              <h3 className="font-bold text-sm mb-3">Today&apos;s Deals</h3>
+              <DealsCardSlideshow deals={curatedDeals} />
+              <Link href="/products" className="text-xs text-amber hover:underline mt-3">
+                Shop all deals
+              </Link>
+            </div>
+          ) : dealHighlight ? (
             <div className="card p-4 flex flex-col">
               <h3 className="font-bold text-sm mb-3">Today&apos;s Deals</h3>
               <Link href={`/products/${dealHighlight.slug}`} className="relative block flex-1 bg-surface rounded overflow-hidden min-h-[110px]">
@@ -127,7 +127,7 @@ export default async function HomePage() {
                 Shop all deals
               </Link>
             </div>
-          )}
+          ) : null}
 
           {/* Card C: second category quick grid */}
           {quickCategoriesB.length > 0 && (

@@ -15,6 +15,7 @@ from app.routers.commerce import cart_router, checkout_router, orders_router
 from app.routers.delivery import router as delivery_router
 from app.routers.recommendations import router as recommendations_router
 from app.routers.hero import router as hero_router
+from app.routers.deals import router as deals_router
 
 app = FastAPI(title="Ekshop API", version="1.0.0")
 
@@ -43,6 +44,7 @@ app.include_router(recommendations_router)
 app.include_router(admin.router)
 app.include_router(messaging.router)
 app.include_router(hero_router)
+app.include_router(deals_router)
 
 
 @app.get("/")

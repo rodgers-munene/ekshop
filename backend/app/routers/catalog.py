@@ -29,6 +29,7 @@ from app.schemas.catalog import (
 from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview
 from app.models.shop import Shop
 from app.services import storage
+from app.services.catalog import with_active_shop
 
 categories_router = APIRouter(prefix="/categories", tags=["categories"])
 products_router = APIRouter(prefix="/products", tags=["products"])
@@ -247,13 +248,17 @@ def get_products(
     q: Optional[str] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
+    county: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, le=100),
     db: Session = Depends(get_db)
 ):
-    base_query = db.query(Product).filter(
-        Product.status == ProductStatus.active
+    base_query = with_active_shop(
+        db.query(Product).filter(Product.status == ProductStatus.active)
     )
+
+    if county:
+        base_query = base_query.filter(func.lower(Shop.county) == county.lower())
 
     if category_slug:
         cat = db.query(Category).filter(Category.slug == category_slug).first()
@@ -326,8 +331,8 @@ def get_products(
     summary="get the details of a specific product"
 )
 def get_product_details(slug: str, db: Session = Depends(get_db)):
-    product = db.query(Product).filter(
-        Product.slug == slug
+    product = with_active_shop(
+        db.query(Product).filter(Product.slug == slug, Product.status == ProductStatus.active)
     ).first()
 
     if not product:

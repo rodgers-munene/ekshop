@@ -29,6 +29,7 @@ class ShopRead(BaseModel):
     rating_count: int
     total_sales: int
     is_verified: bool
+    is_featured: bool
     status: ShopStatus
     created_at: datetime
 

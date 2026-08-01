@@ -14,7 +14,7 @@ const schema = z.object({
     .min(2, "Slug is required")
     .regex(/^[a-z0-9-]+$/, "Lowercase letters, numbers and hyphens only"),
   description: z.string().optional(),
-  county: z.string().optional(),
+  county: z.string().min(2, "County is required"),
   town: z.string().optional(),
   phone: z.string().optional(),
 });
@@ -95,6 +95,7 @@ export default function ShopOnboardingForm() {
           <div>
             <label className="block text-sm font-medium mb-1">County</label>
             <input {...register("county")} className="input-field" placeholder="Nairobi" />
+            {errors.county && <p className="text-danger text-xs mt-1">{errors.county.message}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Town</label>

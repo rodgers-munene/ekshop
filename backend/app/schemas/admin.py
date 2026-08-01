@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.schemas.user import UserRead
 from app.schemas.shop import ShopRead
 from app.schemas.commerce import OrderRead
+from app.schemas.catalog import ProductRead
 
 
 class HeroSlideCreate(BaseModel):
@@ -31,6 +32,36 @@ class HeroSlideRead(BaseModel):
     sort_order: Optional[int] = 0
     is_active: bool
     created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PromotionCreate(BaseModel):
+    product_id: uuid.UUID
+    label: Optional[str] = None
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    sort_order: int = 0
+
+
+class PromotionUpdate(BaseModel):
+    label: Optional[str] = None
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class PromotionRead(BaseModel):
+    id: uuid.UUID
+    product_id: uuid.UUID
+    label: Optional[str]
+    starts_at: Optional[datetime]
+    ends_at: Optional[datetime]
+    sort_order: Optional[int] = 0
+    is_active: bool
+    created_at: datetime
+    product: Optional[ProductRead] = None
 
     model_config = {"from_attributes": True}
 

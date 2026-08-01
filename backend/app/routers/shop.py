@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query
 import uuid
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy import update, func
@@ -14,14 +15,31 @@ from app.schemas.shop import (
     ShopPaymentMethodRead,
     ShopDashboardRead,
 )
-from app.models.shop import Shop, ShopPaymentMethod
+from app.models.shop import Shop, ShopPaymentMethod, ShopStatus
 from app.models.user import User
 from app.models.commerce import Order, OrderGroup
 from app.models.catalog import Product
 from app.schemas.commerce import OrderRead
-from app.schemas.catalog import ProductListResponse
+from app.schemas.catalog import ProductListResponse, ProductStatus, ShopSummary
 
 router = APIRouter(prefix="/shops", tags=["shops"])
+
+
+@router.get(
+    "/",
+    response_model=List[ShopSummary],
+    status_code=status.HTTP_200_OK,
+    summary="List shops",
+)
+def list_shops(
+    featured: Optional[bool] = None,
+    limit: int = Query(6, le=20),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Shop).filter(Shop.status == ShopStatus.active)
+    if featured:
+        q = q.filter(Shop.is_featured == True)
+    return q.order_by(Shop.rating_avg.desc()).limit(limit).all()
 
 
 @router.post(
@@ -80,11 +98,16 @@ def get_shop_products(
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
 
+    if shop.status != ShopStatus.active:
+        return ProductListResponse(total=0, page=page, limit=limit, results=[])
+
     offset = (page - 1) * limit
-    total = db.query(func.count(Product.id)).filter(Product.shop_id == shop.id).scalar() or 0
+    total = db.query(func.count(Product.id)).filter(
+        Product.shop_id == shop.id, Product.status == ProductStatus.active
+    ).scalar() or 0
     products = (
         db.query(Product)
-        .filter(Product.shop_id == shop.id)
+        .filter(Product.shop_id == shop.id, Product.status == ProductStatus.active)
         .offset(offset)
         .limit(limit)
         .all()

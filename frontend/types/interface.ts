@@ -33,6 +33,7 @@ export interface Shop {
   banner_url?: string;
   county?: string;
   is_verified: boolean;
+  is_featured: boolean;
   rating_avg: string;
   rating_count: number;
   total_sales: string;
@@ -221,6 +222,18 @@ export interface HeroSlide {
   sort_order: number;
   is_active: boolean;
   created_at: string;
+}
+
+export interface Promotion {
+  id: string;
+  product_id: string;
+  label?: string;
+  starts_at?: string;
+  ends_at?: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  product?: Product;
 }
 
 // Addresses

@@ -122,6 +122,8 @@ class Promotion(Base):
     label = Column(String(50))
     starts_at = Column(DateTime(timezone=True))
     ends_at = Column(DateTime(timezone=True))
+    sort_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     product = relationship("Product", back_populates="promotions")
