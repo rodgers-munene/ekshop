@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { toast } from "sonner";
+import { useCartStore } from "@/store/cartStore";
 
 export default function PaystackReturnHandler() {
   return (
@@ -18,6 +19,7 @@ function PaystackReturnHandlerInner() {
   const searchParams = useSearchParams();
   const reference = searchParams.get("paystack_ref");
   const handled = useRef(false);
+  const clearCart = useCartStore((state) => state.clearCart);
 
   useEffect(() => {
     if (!reference || handled.current) return;
@@ -28,6 +30,7 @@ function PaystackReturnHandlerInner() {
         const res = await fetch(`/api/paystack/verify?reference=${encodeURIComponent(reference)}`);
         const data = await res.json();
         if (res.ok && data.status === "success") {
+          clearCart();
           toast.success("Payment confirmed!");
         } else if (res.ok && data.status === "failed") {
           toast.error("Payment failed. Please try again.");
@@ -41,7 +44,7 @@ function PaystackReturnHandlerInner() {
         router.refresh();
       }
     })();
-  }, [reference, router, pathname]);
+  }, [reference, router, pathname, clearCart]);
 
   return null;
 }

@@ -88,6 +88,16 @@ class OrderItemRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OrderShopRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    logo_url: Optional[str] = None
+    is_verified: bool
+
+    model_config = {"from_attributes": True}
+
+
 class OrderRead(BaseModel):
     id: uuid.UUID
     group_id: uuid.UUID
@@ -102,6 +112,7 @@ class OrderRead(BaseModel):
     created_at: datetime
     buyer_name: Optional[str] = None
     delivery_address: Optional[Any] = None
+    shop: Optional[OrderShopRead] = None
 
     model_config = {"from_attributes": True}
 

@@ -11,7 +11,7 @@ type Step = "review" | "address" | "payment" | "redirecting";
 
 export default function CheckoutClient({ addresses }: { addresses: UserAddress[] }) {
   const router = useRouter();
-  const { items, totalPrice, clearCart } = useCartStore();
+  const { items, totalPrice } = useCartStore();
   const [step, setStep] = useState<Step>("review");
   const [selectedAddressId, setSelectedAddressId] = useState<string>(
     addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? ""
@@ -66,7 +66,9 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
       const paystackJson = await paystackRes.json();
       if (!paystackRes.ok) { toast.error(paystackJson.detail ?? "Could not start payment"); return; }
 
-      clearCart();
+      // Cart is intentionally left intact here — it's only cleared once
+      // payment is confirmed (see PaystackReturnHandler). If the buyer
+      // cancels on Paystack's page, they should still have their items.
       setStep("redirecting");
       window.location.href = paystackJson.authorization_url;
     } catch {

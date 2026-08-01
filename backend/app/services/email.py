@@ -46,3 +46,14 @@ def send_password_reset_email(to: str, token: str) -> None:
             <p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
         """,
     )
+
+
+def send_notification_email(to: str, title: str, body: str) -> None:
+    _send(
+        to=to,
+        subject=title,
+        html=f"""
+            <p>{body}</p>
+            <p><a href="{settings.FRONTEND_URL}/orders">View your orders</a></p>
+        """,
+    )

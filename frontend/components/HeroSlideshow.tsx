@@ -25,10 +25,11 @@ export default function HeroSlideshow({ slides, fallbackImageUrl }: HeroSlidesho
   }, [slides.length, paused]);
 
   const slide = slides[index] ?? null;
+  const hasSlides = slides.length > 0;
 
   return (
     <section
-      className="relative h-[360px] md:h-[420px] overflow-hidden"
+      className="relative h-[200px] sm:h-[300px] md:h-[420px] overflow-hidden"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -64,30 +65,39 @@ export default function HeroSlideshow({ slides, fallbackImageUrl }: HeroSlidesho
         <Link href={slide.link_url} aria-label={slide.title || "View offer"} className="absolute inset-0" />
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/40 to-transparent pointer-events-none" />
+      {!hasSlides && (
+        <>
+          <div className="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/40 to-transparent pointer-events-none" />
 
-      <div className="relative h-full flex flex-col justify-center px-6 md:px-12 max-w-xl">
-        <span className="text-xs font-medium tracking-widest uppercase text-white/70 mb-3">
-          Kenya&apos;s Marketplace
-        </span>
-        <h1 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4 text-white">
-          {slide?.title ? (
-            slide.title
-          ) : (
-            <>
+          <div className="relative h-full flex flex-col justify-center px-6 md:px-12 max-w-xl">
+            <span className="text-xs font-medium tracking-widest uppercase text-white/70 mb-3">
+              Kenya&apos;s Marketplace
+            </span>
+            <h1 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4 text-white">
               Everything you need, <span className="text-amber">delivered.</span>
-            </>
-          )}
-        </h1>
-        <p className="text-white/80 text-sm mb-6 max-w-xs">
-          Thousands of verified sellers. One seamless experience.
-        </p>
-        <div>
-          <Link href="/products" className="btn-accent">
-            Shop Deals →
-          </Link>
-        </div>
-      </div>
+            </h1>
+            <p className="text-white/80 text-sm mb-6 max-w-xs">
+              Thousands of verified sellers. One seamless experience.
+            </p>
+            <div>
+              <Link href="/products" className="btn-accent">
+                Shop Deals →
+              </Link>
+            </div>
+          </div>
+        </>
+      )}
+
+      {hasSlides && slide?.title && (
+        <>
+          <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-transparent to-transparent pointer-events-none" />
+          <div className="relative h-full flex flex-col justify-end px-6 md:px-12 pb-6 max-w-xl">
+            <h1 className="text-xl md:text-3xl font-extrabold leading-tight text-white drop-shadow">
+              {slide.title}
+            </h1>
+          </div>
+        </>
+      )}
     </section>
   );
 }

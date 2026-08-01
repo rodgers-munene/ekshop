@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
 from app.models.delivery import DeliveryStatus, DeliveryAgentStatus, ActorRole
+from app.schemas.commerce import OrderRead
 
 
 class AgentLoginRequest(BaseModel):
@@ -64,6 +65,7 @@ class DeliveryRead(BaseModel):
     delivered_at: Optional[datetime]
     created_at: datetime
     events: List[DeliveryEventRead] = []
+    order: Optional[OrderRead] = None
 
     model_config = {"from_attributes": True}
 

@@ -11,6 +11,7 @@ import { useCartStore } from "@/store/cartStore";
 import { AnimatePresence, motion } from "motion/react"
 import { Product, ProductListResponse } from "@/types/interface";
 import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -210,6 +211,9 @@ export default function Navbar() {
 
         {/* Right actions */}
         <div className="flex items-center gap-3 md:gap-5 shrink-0 ml-auto">
+
+          {/* Notifications */}
+          {mounted && isAuthenticated && <NotificationBell />}
 
           {/* Account */}
           {mounted && isAuthenticated ? (

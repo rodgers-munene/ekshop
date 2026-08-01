@@ -3,6 +3,7 @@ import { ArrowLeft, BadgeCheck, MapPin, Star, Store } from "lucide-react";
 import { resolveImageUrl } from "@/lib/utils";
 import { Shop, User } from "@/types/interface";
 import HeaderAccountMenu from "./HeaderAccountMenu";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 export default function DashboardHeader({ user, shop }: { user: User; shop: Shop }) {
   return (
@@ -44,6 +45,7 @@ export default function DashboardHeader({ user, shop }: { user: User; shop: Shop
             <ArrowLeft size={15} />
             Back to shop
           </Link>
+          <NotificationBell iconClassName="text-white" />
           <HeaderAccountMenu user={user} />
         </div>
       </div>

@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.dependencies.auth import require_admin, get_current_active_user
@@ -234,6 +234,11 @@ def update_delivery_status(
 
 # ── Agent: my deliveries ──────────────────────────────────────────────────────
 
+@router.get("/agents/me", response_model=DeliveryAgentRead)
+def my_agent_profile(agent: DeliveryAgent = Depends(get_current_agent)):
+    return agent
+
+
 @router.get("/me", response_model=List[DeliveryRead])
 def my_deliveries(
     db: Session = Depends(get_db),
@@ -241,6 +246,11 @@ def my_deliveries(
 ):
     return (
         db.query(Delivery)
+        .options(
+            selectinload(Delivery.order).selectinload(Order.buyer),
+            selectinload(Delivery.order).selectinload(Order.items),
+            selectinload(Delivery.order).selectinload(Order.shop),
+        )
         .filter(Delivery.agent_id == agent.id)
         .order_by(Delivery.created_at.desc())
         .all()

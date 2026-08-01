@@ -152,6 +152,7 @@ export interface Delivery {
   estimated_at?: string;
   delivered_at?: string;
   events: DeliveryEvent[];
+  order?: Order;
 }
 
 export interface DeliveryAgent {
@@ -162,6 +163,17 @@ export interface DeliveryAgent {
   status: string;
   total_deliveries: number;
   rating_avg: string;
+  created_at: string;
+}
+
+// Notifications
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body?: string;
+  data?: Record<string, unknown>;
+  is_read: boolean;
   created_at: string;
 }
 
