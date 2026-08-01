@@ -64,7 +64,7 @@ export default function NotificationBell({ iconClassName = "" }: { iconClassName
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white text-ink rounded-md shadow-lg border border-border z-50">
+        <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-80 max-h-96 overflow-y-auto bg-white text-ink rounded-md shadow-lg border border-border z-50">
           <div className="flex items-center justify-between px-4 py-2 border-b border-border sticky top-0 bg-white">
             <span className="text-sm font-semibold">Notifications</span>
             {unreadCount > 0 && (

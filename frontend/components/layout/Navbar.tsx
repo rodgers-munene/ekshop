@@ -23,7 +23,9 @@ export default function Navbar() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const searchRef = useRef<HTMLFormElement>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -39,6 +41,9 @@ export default function Navbar() {
     function handleClickOutside(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
+      }
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+        setAccountOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -217,44 +222,49 @@ export default function Navbar() {
 
           {/* Account */}
           {mounted && isAuthenticated ? (
-            <div className="relative group">
-              <button className="hidden sm:flex items-center gap-1.5 text-sm font-semibold">
+            <div className="relative" ref={accountRef}>
+              <button
+                onClick={() => setAccountOpen((o) => !o)}
+                className="hidden sm:flex items-center gap-1.5 text-sm font-semibold"
+              >
                 <User size={18} /> {user?.first_name}
               </button>
-              <button className="sm:hidden flex items-center">
+              <button onClick={() => setAccountOpen((o) => !o)} className="sm:hidden flex items-center">
                 <User size={22} />
               </button>
               {/* Dropdown */}
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white text-ink rounded-md shadow-lg border border-border hidden group-hover:block z-50 overflow-hidden">
-                <Link href="/account" className="block px-4 py-2 text-sm hover:bg-surface">
-                  My Account
-                </Link>
-                <Link href="/orders" className="block px-4 py-2 text-sm hover:bg-surface">
-                  My Orders
-                </Link>
-                <Link href="/wishlist" className="block px-4 py-2 text-sm hover:bg-surface">
-                  Wishlist
-                </Link>
-                <Link href="/messages" className="block px-4 py-2 text-sm hover:bg-surface">
-                  Messages
-                </Link>
-                {user?.role === "seller" && (
-                  <Link href="/dashboard" className="block px-4 py-2 text-sm hover:bg-surface border-t border-border">
-                    Seller Dashboard
+              {accountOpen && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white text-ink rounded-md shadow-lg border border-border z-50 overflow-hidden">
+                  <Link href="/account" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface">
+                    My Account
                   </Link>
-                )}
-                {user?.role === "admin" && (
-                  <Link href="/admin" className="block px-4 py-2 text-sm hover:bg-surface border-t border-border">
-                    Admin Panel
+                  <Link href="/orders" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface">
+                    My Orders
                   </Link>
-                )}
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-surface border-t border-border"
-                >
-                  Logout
-                </button>
-              </div>
+                  <Link href="/wishlist" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface">
+                    Wishlist
+                  </Link>
+                  <Link href="/messages" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface">
+                    Messages
+                  </Link>
+                  {user?.role === "seller" && (
+                    <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface border-t border-border">
+                      Seller Dashboard
+                    </Link>
+                  )}
+                  {user?.role === "admin" && (
+                    <Link href="/admin" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface border-t border-border">
+                      Admin Panel
+                    </Link>
+                  )}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-surface border-t border-border"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <Link href="/login" className="flex items-center gap-1.5 text-sm font-semibold">
