@@ -19,7 +19,7 @@ const PROTECTED_API_PREFIXES = [
 
 const COOKIE_OPTS = {
   httpOnly: true,
-  sameSite: "strict" as const,
+  sameSite: "lax" as const,
   path: "/",
   secure: process.env.NODE_ENV === "production",
 };
