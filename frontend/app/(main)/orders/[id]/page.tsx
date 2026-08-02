@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { serverFetch } from "@/lib/server-api";
+import { serverFetch, ServerFetchError } from "@/lib/server-api";
 import { OrderGroup } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import PaystackReturnHandler from "./PaystackReturnHandler";
@@ -22,9 +22,13 @@ interface Props { params: Promise<{ id: string }> }
 export default async function OrderDetailPage({ params }: Props) {
   const { id } = await params;
 
-  const group = await serverFetch<OrderGroup>(`/orders/${id}`).catch(() => null);
-  if (group === null) redirect("/login");
-  if (!group) notFound();
+  const group = await serverFetch<OrderGroup>(`/orders/${id}`).catch((err) => {
+    if (err instanceof ServerFetchError) {
+      if (err.status === 401) redirect("/login");
+      if (err.status === 404) notFound();
+    }
+    throw err;
+  });
 
   const stepIndex = STEPS.indexOf(group.status);
 

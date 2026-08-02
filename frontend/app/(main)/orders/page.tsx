@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { serverFetch } from "@/lib/server-api";
+import { serverFetch, ServerFetchError } from "@/lib/server-api";
 import { OrderGroup } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 
@@ -14,8 +14,10 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default async function OrdersPage() {
-  const orders = await serverFetch<OrderGroup[]>("/orders/").catch(() => null);
-  if (orders === null) redirect("/login");
+  const orders = await serverFetch<OrderGroup[]>("/orders/").catch((err) => {
+    if (err instanceof ServerFetchError && err.status === 401) redirect("/login");
+    throw err;
+  });
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 md:px-6 py-6">

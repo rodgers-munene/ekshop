@@ -2,6 +2,14 @@ import { cookies } from "next/headers";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL
 
+export class ServerFetchError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+        super(message);
+        this.status = status;
+    }
+}
+
 export async function serverFetch<T>(
     path: string,
     options: RequestInit= {}
@@ -22,7 +30,7 @@ export async function serverFetch<T>(
 
     if (!res.ok) {
         const error = await res.json().catch(() => ({detail: "Request failed"}));
-        throw new Error(error.detail?? `HTTP ${res.status}`);
+        throw new ServerFetchError(error.detail ?? `HTTP ${res.status}`, res.status);
     }
 
     return res.json();
