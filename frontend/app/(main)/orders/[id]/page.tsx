@@ -4,6 +4,7 @@ import { serverFetch, ServerFetchError } from "@/lib/server-api";
 import { OrderGroup } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import PaystackReturnHandler from "./PaystackReturnHandler";
+import PaymentStatusCheck from "./PaymentStatusCheck";
 import DeliveryTracker from "./DeliveryTracker";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -46,6 +47,8 @@ export default async function OrderDetailPage({ params }: Props) {
           {group.status.replace(/_/g, " ")}
         </span>
       </div>
+
+      {group.status === "pending_payment" && <PaymentStatusCheck orderGroupId={group.id} />}
 
       {/* Progress tracker */}
       {group.status !== "cancelled" && (

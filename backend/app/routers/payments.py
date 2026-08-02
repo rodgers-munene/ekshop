@@ -222,6 +222,41 @@ async def paystack_callback(request: Request, db: Session = Depends(get_db)):
     return {"status": "recorded"}
 
 
+def _reconcile_paystack_intent(db: Session, intent: PaymentIntent) -> PaymentStatus:
+    """Checks Paystack's own record for a payment intent and marks the order paid
+    if it succeeded there, regardless of whether our webhook or redirect ever fired."""
+    if intent.status == PaymentStatus.success:
+        return intent.status
+
+    try:
+        result = paystack.verify_transaction(intent.provider_ref)
+    except Exception as e:
+        raise HTTPException(502, f"Paystack error: {str(e)}")
+
+    if result.get("status") == "success":
+        existing = db.query(Payment).filter(Payment.provider_ref == intent.provider_ref).first()
+        if not existing:
+            payment = Payment(
+                order_group_id=intent.order_group_id,
+                user_id=intent.user_id,
+                provider="paystack",
+                provider_ref=intent.provider_ref,
+                amount=str(result["amount"] / 100),
+                status=PaymentStatus.success,
+                channel=result.get("channel"),
+                raw_response=result,
+            )
+            db.add(payment)
+            intent.status = PaymentStatus.success
+            _mark_order_paid(db, intent.order_group_id)
+            db.commit()
+    elif result.get("status") == "failed":
+        intent.status = PaymentStatus.failed
+        db.commit()
+
+    return intent.status
+
+
 @router.get("/paystack/verify/{reference}", response_model=PaystackVerifyResponse)
 def paystack_verify(
     reference: str,
@@ -237,34 +272,29 @@ def paystack_verify(
     if not intent:
         raise HTTPException(404, "Payment not found")
 
-    if intent.status == PaymentStatus.success:
-        return PaystackVerifyResponse(status=intent.status, order_group_id=intent.order_group_id)
+    status_ = _reconcile_paystack_intent(db, intent)
+    return PaystackVerifyResponse(status=status_, order_group_id=intent.order_group_id)
 
-    try:
-        result = paystack.verify_transaction(reference)
-    except Exception as e:
-        raise HTTPException(502, f"Paystack error: {str(e)}")
 
-    if result.get("status") == "success":
-        existing = db.query(Payment).filter(Payment.provider_ref == reference).first()
-        if not existing:
-            payment = Payment(
-                order_group_id=intent.order_group_id,
-                user_id=intent.user_id,
-                provider="paystack",
-                provider_ref=reference,
-                amount=str(result["amount"] / 100),
-                status=PaymentStatus.success,
-                channel=result.get("channel"),
-                raw_response=result,
-            )
-            db.add(payment)
-            intent.status = PaymentStatus.success
-            _mark_order_paid(db, intent.order_group_id)
-            db.commit()
-    elif result.get("status") == "failed":
-        intent.status = PaymentStatus.failed
-        db.commit()
+@router.get("/paystack/verify-order/{order_group_id}", response_model=PaystackVerifyResponse)
+def paystack_verify_order(
+    order_group_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Fallback reconciliation for buyers who never made it back to our callback
+    URL (e.g. the Paystack checkout page crashed after they paid via mobile money).
+    Looks up the latest Paystack payment intent for this order and re-checks it
+    against Paystack directly, so the buyer isn't stuck on 'pending' waiting on a
+    webhook that may be missing or delayed."""
+    intent = db.query(PaymentIntent).filter(
+        PaymentIntent.order_group_id == order_group_id,
+        PaymentIntent.user_id == current_user.id,
+        PaymentIntent.provider == "paystack",
+    ).order_by(PaymentIntent.created_at.desc()).first()
+    if not intent:
+        raise HTTPException(404, "No Paystack payment found for this order")
 
-    return PaystackVerifyResponse(status=intent.status, order_group_id=intent.order_group_id)
+    status_ = _reconcile_paystack_intent(db, intent)
+    return PaystackVerifyResponse(status=status_, order_group_id=intent.order_group_id)
 
