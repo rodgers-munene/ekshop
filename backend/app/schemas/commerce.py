@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from app.models.commerce import OrderStatus, OrderGroupStatus
 
 
@@ -86,6 +86,11 @@ class OrderItemRead(BaseModel):
     line_total: str
 
     model_config = {"from_attributes": True}
+
+    @field_validator("discount_amount", mode="before")
+    @classmethod
+    def default_discount_amount(cls, v):
+        return v if v is not None else "0.00"
 
 
 class OrderShopRead(BaseModel):
