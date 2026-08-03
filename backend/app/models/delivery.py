@@ -84,6 +84,17 @@ class DeliveryEvent(Base):
     actor = relationship("User")
 
 
+class DeliveryRateSettings(Base):
+    __tablename__ = "delivery_rate_settings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    same_county_fee = Column(String(20), nullable=False, default="200.00")
+    same_region_fee = Column(String(20), nullable=False, default="350.00")
+    different_region_fee = Column(String(20), nullable=False, default="600.00")
+    unknown_origin_fee = Column(String(20), nullable=False, default="400.00")
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class Notification(Base):
     __tablename__ = "notifications"
 

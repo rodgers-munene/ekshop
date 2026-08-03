@@ -16,6 +16,21 @@ class CheckoutCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class DeliveryFeePreviewRequest(BaseModel):
+    address_id: uuid.UUID
+    shop_ids: List[uuid.UUID]
+
+
+class DeliveryFeeBreakdownItem(BaseModel):
+    shop_id: uuid.UUID
+    fee: str
+
+
+class DeliveryFeePreviewResponse(BaseModel):
+    total_delivery_fee: str
+    breakdown: List[DeliveryFeeBreakdownItem]
+
+
 class UserAddressCreate(BaseModel):
     label: Optional[str] = None
     first_name: str

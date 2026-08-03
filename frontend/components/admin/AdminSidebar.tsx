@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Store, Users, FolderTree, Truck, GalleryHorizontal, Tag } from "lucide-react";
+import { LayoutDashboard, Store, Users, FolderTree, Truck, GalleryHorizontal, Tag, Banknote } from "lucide-react";
 
 const LINKS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/deliveries", label: "Deliveries", icon: Truck },
+  { href: "/admin/delivery-rates", label: "Delivery Rates", icon: Banknote },
   { href: "/admin/hero-slides", label: "Hero Slides", icon: GalleryHorizontal },
   { href: "/admin/deals", label: "Deals", icon: Tag },
 ];

@@ -73,3 +73,21 @@ class DeliveryRead(BaseModel):
 class DeliveryStatusUpdate(BaseModel):
     status: DeliveryStatus
     notes: Optional[str] = None
+
+
+class DeliveryRateRead(BaseModel):
+    id: uuid.UUID
+    same_county_fee: str
+    same_region_fee: str
+    different_region_fee: str
+    unknown_origin_fee: str
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DeliveryRateUpdate(BaseModel):
+    same_county_fee: Optional[str] = None
+    same_region_fee: Optional[str] = None
+    different_region_fee: Optional[str] = None
+    unknown_origin_fee: Optional[str] = None

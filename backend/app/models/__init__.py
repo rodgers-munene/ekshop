@@ -3,7 +3,7 @@ from app.models.shop import Shop, ShopPaymentMethod
 from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview
 from app.models.commerce import UserAddress, Cart, CartItem, Wishlist, OrderGroup, Order, OrderItem
 from app.models.payment import Payment, PaymentIntent
-from app.models.delivery import DeliveryAgent, Delivery, DeliveryEvent, Notification
+from app.models.delivery import DeliveryAgent, Delivery, DeliveryEvent, Notification, DeliveryRateSettings
 from app.models.subscription import SubscriptionPlan, Subscription
 from app.models.messaging import Conversation, Message
 from app.models.analytics import (
@@ -17,7 +17,7 @@ __all__ = [
     "Category", "Product", "ProductImage", "ProductVariant", "ProductReview",
     "UserAddress", "Cart", "CartItem", "Wishlist", "OrderGroup", "Order", "OrderItem",
     "Payment", "PaymentIntent",
-    "DeliveryAgent", "Delivery", "DeliveryEvent", "Notification",
+    "DeliveryAgent", "Delivery", "DeliveryEvent", "Notification", "DeliveryRateSettings",
     "SubscriptionPlan", "Subscription",
     "Conversation", "Message",
     "UserEvent", "ProductScore", "UserPreference", "SearchTerm",

@@ -226,6 +226,15 @@ export interface AdminTrendPoint {
   orders: number;
 }
 
+export interface DeliveryRates {
+  id: string;
+  same_county_fee: string;
+  same_region_fee: string;
+  different_region_fee: string;
+  unknown_origin_fee: string;
+  updated_at: string;
+}
+
 export interface HeroSlide {
   id: string;
   image_url: string;

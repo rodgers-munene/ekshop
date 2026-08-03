@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useCartStore } from "@/store/cartStore";
@@ -17,10 +17,39 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
     addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? ""
   );
   const [loading, setLoading] = useState(false);
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [resolvedFeeKey, setResolvedFeeKey] = useState("");
+  const requestKeyRef = useRef("");
 
   const subtotal = totalPrice();
-  const deliveryFee = 150;
   const total = subtotal + deliveryFee;
+
+  const shopIds = [...new Set(items.map((item) => item.shop_id))];
+  const feeKey = selectedAddressId && shopIds.length > 0 ? `${selectedAddressId}|${shopIds.sort().join(",")}` : "";
+  const feeLoading = feeKey !== "" && feeKey !== resolvedFeeKey;
+
+  useEffect(() => {
+    if (!feeKey) return;
+    requestKeyRef.current = feeKey;
+
+    fetch("/api/checkout/delivery-fee-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address_id: selectedAddressId, shop_ids: shopIds }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (requestKeyRef.current !== feeKey) return; // a newer request superseded this one
+        if (typeof data.total_delivery_fee === "string") {
+          setDeliveryFee(parseFloat(data.total_delivery_fee));
+        }
+        setResolvedFeeKey(feeKey);
+      })
+      .catch(() => {
+        if (requestKeyRef.current === feeKey) setResolvedFeeKey(feeKey);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feeKey]);
 
   async function placeOrder() {
     if (!selectedAddressId) { toast.error("Select a delivery address"); return; }
@@ -180,7 +209,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted">Delivery</span>
-              <span>{formatKES(deliveryFee)}</span>
+              <span>{feeLoading ? <span className="text-muted italic">Calculating…</span> : formatKES(deliveryFee)}</span>
             </div>
             <div className="flex justify-between font-bold border-t border-border pt-3">
               <span>Total</span>
@@ -188,7 +217,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
             </div>
             <button
               onClick={placeOrder}
-              disabled={loading || !selectedAddressId}
+              disabled={loading || feeLoading || !selectedAddressId}
               className="btn-accent w-full disabled:opacity-40 mt-2"
             >
               {loading ? "Processing..." : "Pay →"}

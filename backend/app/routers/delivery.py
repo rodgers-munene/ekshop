@@ -18,8 +18,10 @@ from app.schemas.delivery import (
     AgentLoginRequest, AgentTokenResponse,
     DeliveryAgentCreate, DeliveryAgentRead, DeliveryAgentListResponse,
     DeliveryRead, DeliveryStatusUpdate,
+    DeliveryRateRead, DeliveryRateUpdate,
 )
 from app.services.notifications import create_notification
+from app.services.delivery_pricing import get_or_create_rate_settings
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -255,6 +257,36 @@ def my_deliveries(
         .order_by(Delivery.created_at.desc())
         .all()
     )
+
+
+# ── Admin: delivery fee rates ──────────────────────────────────────────────────
+
+@router.get("/rates", response_model=DeliveryRateRead)
+def get_delivery_rates(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    settings = get_or_create_rate_settings(db)
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+@router.put("/rates", response_model=DeliveryRateRead)
+def update_delivery_rates(
+    payload: DeliveryRateUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    settings = get_or_create_rate_settings(db)
+
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(settings, field, value)
+
+    db.commit()
+    db.refresh(settings)
+    return settings
 
 
 # ── Buyer: track order ────────────────────────────────────────────────────────
