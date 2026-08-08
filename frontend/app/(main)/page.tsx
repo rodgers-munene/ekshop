@@ -14,18 +14,18 @@ import {
 } from "lucide-react";
 import { serverFetch } from "@/lib/server-api";
 import { resolveImageUrl, decodeHtml } from "@/lib/utils";
-import { Product, Category, ProductListResponse, ShopSummary, HeroSlide, Promotion } from "@/types/interface";
+import { Product, Category, ProductListResponse, PaginatedResponse, ShopSummary, HeroSlide, Promotion } from "@/types/interface";
 import ProductRail from "@/components/ProductRail";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import DealsCardSlideshow from "@/components/DealsCardSlideshow";
 
 export default async function HomePage() {
-  const [trending, categories, newArrivalsRes, heroSlides, featuredShops, curatedDeals] = await Promise.all([
+  const [trending, categories, newArrivalsRes, heroSlides, featuredShopsRes, curatedDeals] = await Promise.all([
     serverFetch<Product[]>("/recommendations?limit=20").catch(() => []),
     serverFetch<Category[]>("/categories/").catch(() => []),
     serverFetch<ProductListResponse>("/products/?limit=8").catch(() => null),
     serverFetch<HeroSlide[]>("/hero-slides").catch(() => []),
-    serverFetch<ShopSummary[]>("/shops/?featured=true&limit=6").catch(() => []),
+    serverFetch<PaginatedResponse<ShopSummary>>("/shops/?featured=true&limit=6").catch(() => null),
     serverFetch<Promotion[]>("/deals/?limit=8").catch(() => []),
   ]);
 
@@ -39,6 +39,7 @@ export default async function HomePage() {
         )
         .slice(0, 8);
   const newArrivals = newArrivalsRes?.results ?? [];
+  const featuredShops = featuredShopsRes?.results ?? [];
 
   const categoryImages = new Map<string, string>();
   for (const product of [...trending, ...newArrivals]) {

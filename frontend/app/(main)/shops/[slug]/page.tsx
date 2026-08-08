@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { BadgeCheck, MapPin, Star } from "lucide-react";
 import { serverFetch } from "@/lib/server-api";
@@ -10,11 +12,46 @@ interface Props {
   params: Promise<{ slug: string }>;
 }
 
+const getShop = cache((slug: string) =>
+  serverFetch<Shop>(`/shops/${slug}`).catch(() => null)
+);
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const shop = await getShop(slug);
+  if (!shop) return {};
+
+  const description = shop.description
+    ? decodeHtml(shop.description).slice(0, 155)
+    : `Shop ${decodeHtml(shop.name)} on Ekshop${shop.county ? ` - based in ${shop.county}` : ""}.`;
+
+  const image = shop.banner_url ?? shop.logo_url;
+
+  return {
+    title: decodeHtml(shop.name),
+    description,
+    alternates: { canonical: `/shops/${shop.slug}` },
+    openGraph: {
+      title: decodeHtml(shop.name),
+      description,
+      type: "website",
+      images: image ? [{ url: resolveImageUrl(image) }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: decodeHtml(shop.name),
+      description,
+      images: image ? [resolveImageUrl(image)] : undefined,
+    },
+  };
+}
+
+
 export default async function ShopPage({ params }: Props) {
   const { slug } = await params;
 
   const [shop, productsRes] = await Promise.all([
-    serverFetch<Shop>(`/shops/${slug}`).catch(() => null),
+    getShop(slug),
     serverFetch<ProductListResponse>(`/shops/${slug}/products?limit=24`).catch(() => null),
   ]);
 

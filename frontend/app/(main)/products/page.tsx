@@ -1,10 +1,43 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { serverFetch } from "@/lib/server-api";
 import { Category, ProductListResponse } from "@/types/interface";
 import ProductCard from "@/components/ProductCard";
 
 interface Props {
-  searchParams: Promise<{ category?: string; q?: string; county?: string; page?: string }>;
+  searchParams: Promise<{
+    category?: string;
+    q?: string;
+    county?: string;
+    page?: string;
+  }>;
+}
+
+export async function generateMetadata({
+  searchParams,
+}: Props): Promise<Metadata> {
+  const { category, q } = await searchParams;
+
+  if (q) {
+    return {
+      title: `Results for "${q}"`,
+      robots: { index: false, follow: true },
+    };
+  }
+
+  if (category) {
+    const name = category.replace(/-/g, " ");
+    return {
+      title: `${name} - Shop Online in Kenya`,
+      description: `Browse ${name} on Ekshop - Kenya's online marketplace.`,
+    };
+  }
+
+  return {
+    title: "Shop All Products",
+    description:
+      "Browse thousands of products from verified sellers across Kenya.",
+  };
 }
 
 export default async function ProductsPage({ searchParams }: Props) {
@@ -19,8 +52,14 @@ export default async function ProductsPage({ searchParams }: Props) {
   params.set("limit", "20");
 
   const [data, categories] = await Promise.all([
-    serverFetch<ProductListResponse>(`/products/?${params}`).catch((e) => { console.error("PRODUCTS ERROR:", e.message); return null; }),
-    serverFetch<Category[]>("/categories/").catch((e) => { console.error("CATEGORIES ERROR:", e.message); return []; }),
+    serverFetch<ProductListResponse>(`/products/?${params}`).catch((e) => {
+      console.error("PRODUCTS ERROR:", e.message);
+      return null;
+    }),
+    serverFetch<Category[]>("/categories/").catch((e) => {
+      console.error("CATEGORIES ERROR:", e.message);
+      return [];
+    }),
   ]);
 
   const products = data?.results ?? [];
@@ -29,12 +68,15 @@ export default async function ProductsPage({ searchParams }: Props) {
 
   return (
     <div className="w-full px-4 md:px-6 py-4">
-
       {/* ── Page header ────────────────────────────────────── */}
       <div className="card px-4 md:px-6 py-5 mb-4">
         <div className="flex items-baseline justify-between">
           <h1 className="text-2xl font-bold">
-            {q ? `Results for "${q}"` : category ? category.replace(/-/g, " ") : "All Products"}
+            {q
+              ? `Results for "${q}"`
+              : category
+                ? category.replace(/-/g, " ")
+                : "All Products"}
           </h1>
           <span className="text-sm text-muted">{total} products</span>
         </div>
@@ -51,15 +93,20 @@ export default async function ProductsPage({ searchParams }: Props) {
       </div>
 
       <div className="flex gap-4">
-
         {/* ── Sidebar filters ─────────────────────────────── */}
         <aside className="hidden md:block w-56 shrink-0">
           <div className="card p-4 mb-4">
             <p className="text-xs font-medium uppercase tracking-widest text-muted mb-3">
               Location
             </p>
-            <form action="/products" method="get" className="flex flex-col gap-2">
-              {category && <input type="hidden" name="category" value={category} />}
+            <form
+              action="/products"
+              method="get"
+              className="flex flex-col gap-2"
+            >
+              {category && (
+                <input type="hidden" name="category" value={category} />
+              )}
               {q && <input type="hidden" name="q" value={q} />}
               <input
                 type="text"
@@ -68,7 +115,10 @@ export default async function ProductsPage({ searchParams }: Props) {
                 placeholder="e.g. Nairobi"
                 className="input-field text-sm py-1.5"
               />
-              <button type="submit" className="text-xs py-1.5 px-3 rounded-md border border-border hover:bg-surface transition-colors">
+              <button
+                type="submit"
+                className="text-xs py-1.5 px-3 rounded-md border border-border hover:bg-surface transition-colors"
+              >
                 Filter by county
               </button>
             </form>
@@ -95,20 +145,22 @@ export default async function ProductsPage({ searchParams }: Props) {
                   >
                     {cat.name}
                   </Link>
-                  {cat.children && cat.children.length > 0 && category === cat.slug && (
-                    <ul className="ml-3 mt-1 space-y-1">
-                      {cat.children.map((child) => (
-                        <li key={child.id}>
-                          <Link
-                            href={`/products?category=${child.slug}`}
-                            className="block text-xs py-0.5 text-muted hover:text-amber transition-colors"
-                          >
-                            {child.name}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {cat.children &&
+                    cat.children.length > 0 &&
+                    category === cat.slug && (
+                      <ul className="ml-3 mt-1 space-y-1">
+                        {cat.children.map((child) => (
+                          <li key={child.id}>
+                            <Link
+                              href={`/products?category=${child.slug}`}
+                              className="block text-xs py-0.5 text-muted hover:text-amber transition-colors"
+                            >
+                              {child.name}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                 </li>
               ))}
             </ul>
@@ -153,7 +205,9 @@ export default async function ProductsPage({ searchParams }: Props) {
           ) : (
             <div className="card flex flex-col items-center justify-center py-24 text-center">
               <p className="text-2xl font-bold mb-2">No products found</p>
-              <p className="text-muted text-sm mb-6">Try a different category or search term</p>
+              <p className="text-muted text-sm mb-6">
+                Try a different category or search term
+              </p>
               <Link href="/products" className="btn-accent">
                 Browse all products
               </Link>

@@ -20,26 +20,30 @@ from app.models.user import User
 from app.models.commerce import Order, OrderGroup
 from app.models.catalog import Product
 from app.schemas.commerce import OrderRead
-from app.schemas.catalog import ProductListResponse, ProductStatus, ShopSummary
+from app.schemas.catalog import ProductListResponse, ProductStatus, ShopSummary, ShopListResponse
 
 router = APIRouter(prefix="/shops", tags=["shops"])
 
 
 @router.get(
     "/",
-    response_model=List[ShopSummary],
+    response_model=ShopListResponse,
     status_code=status.HTTP_200_OK,
     summary="List shops",
 )
 def list_shops(
     featured: Optional[bool] = None,
-    limit: int = Query(6, le=20),
+    page: int = Query(1, ge=1),
+    limit: int = Query(6, le=100),
     db: Session = Depends(get_db),
 ):
     q = db.query(Shop).filter(Shop.status == ShopStatus.active)
     if featured:
         q = q.filter(Shop.is_featured == True)
-    return q.order_by(Shop.rating_avg.desc()).limit(limit).all()
+    total = q.count()
+    skip = (page - 1) * limit
+    results = q.order_by(Shop.rating_avg.desc()).offset(skip).limit(limit).all()
+    return ShopListResponse(total=total, page=page, limit=limit, results=results)
 
 
 @router.post(

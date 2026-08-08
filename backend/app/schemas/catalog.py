@@ -110,6 +110,13 @@ class ShopSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ShopListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[ShopSummary]
+
+
 class ProductRead(BaseModel):
     id: uuid.UUID
     shop_id: uuid.UUID
