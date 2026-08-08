@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -99,3 +99,19 @@ def calculate_delivery_fee(
         return Decimal(settings.same_region_fee)
 
     return Decimal(settings.different_region_fee)
+
+
+# County/region matching above is on hold pending further research; this
+# cart-total-tiered model is what's live at checkout for now.
+def calculate_delivery_fee_from_cart_total(cart_total: Decimal) -> Decimal:
+    if cart_total >= 800:
+        return (cart_total * Decimal("0.0825")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    if cart_total >= 400:
+        return Decimal("150")
+    if cart_total >= 150:
+        return Decimal("127")
+    if cart_total >= 50:
+        return Decimal("93")
+    if cart_total >= 1:
+        return Decimal("87")
+    return Decimal("0")

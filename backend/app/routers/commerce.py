@@ -10,7 +10,6 @@ from app.dependencies.database import get_db
 from app.models.user import User
 from app.models.commerce import Cart, CartItem, UserAddress, OrderGroup, Order, OrderItem
 from app.models.catalog import Product
-from app.models.shop import Shop
 from app.schemas.commerce import (
     CartRead,
     CartItemRead,
@@ -21,10 +20,9 @@ from app.schemas.commerce import (
     OrderStatusUpdate,
     DeliveryFeePreviewRequest,
     DeliveryFeePreviewResponse,
-    DeliveryFeeBreakdownItem,
 )
 from app.services.notifications import create_notification
-from app.services.delivery_pricing import calculate_delivery_fee, get_or_create_rate_settings
+from app.services.delivery_pricing import calculate_delivery_fee_from_cart_total
 
 cart_router = APIRouter(prefix="/cart", tags=["cart"])
 checkout_router = APIRouter(prefix="/checkout", tags=["checkout"])
@@ -197,22 +195,19 @@ def preview_delivery_fee(
     if not address:
         raise HTTPException(status_code=404, detail="Address not found")
 
-    shops = {
-        s.id: s
-        for s in db.query(Shop).filter(Shop.id.in_(payload.shop_ids)).all()
-    }
-    rate_settings = get_or_create_rate_settings(db)
-    db.commit()
+    cart = db.query(Cart).filter(Cart.user_id == current_user.id).first()
+    cart_total = Decimal("0.00")
+    if cart:
+        product_ids = [item.product_id for item in cart.items]
+        products = {p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
+        for item in cart.items:
+            product = products.get(item.product_id)
+            if product:
+                cart_total += Decimal(product.price) * item.quantity
 
-    breakdown = []
-    total = Decimal("0.00")
-    for shop_id in payload.shop_ids:
-        shop = shops.get(shop_id)
-        fee = calculate_delivery_fee(address.county, shop.county if shop else None, rate_settings)
-        total += fee
-        breakdown.append(DeliveryFeeBreakdownItem(shop_id=shop_id, fee=str(fee)))
+    fee = calculate_delivery_fee_from_cart_total(cart_total)
 
-    return DeliveryFeePreviewResponse(total_delivery_fee=str(total), breakdown=breakdown)
+    return DeliveryFeePreviewResponse(total_delivery_fee=str(fee), breakdown=[])
 
 
 @checkout_router.post(
@@ -284,20 +279,18 @@ def checkout(
         shop_id = products[item.product_id].shop_id
         items_by_shop.setdefault(shop_id, []).append(item)
 
-    shops = {
-        s.id: s
-        for s in db.query(Shop).filter(Shop.id.in_(items_by_shop.keys())).all()
-    }
-    rate_settings = get_or_create_rate_settings(db)
+    # cart-total-tiered fee, charged once for the whole order group
+    cart_total = sum(
+        (Decimal(products[item.product_id].price) * item.quantity for item in cart.items),
+        Decimal("0.00"),
+    )
+    group_delivery_fee = calculate_delivery_fee_from_cart_total(cart_total)
 
     # create Orders, OrderItems, decrement stock
     group_subtotal = Decimal("0.00")
-    group_delivery_fee = Decimal("0.00")
 
     for shop_id, shop_items in items_by_shop.items():
         order_subtotal = Decimal("0.00")
-        delivery_fee = calculate_delivery_fee(address.county, shops[shop_id].county, rate_settings)
-        group_delivery_fee += delivery_fee
 
         order = Order(
             group_id=order_group.id,
@@ -305,7 +298,7 @@ def checkout(
             buyer_id=current_user.id,
             notes=payload.notes,
             subtotal="0.00",
-            delivery_fee=str(delivery_fee),
+            delivery_fee="0.00",
             total="0.00",
         )
         db.add(order)
@@ -339,7 +332,7 @@ def checkout(
             product.stock_qty -= item.quantity
 
         order.subtotal = str(order_subtotal)
-        order.total = str(order_subtotal + delivery_fee)
+        order.total = str(order_subtotal)
         group_subtotal += order_subtotal
 
     # update group totals now that we know the real sum

@@ -35,10 +35,12 @@ Make sure the following are installed before you begin:
 
 ```
 ekshop/
-├── backend/        FastAPI application
-├── frontend/       Next.js application
-├── DEVELOPMENT.md  Full architecture decisions and phase roadmap
-└── README.md       This file
+├── backend/            FastAPI application
+├── frontend/           Next.js application
+├── infra/terraform/    AWS infrastructure (EC2, ECR, IAM/OIDC, S3, Secrets Manager)
+├── .github/workflows/  CI/CD — migrate + build + deploy to AWS on push to main
+├── DEVELOPMENT.md      Full architecture decisions and phase roadmap
+└── README.md           This file
 ```
 
 ---
@@ -71,7 +73,7 @@ Open `.env` and fill in the values:
 ```env
 DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname
 SECRET_KEY=<generate below>
-ACCESS_TOKEN_EXPIRE_MINUTES=15
+ACCESS_TOKEN_EXPIRE_DAYS=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
@@ -92,7 +94,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 alembic upgrade head
 ```
 
-This creates all 30 tables in the target database.
+This creates all tables in the target database (see [`backend/docs/architecture_overview.pdf`](backend/docs/architecture_overview.pdf) for the full data model).
 
 ### 5. Start the development server
 
@@ -159,8 +161,13 @@ cd frontend && npm run dev
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string (`postgresql+psycopg://...`) |
 | `SECRET_KEY` | Yes | JWT signing secret — must be random and kept private |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Access token TTL (default: 15) |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | No | Refresh token TTL (default: 7) |
+| `ACCESS_TOKEN_EXPIRE_DAYS` | No | Access token TTL in days (default: 15) |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | No | Refresh token TTL in days (default: 7) |
+| `CORS_ORIGINS` | Yes | Comma-separated list of allowed frontend origins |
+| `PAYSTACK_SECRET_KEY` / `PAYSTACK_PUBLIC_KEY` | Yes | Live payment provider |
+| `MPESA_*` (consumer key/secret, shortcode, passkey, environment, callback URL) | No | M-Pesa Daraja STK Push — built but not linked into checkout until the Daraja app is approved for production |
+| `RESEND_API_KEY` / `EMAIL_FROM` | No | Transactional email; falls back to console logging in dev |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` / `AWS_S3_BUCKET` / `AWS_S3_PUBLIC_URL` | No | Product/hero image storage; uploads fail with a 502 until these are set |
 
 ### Frontend (`frontend/.env.local`)
 
@@ -195,18 +202,22 @@ alembic history
 
 ## API overview
 
-| Tag | Prefix | Status |
+| Tag | Prefix | Handles |
 |---|---|---|
-| Auth | `/auth` | Complete |
-| Users | `/users` | In progress |
-| Shops | `/shops` | Pending |
-| Products | `/products` | Pending |
-| Orders | `/orders` | Pending |
-| Payments | `/payments` | Pending |
-| Delivery | `/delivery` | Pending |
-| Recommendations | `/recommendations` | Pending |
+| Auth | `/auth` | Register, verify, login, refresh, logout, password reset |
+| Users | `/users` | Profile, addresses, wishlist, notification preferences |
+| Shops | `/shops` | Shop CRUD, public storefront, seller dashboard |
+| Categories / Products | `/categories`, `/products` | Catalog browsing, full-text search, product detail |
+| Cart / Checkout | `/cart`, `/checkout` | Cart CRUD, multi-vendor order splitting, delivery-fee preview |
+| Orders | `/orders` | Buyer order history and detail |
+| Payments | `/payments` | Paystack (live) + M-Pesa (built, not yet linked) init/callback/verify, stuck-payment reconciliation |
+| Delivery | `/delivery` | Agent auth, assignment, tracking, admin-configurable delivery rates |
+| Admin | `/admin` | User/shop moderation, platform operations |
+| Messaging, Recommendations, Hero, Deals, Notifications | — | Buyer↔shop chat, personalization, homepage merchandising |
 
-Full documentation for the auth system: [`backend/docs/auth_pipeline.md`](backend/docs/auth_pipeline.md)
+Every router above is implemented and mounted in `app/main.py` — see [`backend/docs/architecture_overview.pdf`](backend/docs/architecture_overview.pdf) for the full architecture, including data model, auth flow, payments, delivery pricing, frontend structure, and deployment infrastructure.
+
+Full documentation for the auth system: [`backend/docs/auth_pipeline.md`](backend/docs/auth_pipeline.md) *(note: this doc's stated token TTL and rate-limiting status have drifted from the code — see the architecture PDF for the current state)*
 
 Full development roadmap: [`DEVELOPMENT.md`](DEVELOPMENT.md)
 
@@ -224,6 +235,16 @@ Full development roadmap: [`DEVELOPMENT.md`](DEVELOPMENT.md)
 - Money values in the database are stored as strings (e.g. `"1250.00"`) to
   avoid float precision issues. They are parsed to `Decimal` in the service
   layer when arithmetic is needed.
+
+---
+
+## Deployment & architecture
+
+- **Backend**: containerized (`backend/Dockerfile`), pushed to AWS ECR, and deployed to a single EC2 instance via GitHub Actions using OIDC (no long-lived AWS keys) and SSM Run Command (no SSH). Infrastructure is defined in [`infra/terraform/`](infra/terraform/README.md). Every push to `main` touching `backend/**` runs Alembic migrations in CI before the new image is deployed.
+- **Frontend**: standard Next.js app deployed on Vercel via its own git integration — no custom pipeline in this repo.
+- **Database**: managed PostgreSQL on Supabase.
+
+For the full picture — data model, auth, payments, delivery pricing, frontend structure, CI/CD, and AWS resources — see [`backend/docs/architecture_overview.pdf`](backend/docs/architecture_overview.pdf).
 
 ---
 
