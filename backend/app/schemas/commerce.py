@@ -16,9 +16,15 @@ class CheckoutCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class DeliveryFeePreviewItem(BaseModel):
+    product_id: uuid.UUID
+    quantity: int = 1
+
+
 class DeliveryFeePreviewRequest(BaseModel):
     address_id: uuid.UUID
-    shop_ids: List[uuid.UUID]
+    shop_ids: List[uuid.UUID] = []
+    items: List[DeliveryFeePreviewItem] = []
 
 
 class DeliveryFeeBreakdownItem(BaseModel):

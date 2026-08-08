@@ -25,7 +25,8 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
   const total = subtotal + deliveryFee;
 
   const shopIds = [...new Set(items.map((item) => item.shop_id))];
-  const feeKey = selectedAddressId && shopIds.length > 0 ? `${selectedAddressId}|${shopIds.sort().join(",")}` : "";
+  const itemsKey = items.map((item) => `${item.product_id}:${item.quantity}`).sort().join(",");
+  const feeKey = selectedAddressId && items.length > 0 ? `${selectedAddressId}|${itemsKey}` : "";
   const feeLoading = feeKey !== "" && feeKey !== resolvedFeeKey;
 
   useEffect(() => {
@@ -35,7 +36,11 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
     fetch("/api/checkout/delivery-fee-preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address_id: selectedAddressId, shop_ids: shopIds }),
+      body: JSON.stringify({
+        address_id: selectedAddressId,
+        shop_ids: shopIds,
+        items: items.map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
+      }),
     })
       .then((res) => res.json())
       .then((data) => {

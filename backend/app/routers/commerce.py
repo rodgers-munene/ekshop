@@ -195,12 +195,11 @@ def preview_delivery_fee(
     if not address:
         raise HTTPException(status_code=404, detail="Address not found")
 
-    cart = db.query(Cart).filter(Cart.user_id == current_user.id).first()
     cart_total = Decimal("0.00")
-    if cart:
-        product_ids = [item.product_id for item in cart.items]
+    if payload.items:
+        product_ids = [item.product_id for item in payload.items]
         products = {p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
-        for item in cart.items:
+        for item in payload.items:
             product = products.get(item.product_id)
             if product:
                 cart_total += Decimal(product.price) * item.quantity
