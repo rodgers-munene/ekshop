@@ -10,7 +10,7 @@ import TopList from "@/components/investor/TopList";
 import DailyRevenueTable from "@/components/investor/DailyRevenueTable";
 
 export const metadata: Metadata = {
-  title: "Investor Briefing",
+  title: "Ekshop Store",
   robots: { index: false, follow: false, nocache: true },
 };
 
@@ -68,8 +68,8 @@ export default async function InvestorBriefingPage({ searchParams }: Props) {
   return (
     <div className="w-full max-w-6xl mx-auto px-4 md:px-8 py-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Investor briefing</h1>
-        <p className="text-xs text-muted mt-1">Confidential — platform performance snapshot</p>
+        <h1 className="text-2xl font-bold">Ekshop data</h1>
+        <p className="text-xs text-muted mt-1">Confidential - platform performance snapshot</p>
       </div>
 
       <div className="card p-4 mb-6 flex flex-wrap items-end gap-3">
