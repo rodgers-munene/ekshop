@@ -226,6 +226,57 @@ export interface AdminTrendPoint {
   orders: number;
 }
 
+// Investor
+export interface TopSeller {
+  shop_name: string;
+  revenue: string;
+  orders: number;
+}
+
+export interface TopBuyer {
+  name: string;
+  revenue: string;
+  orders: number;
+}
+
+export interface InvestorOverview {
+  revenue_total: string;
+  revenue_30d: string;
+  revenue_7d: string;
+  total_orders: number;
+  orders_30d: number;
+  orders_7d: number;
+  total_buyers: number;
+  total_sellers: number;
+  total_shops: number;
+  total_products: number;
+  losses_total: string;
+  losses_count: number;
+  order_status_counts: Record<string, number>;
+  top_sellers: TopSeller[];
+  top_buyers: TopBuyer[];
+  available_years: number[];
+}
+
+export interface InvestorTrendPoint {
+  label: string;
+  revenue: number;
+  orders: number;
+}
+
+export interface InvestorDailyRevenuePoint {
+  date: string;
+  revenue: string;
+  orders: number;
+}
+
+export interface InvestorDailyRevenueResponse {
+  total: number;
+  page: number;
+  limit: number;
+  results: InvestorDailyRevenuePoint[];
+}
+
 export interface DeliveryRates {
   id: string;
   same_county_fee: string;
