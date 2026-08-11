@@ -68,7 +68,7 @@ export default async function InvestorBriefingPage({ searchParams }: Props) {
   return (
     <div className="w-full max-w-6xl mx-auto px-4 md:px-8 py-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Ekshop data</h1>
+        <h1 className="text-2xl font-bold">Ekshop store Overview</h1>
         <p className="text-xs text-muted mt-1">Confidential - platform performance snapshot</p>
       </div>
 
