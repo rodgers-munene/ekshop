@@ -177,19 +177,19 @@ export default function AdminDeliveryRatesPage() {
           <ol className="space-y-2.5 text-sm mb-5">
             <li className="flex gap-2">
               <span className="font-semibold text-amber shrink-0">1.</span>
-              <span><span className="font-medium">Same county</span> — buyer and shop are in the exact same county. Cheapest tier.</span>
+              <span><span className="font-medium">Same county</span>: buyer and shop are in the exact same county. Cheapest tier.</span>
             </li>
             <li className="flex gap-2">
               <span className="font-semibold text-amber shrink-0">2.</span>
-              <span><span className="font-medium">Same region</span> — different county, but both fall in the same logistics cluster below.</span>
+              <span><span className="font-medium">Same region</span>: different county, but both fall in the same logistics cluster below.</span>
             </li>
             <li className="flex gap-2">
               <span className="font-semibold text-amber shrink-0">3.</span>
-              <span><span className="font-medium">Different region</span> — buyer and shop are in unrelated parts of the country. Most expensive tier.</span>
+              <span><span className="font-medium">Different region</span>: buyer and shop are in unrelated parts of the country. Most expensive tier.</span>
             </li>
             <li className="flex gap-2">
               <span className="font-semibold text-amber shrink-0">4.</span>
-              <span><span className="font-medium">Unknown origin</span> — fallback when the shop hasn&apos;t set a county at all.</span>
+              <span><span className="font-medium">Unknown origin</span>: fallback when the shop hasn&apos;t set a county at all.</span>
             </li>
           </ol>
 
