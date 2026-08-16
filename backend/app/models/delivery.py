@@ -92,6 +92,10 @@ class DeliveryRateSettings(Base):
     same_region_fee = Column(String(20), nullable=False, default="350.00")
     different_region_fee = Column(String(20), nullable=False, default="600.00")
     unknown_origin_fee = Column(String(20), nullable=False, default="400.00")
+    # Feature flag: while False, checkout keeps using the cart-total-tiered fee
+    # (calculate_delivery_fee_from_cart_total). Flip to True once the county/region
+    # model has been validated against real seller locations in the admin simulator.
+    use_geo_pricing = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 

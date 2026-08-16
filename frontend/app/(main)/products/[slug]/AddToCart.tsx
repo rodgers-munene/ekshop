@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useCartStore } from "@/store/cartStore";
 import { Product } from "@/types/interface";
+import { trackEvent } from "@/lib/track";
 
 export default function AddToCart({ product }: { product: Product }) {
   const [quantity, setQuantity] = useState(1);
@@ -20,6 +21,7 @@ export default function AddToCart({ product }: { product: Product }) {
       unit_price: parseFloat(product.price),
       quantity,
     });
+    trackEvent("add_to_cart", { product_id: product.id, category_id: product.category_id ?? undefined });
     toast.success(`${product.name} added to cart`);
   }
 

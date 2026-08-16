@@ -11,17 +11,26 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.dependencies.auth import require_admin, get_current_active_user
 from app.dependencies.database import get_db
+from decimal import Decimal
+
 from app.models.delivery import DeliveryAgent, DeliveryAgentStatus, Delivery, DeliveryEvent, DeliveryStatus, ActorRole
 from app.models.commerce import Order, OrderStatus
+from app.models.shop import Shop, ShopStatus
 from app.models.user import User
 from app.schemas.delivery import (
     AgentLoginRequest, AgentTokenResponse,
     DeliveryAgentCreate, DeliveryAgentRead, DeliveryAgentListResponse,
     DeliveryRead, DeliveryStatusUpdate,
     DeliveryRateRead, DeliveryRateUpdate,
+    DeliverySimulationRow, DeliverySimulationResponse,
 )
 from app.services.notifications import create_notification
-from app.services.delivery_pricing import get_or_create_rate_settings
+from app.services.delivery_pricing import (
+    get_or_create_rate_settings,
+    calculate_delivery_fee,
+    calculate_delivery_fee_from_cart_total,
+    get_region,
+)
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -287,6 +296,48 @@ def update_delivery_rates(
     db.commit()
     db.refresh(settings)
     return settings
+
+
+# ── Admin: simulate geo pricing against real seller locations ─────────────────
+
+@router.get("/simulate", response_model=DeliverySimulationResponse)
+def simulate_delivery_fees(
+    buyer_county: str = Query(..., description="County to simulate a buyer ordering from"),
+    sample_cart_total: Decimal = Query(Decimal("500"), ge=0, description="Cart total to compare against the legacy tiered model"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    settings = get_or_create_rate_settings(db)
+    db.commit()
+
+    shops = (
+        db.query(Shop)
+        .filter(Shop.status == ShopStatus.active)
+        .order_by(Shop.name)
+        .all()
+    )
+
+    cart_total_fee = calculate_delivery_fee_from_cart_total(sample_cart_total)
+
+    rows = [
+        DeliverySimulationRow(
+            shop_id=shop.id,
+            shop_name=shop.name,
+            shop_county=shop.county,
+            region=get_region(shop.county),
+            geo_fee=str(calculate_delivery_fee(buyer_county, shop.county, settings)),
+            cart_total_fee=str(cart_total_fee),
+        )
+        for shop in shops
+    ]
+
+    return DeliverySimulationResponse(
+        buyer_county=buyer_county,
+        buyer_region=get_region(buyer_county),
+        sample_cart_total=str(sample_cart_total),
+        live_model="geo" if settings.use_geo_pricing else "cart_total",
+        rows=rows,
+    )
 
 
 # ── Buyer: track order ────────────────────────────────────────────────────────

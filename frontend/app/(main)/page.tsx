@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { cookies } from "next/headers";
 import {
   Smartphone,
   Truck,
@@ -20,13 +21,19 @@ import HeroSlideshow from "@/components/HeroSlideshow";
 import DealsCardSlideshow from "@/components/DealsCardSlideshow";
 
 export default async function HomePage() {
-  const [trending, categories, newArrivalsRes, heroSlides, featuredShopsRes, curatedDeals] = await Promise.all([
-    serverFetch<Product[]>("/recommendations?limit=20").catch(() => []),
+  const cookieStore = await cookies();
+  const isLoggedIn = Boolean(cookieStore.get("ekshop_token")?.value);
+
+  const [trending, categories, newArrivalsRes, heroSlides, featuredShopsRes, curatedDeals, activityProducts] = await Promise.all([
+    serverFetch<Product[]>("/recommendations/trending?limit=20").catch(() => []),
     serverFetch<Category[]>("/categories/").catch(() => []),
     serverFetch<ProductListResponse>("/products/?limit=8").catch(() => null),
     serverFetch<HeroSlide[]>("/hero-slides").catch(() => []),
     serverFetch<PaginatedResponse<ShopSummary>>("/shops/?featured=true&limit=6").catch(() => null),
     serverFetch<Promotion[]>("/deals/?limit=8").catch(() => []),
+    // Personalized picks (weighted by this buyer's views/carts/purchases and, when
+    // known, boosted toward their county) — only worth fetching once logged in.
+    isLoggedIn ? serverFetch<Product[]>("/recommendations?limit=12").catch(() => []) : Promise.resolve([]),
   ]);
 
   const featuredProduct = trending[0] ?? null;
@@ -381,6 +388,11 @@ export default async function HomePage() {
 
       {/* ── New Arrivals ─────────────────────────────────────── */}
       <ProductRail title="New Arrivals" products={newArrivals} viewAllHref="/products" />
+
+      {/* ── Personalized picks, only once we have a buyer to personalize for ── */}
+      {activityProducts.length > 0 && (
+        <ProductRail title="Based on Your Activity" products={activityProducts} viewAllHref="/products" />
+      )}
 
     </div>
   );

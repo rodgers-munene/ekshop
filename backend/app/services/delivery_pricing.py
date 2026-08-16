@@ -101,8 +101,9 @@ def calculate_delivery_fee(
     return Decimal(settings.different_region_fee)
 
 
-# County/region matching above is on hold pending further research; this
-# cart-total-tiered model is what's live at checkout for now.
+# Legacy pricing model — still the default at checkout until an admin flips
+# DeliveryRateSettings.use_geo_pricing on (see /delivery/simulate to validate
+# the county/region model above against real seller locations first).
 def calculate_delivery_fee_from_cart_total(cart_total: Decimal) -> Decimal:
     if cart_total >= 800:
         return (cart_total * Decimal("0.0825")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)

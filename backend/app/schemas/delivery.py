@@ -81,6 +81,7 @@ class DeliveryRateRead(BaseModel):
     same_region_fee: str
     different_region_fee: str
     unknown_origin_fee: str
+    use_geo_pricing: bool
     updated_at: datetime
 
     model_config = {"from_attributes": True}
@@ -91,3 +92,21 @@ class DeliveryRateUpdate(BaseModel):
     same_region_fee: Optional[str] = None
     different_region_fee: Optional[str] = None
     unknown_origin_fee: Optional[str] = None
+    use_geo_pricing: Optional[bool] = None
+
+
+class DeliverySimulationRow(BaseModel):
+    shop_id: uuid.UUID
+    shop_name: str
+    shop_county: Optional[str]
+    region: Optional[str]
+    geo_fee: str
+    cart_total_fee: str
+
+
+class DeliverySimulationResponse(BaseModel):
+    buyer_county: str
+    buyer_region: Optional[str]
+    sample_cart_total: str
+    live_model: str  # "geo" | "cart_total" — whichever is actually charged today
+    rows: List[DeliverySimulationRow]

@@ -8,6 +8,7 @@ from app.dependencies.database import get_db
 from app.models.user import User
 from app.models.commerce import OrderGroup, OrderGroupStatus, OrderStatus, Order
 from app.models.payment import PaymentIntent, Payment, PaymentStatus
+from app.models.analytics import EventType
 from app.schemas.payment import (
     StkPushRequest,
     StkPushResponse,
@@ -16,6 +17,7 @@ from app.schemas.payment import (
     PaystackVerifyResponse,
 )
 from app.services import mpesa, paystack
+from app.services import recommendations as rec_service
 from app.services.notifications import create_notification
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -26,6 +28,17 @@ def _mark_order_paid(db: Session, order_group_id: uuid.UUID) -> None:
     order_group.status = OrderGroupStatus.paid
     for order in order_group.orders:
         order.status = OrderStatus.confirmed
+        for item in order.items:
+            # feeds the recommendation engine's trending/purchase-affinity signals;
+            # session_id here is synthetic since this fires server-side on payment
+            # confirmation, not from a browser session
+            rec_service.log_event(
+                db,
+                session_id=f"order:{order_group_id}",
+                event_type=EventType.purchase,
+                user_id=order_group.buyer_id,
+                product_id=item.product_id,
+            )
 
     create_notification(
         db,

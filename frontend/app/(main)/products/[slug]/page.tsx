@@ -8,6 +8,7 @@ import { formatKES, decodeHtml, resolveImageUrl } from "@/lib/utils";
 import AddToCart from "./AddToCart";
 import ProductCard from "@/components/ProductCard";
 import ProductImageGallery from "./ProductImageGallery";
+import ViewTracker from "./ViewTracker";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -135,6 +136,8 @@ export default async function ProductDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+
+      <ViewTracker productId={product.id} categoryId={product.category_id} />
 
       <div className="w-full mx-auto px-4 md:px-6 py-4">
         {/* Breadcrumb */}

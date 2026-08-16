@@ -283,7 +283,25 @@ export interface DeliveryRates {
   same_region_fee: string;
   different_region_fee: string;
   unknown_origin_fee: string;
+  use_geo_pricing: boolean;
   updated_at: string;
+}
+
+export interface DeliverySimulationRow {
+  shop_id: string;
+  shop_name: string;
+  shop_county: string | null;
+  region: string | null;
+  geo_fee: string;
+  cart_total_fee: string;
+}
+
+export interface DeliverySimulationResponse {
+  buyer_county: string;
+  buyer_region: string | null;
+  sample_cart_total: string;
+  live_model: "geo" | "cart_total";
+  rows: DeliverySimulationRow[];
 }
 
 export interface HeroSlide {
