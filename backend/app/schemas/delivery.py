@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pydantic import BaseModel
 from app.models.delivery import DeliveryStatus, DeliveryAgentStatus, ActorRole
 from app.schemas.commerce import OrderRead
@@ -100,13 +100,13 @@ class DeliverySimulationRow(BaseModel):
     shop_name: str
     shop_county: Optional[str]
     region: Optional[str]
-    geo_fee: str
+    geo_fees: Dict[str, str]  # buyer county -> geo fee from this shop
     cart_total_fee: str
 
 
 class DeliverySimulationResponse(BaseModel):
-    buyer_county: str
-    buyer_region: Optional[str]
+    buyer_counties: List[str]
+    buyer_regions: Dict[str, Optional[str]]
     sample_cart_total: str
     live_model: str  # "geo" | "cart_total" — whichever is actually charged today
     rows: List[DeliverySimulationRow]

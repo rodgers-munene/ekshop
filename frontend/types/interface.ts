@@ -292,13 +292,13 @@ export interface DeliverySimulationRow {
   shop_name: string;
   shop_county: string | null;
   region: string | null;
-  geo_fee: string;
+  geo_fees: Record<string, string>;
   cart_total_fee: string;
 }
 
 export interface DeliverySimulationResponse {
-  buyer_county: string;
-  buyer_region: string | null;
+  buyer_counties: string[];
+  buyer_regions: Record<string, string | null>;
   sample_cart_total: string;
   live_model: "geo" | "cart_total";
   rows: DeliverySimulationRow[];

@@ -302,7 +302,7 @@ def update_delivery_rates(
 
 @router.get("/simulate", response_model=DeliverySimulationResponse)
 def simulate_delivery_fees(
-    buyer_county: str = Query(..., description="County to simulate a buyer ordering from"),
+    buyer_county: List[str] = Query(..., description="One or more counties to simulate a buyer ordering from"),
     sample_cart_total: Decimal = Query(Decimal("500"), ge=0, description="Cart total to compare against the legacy tiered model"),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
@@ -325,15 +325,18 @@ def simulate_delivery_fees(
             shop_name=shop.name,
             shop_county=shop.county,
             region=get_region(shop.county),
-            geo_fee=str(calculate_delivery_fee(buyer_county, shop.county, settings)),
+            geo_fees={
+                county: str(calculate_delivery_fee(county, shop.county, settings))
+                for county in buyer_county
+            },
             cart_total_fee=str(cart_total_fee),
         )
         for shop in shops
     ]
 
     return DeliverySimulationResponse(
-        buyer_county=buyer_county,
-        buyer_region=get_region(buyer_county),
+        buyer_counties=buyer_county,
+        buyer_regions={county: get_region(county) for county in buyer_county},
         sample_cart_total=str(sample_cart_total),
         live_model="geo" if settings.use_geo_pricing else "cart_total",
         rows=rows,
