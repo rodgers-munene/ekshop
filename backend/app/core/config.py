@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     PAYSTACK_PUBLIC_KEY: str | None = None
 
     RESEND_API_KEY: str | None = None
-    EMAIL_FROM: str = "Ekshop <no-reply@ekshop.co.ke>"
+    EMAIL_FROM: str = "Ekshop <notifications@mail.ekshop.store>"
 
     # Product image storage (AWS S3): foundation only until AWS account access
     # is available; upload calls will fail until these are set.
