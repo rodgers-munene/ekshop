@@ -82,6 +82,7 @@ class DeliveryRateRead(BaseModel):
     different_region_fee: str
     unknown_origin_fee: str
     use_geo_pricing: bool
+    standard_delivery_hours: int
     updated_at: datetime
 
     model_config = {"from_attributes": True}
@@ -93,6 +94,7 @@ class DeliveryRateUpdate(BaseModel):
     different_region_fee: Optional[str] = None
     unknown_origin_fee: Optional[str] = None
     use_geo_pricing: Optional[bool] = None
+    standard_delivery_hours: Optional[int] = None
 
 
 class DeliverySimulationRow(BaseModel):

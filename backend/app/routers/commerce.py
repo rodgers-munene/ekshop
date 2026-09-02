@@ -279,6 +279,8 @@ def checkout(
         "phone": address.phone,
         "county": address.county,
         "town": address.town,
+        "subcounty": address.ward.subcounty_name if address.ward else None,
+        "ward": address.ward.name if address.ward else None,
         "exact_location": address.exact_location,
         "apartment": address.apartment,
     }

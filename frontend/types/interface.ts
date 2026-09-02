@@ -326,6 +326,81 @@ export interface Promotion {
   product?: Product;
 }
 
+export interface MerchantActivityMetrics {
+  active_merchants_7d: number;
+  active_merchants_30d: number;
+  merchants_receiving_orders: number;
+  merchants_processing_orders: number;
+  merchants_zero_activity: number;
+  sellers_logged_in: number;
+  products_updated: number;
+  avg_transactions_per_merchant: number;
+}
+
+export interface SalesDemandMetrics {
+  total_orders: number;
+  gmv: string;
+  average_order_value: string;
+  new_customers: number;
+  repeat_customers: number;
+  customer_acquisition_rate: number;
+  cart_abandonment_rate: number;
+  order_cancellation_rate: number;
+}
+
+export interface CustomerRetentionMetrics {
+  new_customers: number;
+  returning_customers: number;
+  repeat_purchase_rate: number;
+  churn_rate: number;
+  retention_30d: number;
+  orders_per_customer: number;
+  avg_days_between_purchases: number;
+  customer_complaints: number;
+}
+
+export interface OperationsDeliveryMetrics {
+  orders_received: number;
+  orders_accepted: number;
+  orders_fulfilled: number;
+  orders_cancelled: number;
+  avg_dispatch_time_hours: number;
+  avg_delivery_time_hours: number;
+  on_time_delivery_rate: number | null;
+  failed_deliveries: number;
+  rider_utilization: number;
+  delivery_revenue: string;
+}
+
+export interface OrderNotificationRecipient {
+  id: string;
+  email: string;
+  label?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+// Geography (Kenya county → subcounty → ward)
+export interface County {
+  id: string;
+  name: string;
+}
+
+export interface SubCounty {
+  id: string;
+  name: string;
+}
+
+export interface Ward {
+  id: string;
+  name: string;
+}
+
+export interface WardWithLocation extends Ward {
+  subcounty_name: string;
+  county_name: string;
+}
+
 // Addresses
 export interface UserAddress {
   id: string;
@@ -335,8 +410,10 @@ export interface UserAddress {
   phone: string;
   county: string;
   town: string;
-  street?: string;
-  building?: string;
+  ward_id?: string;
+  ward?: WardWithLocation;
+  exact_location?: string;
+  apartment?: string;
   is_default: boolean;
 }
 

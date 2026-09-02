@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional, Any
 from pydantic import BaseModel
 from app.models.shop import ShopStatus
+from app.schemas.geography import WardWithLocationRead
 
 
 class ShopCreate(BaseModel):
@@ -11,6 +12,7 @@ class ShopCreate(BaseModel):
     description: Optional[str] = None
     county: Optional[str] = None
     town: Optional[str] = None
+    ward_id: Optional[uuid.UUID] = None
     exact_location: Optional[str] = None
     phone: Optional[str] = None
 
@@ -25,6 +27,8 @@ class ShopRead(BaseModel):
     banner_url: Optional[str]
     county: Optional[str]
     town: Optional[str]
+    ward_id: Optional[uuid.UUID]
+    ward: Optional[WardWithLocationRead] = None
     rating_avg: Optional[str]
     rating_count: int
     total_sales: int
@@ -43,6 +47,7 @@ class ShopUpdate(BaseModel):
     banner_url: Optional[str] = None
     county: Optional[str] = None
     town: Optional[str] = None
+    ward_id: Optional[uuid.UUID] = None
     exact_location: Optional[str] = None
     phone: Optional[str] = None
 

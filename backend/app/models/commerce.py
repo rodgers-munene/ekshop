@@ -41,6 +41,7 @@ class UserAddress(Base):
     phone = Column(String(20), nullable=False)
     county = Column(String(100), nullable=False)
     town = Column(String(100), nullable=False)
+    ward_id = Column(UUID(as_uuid=True), ForeignKey("wards.id", ondelete="SET NULL"))
     exact_location = Column(String(255))
     apartment = Column(String(255))
     floor = Column(String(50))
@@ -48,6 +49,7 @@ class UserAddress(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     user = relationship("User", back_populates="addresses")
+    ward = relationship("Ward")
 
 
 class Cart(Base):

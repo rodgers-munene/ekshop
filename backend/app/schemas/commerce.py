@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional, List, Any
 from pydantic import BaseModel, field_validator
 from app.models.commerce import OrderStatus, OrderGroupStatus
+from app.schemas.geography import WardWithLocationRead
 
 
 class CartItemCreate(BaseModel):
@@ -44,7 +45,8 @@ class UserAddressCreate(BaseModel):
     phone: str
     county: str
     town: str
-    exact_location: Optional[str] = None
+    ward_id: uuid.UUID
+    exact_location: str
     apartment: Optional[str] = None
     floor: Optional[str] = None
     is_default: bool = False
@@ -58,12 +60,15 @@ class UserAddressRead(BaseModel):
     phone: str
     county: str
     town: str
+    ward_id: Optional[uuid.UUID]
+    ward: Optional[WardWithLocationRead] = None
     exact_location: Optional[str]
     apartment: Optional[str]
     is_default: bool
 
     model_config = {"from_attributes": True}
-    
+
+
 class UserAddressUpdate(BaseModel):
     label: Optional[str] = None
     first_name: Optional[str] = None
@@ -71,6 +76,7 @@ class UserAddressUpdate(BaseModel):
     phone: Optional[str] = None
     county: Optional[str] = None
     town: Optional[str] = None
+    ward_id: Optional[uuid.UUID] = None
     exact_location: Optional[str] = None
     apartment: Optional[str] = None
     floor: Optional[str] = None

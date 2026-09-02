@@ -18,7 +18,7 @@ from app.schemas.payment import (
 )
 from app.services import mpesa, paystack
 from app.services import recommendations as rec_service
-from app.services.notifications import create_notification
+from app.services.notifications import create_notification, notify_admins_of_new_order
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -28,6 +28,7 @@ def _mark_order_paid(db: Session, order_group_id: uuid.UUID) -> None:
     order_group.status = OrderGroupStatus.paid
     for order in order_group.orders:
         order.status = OrderStatus.confirmed
+        notify_admins_of_new_order(db, order)
         for item in order.items:
             # feeds the recommendation engine's trending/purchase-affinity signals;
             # session_id here is synthetic since this fires server-side on payment

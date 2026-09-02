@@ -105,3 +105,69 @@ class OrderListResponse(BaseModel):
     page: int
     limit: int
     results: List[OrderRead]
+
+
+class MerchantActivityMetrics(BaseModel):
+    active_merchants_7d: int
+    active_merchants_30d: int
+    merchants_receiving_orders: int
+    merchants_processing_orders: int
+    merchants_zero_activity: int
+    sellers_logged_in: int
+    products_updated: int
+    avg_transactions_per_merchant: float
+
+
+class SalesDemandMetrics(BaseModel):
+    total_orders: int
+    gmv: str
+    average_order_value: str
+    new_customers: int
+    repeat_customers: int
+    customer_acquisition_rate: float
+    cart_abandonment_rate: float
+    order_cancellation_rate: float
+
+
+class CustomerRetentionMetrics(BaseModel):
+    new_customers: int
+    returning_customers: int
+    repeat_purchase_rate: float
+    churn_rate: float
+    retention_30d: float
+    orders_per_customer: float
+    avg_days_between_purchases: float
+    customer_complaints: int
+
+
+class OperationsDeliveryMetrics(BaseModel):
+    orders_received: int
+    orders_accepted: int
+    orders_fulfilled: int
+    orders_cancelled: int
+    avg_dispatch_time_hours: float
+    avg_delivery_time_hours: float
+    on_time_delivery_rate: Optional[float]
+    failed_deliveries: int
+    rider_utilization: float
+    delivery_revenue: str
+
+
+class OrderNotificationRecipientCreate(BaseModel):
+    email: str
+    label: Optional[str] = None
+
+
+class OrderNotificationRecipientUpdate(BaseModel):
+    label: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class OrderNotificationRecipientRead(BaseModel):
+    id: uuid.UUID
+    email: str
+    label: Optional[str]
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

@@ -29,6 +29,7 @@ class Shop(Base):
     banner_url = Column(String(500))
     county = Column(String(100))
     town = Column(String(100))
+    ward_id = Column(UUID(as_uuid=True), ForeignKey("wards.id", ondelete="SET NULL"))
     exact_location = Column(String(255))
     phone = Column(String(20))
     rating_avg = Column(String(10), default="0.00")
@@ -41,6 +42,7 @@ class Shop(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     seller = relationship("User", back_populates="shop")
+    ward = relationship("Ward")
     payment_methods = relationship("ShopPaymentMethod", back_populates="shop", cascade="all, delete-orphan")
     products = relationship("Product", back_populates="shop")
     orders = relationship("Order", back_populates="shop")

@@ -12,19 +12,27 @@ from app.dependencies.database import get_db
 from app.models.commerce import OrderGroup, OrderGroupStatus, Order, OrderStatus
 from app.models.catalog import Product
 from app.models.delivery import Delivery
+from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
 from app.schemas.admin import (
     AdminStatsRead,
     AdminTrendPoint,
+    CustomerRetentionMetrics,
     HeroSlideCreate,
     HeroSlideRead,
     HeroSlideUpdate,
+    MerchantActivityMetrics,
+    OperationsDeliveryMetrics,
     OrderListResponse,
+    OrderNotificationRecipientCreate,
+    OrderNotificationRecipientRead,
+    OrderNotificationRecipientUpdate,
     PromotionCreate,
     PromotionRead,
     PromotionUpdate,
+    SalesDemandMetrics,
     ShopListResponse,
     UserListResponse,
 )
@@ -32,6 +40,7 @@ from app.schemas.commerce import OrderRead
 from app.schemas.shop import ShopRead
 from app.schemas.user import UserRead
 from app.services import storage
+from app.services import dashboard_metrics
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -111,6 +120,48 @@ def get_stats_trend(
             )
         )
     return points
+
+
+# ── Analytics ────────────────────────────────────────────────────────────────
+
+def _since(days: int) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
+@router.get("/metrics/merchants", response_model=MerchantActivityMetrics)
+def get_merchant_metrics(
+    days: int = Query(7, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return dashboard_metrics.get_merchant_activity_metrics(db, _since(days))
+
+
+@router.get("/metrics/sales", response_model=SalesDemandMetrics)
+def get_sales_metrics(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return dashboard_metrics.get_sales_demand_metrics(db, _since(days))
+
+
+@router.get("/metrics/retention", response_model=CustomerRetentionMetrics)
+def get_retention_metrics(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return dashboard_metrics.get_customer_retention_metrics(db, _since(days))
+
+
+@router.get("/metrics/operations", response_model=OperationsDeliveryMetrics)
+def get_operations_metrics(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return dashboard_metrics.get_operations_delivery_metrics(db, _since(days))
 
 
 # ── Deliveries ───────────────────────────────────────────────────────────────
@@ -237,6 +288,71 @@ def reactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User =
     db.commit()
     db.refresh(user)
     return user
+
+
+# ── Order notification recipients ───────────────────────────────────────────
+
+@router.get("/order-notification-recipients", response_model=List[OrderNotificationRecipientRead])
+def list_order_notification_recipients(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    return (
+        db.query(OrderNotificationRecipient)
+        .order_by(OrderNotificationRecipient.created_at.desc())
+        .all()
+    )
+
+
+@router.post(
+    "/order-notification-recipients",
+    response_model=OrderNotificationRecipientRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_order_notification_recipient(
+    payload: OrderNotificationRecipientCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    existing = (
+        db.query(OrderNotificationRecipient)
+        .filter(OrderNotificationRecipient.email == payload.email)
+        .first()
+    )
+    if existing:
+        raise HTTPException(400, "This email is already a recipient")
+    recipient = OrderNotificationRecipient(**payload.model_dump())
+    db.add(recipient)
+    db.commit()
+    db.refresh(recipient)
+    return recipient
+
+
+@router.patch("/order-notification-recipients/{recipient_id}", response_model=OrderNotificationRecipientRead)
+def update_order_notification_recipient(
+    recipient_id: uuid.UUID,
+    payload: OrderNotificationRecipientUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    recipient = db.query(OrderNotificationRecipient).filter(OrderNotificationRecipient.id == recipient_id).first()
+    if not recipient:
+        raise HTTPException(404, "Recipient not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(recipient, field, value)
+    db.commit()
+    db.refresh(recipient)
+    return recipient
+
+
+@router.delete("/order-notification-recipients/{recipient_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_order_notification_recipient(
+    recipient_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    recipient = db.query(OrderNotificationRecipient).filter(OrderNotificationRecipient.id == recipient_id).first()
+    if not recipient:
+        raise HTTPException(404, "Recipient not found")
+    db.delete(recipient)
+    db.commit()
 
 
 # ── Hero slides ──────────────────────────────────────────────────────────────

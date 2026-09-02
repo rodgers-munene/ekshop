@@ -183,7 +183,9 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
                     />
                     <div>
                       <p className="text-sm font-medium">{addr.first_name} {addr.last_name} {addr.label && <span className="text-xs text-muted ml-1">({addr.label})</span>}</p>
-                      <p className="text-xs text-muted">{addr.town}, {addr.county} · {addr.phone}</p>
+                      <p className="text-xs text-muted">
+                        {[addr.ward?.name, addr.town, addr.county].filter(Boolean).join(", ")} · {addr.phone}
+                      </p>
                     </div>
                   </label>
                 ))

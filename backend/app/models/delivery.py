@@ -96,6 +96,9 @@ class DeliveryRateSettings(Base):
     # (calculate_delivery_fee_from_cart_total). Flip to True once the county/region
     # model has been validated against real seller locations in the admin simulator.
     use_geo_pricing = Column(Boolean, nullable=False, default=False)
+    # SLA window used to stamp Delivery.estimated_at when a delivery is assigned,
+    # so the operations dashboard can compute an on-time-delivery rate.
+    standard_delivery_hours = Column(Integer, nullable=False, default=48)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 

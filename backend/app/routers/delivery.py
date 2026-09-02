@@ -161,6 +161,9 @@ def assign_delivery(
 
     delivery.agent_id = agent_id
     delivery.status = DeliveryStatus.assigned
+    if not delivery.estimated_at:
+        sla_hours = get_or_create_rate_settings(db).standard_delivery_hours
+        delivery.estimated_at = datetime.now(timezone.utc) + timedelta(hours=sla_hours)
 
     event = DeliveryEvent(
         delivery_id=delivery.id,
