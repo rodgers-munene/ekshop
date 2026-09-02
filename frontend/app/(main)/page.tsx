@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { cookies } from "next/headers";
 import {
   Smartphone,
@@ -8,13 +7,9 @@ import {
   RotateCcw,
   BadgeCheck,
   Star,
-  ArrowUpRight,
-  TrendingUp,
-  Package,
-  Receipt,
 } from "lucide-react";
 import { serverFetch } from "@/lib/server-api";
-import { resolveImageUrl, decodeHtml } from "@/lib/utils";
+import { resolveImageUrl, decodeHtml, seededShuffle, todaysSeed } from "@/lib/utils";
 import { Product, Category, ProductListResponse, PaginatedResponse, ShopSummary, HeroSlide, Promotion } from "@/types/interface";
 import ProductRail from "@/components/ProductRail";
 import HeroSlideshow from "@/components/HeroSlideshow";
@@ -59,6 +54,24 @@ export default async function HomePage() {
   const quickCategoriesB = categories.length > 4 ? categories.slice(4, 8) : categories.slice(0, 4);
   const dealHighlight = dealProducts[0] ?? featuredProduct;
   const arrivalHighlight = newArrivals[0] ?? trending[1] ?? null;
+
+  // Rotates which categories get a product rail once per day, and which
+  // products within them, so the homepage doesn't show the same lineup daily.
+  const dailySeed = todaysSeed();
+  const candidateCategories = seededShuffle(categories, dailySeed).slice(0, 6);
+  const candidateResults = await Promise.all(
+    candidateCategories.map((category) =>
+      serverFetch<ProductListResponse>(`/products/?category_slug=${category.slug}&limit=16`).catch(() => null)
+    )
+  );
+  const categoryRails = candidateCategories
+    .map((category, i) => {
+      const results = candidateResults[i]?.results ?? [];
+      if (results.length < 4) return null;
+      return { category, products: seededShuffle(results, `${dailySeed}:${category.id}`).slice(0, 8) };
+    })
+    .filter((rail): rail is { category: Category; products: Product[] } => rail !== null)
+    .slice(0, 4);
 
   return (
     <div className="w-full">
@@ -287,69 +300,10 @@ export default async function HomePage() {
       {/* ── Today's Deals ────────────────────────────────────── */}
       <ProductRail title="Today's Deals" products={dealProducts} viewAllHref="/products" />
 
-      {/* ── Tara POS promo banner ────────────────────────────── */}
-      <section className="px-4 md:px-6 py-4">
-        <div className="relative rounded-xl bg-navy text-white overflow-hidden">
-          {/* decorative glow blobs */}
-          <div className="absolute -top-16 -left-16 w-64 h-64 bg-amber/20 rounded-full blur-3xl" />
-          <div className="absolute -bottom-20 -right-10 w-72 h-72 bg-navy-light/60 rounded-full blur-3xl" />
-
-          <div className="relative px-4 md:px-10 py-10 md:py-14 flex flex-col md:flex-row items-center gap-10 md:gap-16">
-            {/* Text */}
-            <div className="flex-1 order-2 md:order-1 text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
-                <p className="text-2xl md:text-3xl font-extrabold">Tara POS</p>
-                <span className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 bg-amber text-ink rounded-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-ink/70" /> Live now
-                </span>
-              </div>
-              <p className="text-white/80 text-sm max-w-md mx-auto md:mx-0 mb-4">
-                One dashboard for your whole business. Connect your Ekshop shop to Tara POS
-                and manage inventory, sales, and orders in real time, in-store and online,
-                perfectly in sync, right from your phone.
-              </p>
-              <div className="flex items-center justify-center md:justify-start gap-4 text-xs text-white/70 mb-6">
-                <span className="flex items-center gap-1"><Package size={14} /> Inventory</span>
-                <span className="flex items-center gap-1"><Receipt size={14} /> Sales</span>
-                <span className="flex items-center gap-1"><TrendingUp size={14} /> Insights</span>
-              </div>
-              <a
-                href="https://tara.ekshop.store"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-accent inline-flex items-center gap-1.5"
-              >
-                Open Tara POS <ArrowUpRight size={16} />
-              </a>
-            </div>
-
-            {/* Screenshots */}
-            <div className="order-1 md:order-2 relative shrink-0 w-full max-w-[280px] sm:max-w-none sm:w-[380px] md:w-[440px] select-none">
-              {/* Desktop dashboard, hidden on the smallest screens to keep things legible */}
-              <div className="hidden sm:block sm:mr-14 md:mr-16 rounded-lg overflow-hidden shadow-2xl ring-1 ring-white/10">
-                <Image
-                  src="/tara_dashboard.png"
-                  alt="Tara POS inventory dashboard"
-                  width={1364}
-                  height={655}
-                  className="w-full h-auto"
-                />
-              </div>
-
-              {/* Phone app, overlapping the dashboard on larger screens */}
-              <div className="w-32 sm:w-36 md:w-40 mx-auto sm:absolute sm:-bottom-4 sm:-right-2 md:-right-6 drop-shadow-2xl">
-                <Image
-                  src="/tara_phone_dash.png"
-                  alt="Tara POS mobile app"
-                  width={744}
-                  height={1510}
-                  className="w-full h-auto"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ── Personalized picks, only once we have a buyer to personalize for ── */}
+      {activityProducts.length > 0 && (
+        <ProductRail title="Based on Your Activity" products={activityProducts} viewAllHref="/products" />
+      )}
 
       {/* ── Shop by Category ─────────────────────────────────── */}
       {categories.length > 0 && (
@@ -386,13 +340,18 @@ export default async function HomePage() {
         </section>
       )}
 
+      {/* ── Category spotlights (rotate daily) ───────────────── */}
+      {categoryRails.map(({ category, products }) => (
+        <ProductRail
+          key={category.id}
+          title={category.name}
+          products={products}
+          viewAllHref={`/products?category=${category.slug}`}
+        />
+      ))}
+
       {/* ── New Arrivals ─────────────────────────────────────── */}
       <ProductRail title="New Arrivals" products={newArrivals} viewAllHref="/products" />
-
-      {/* ── Personalized picks, only once we have a buyer to personalize for ── */}
-      {activityProducts.length > 0 && (
-        <ProductRail title="Based on Your Activity" products={activityProducts} viewAllHref="/products" />
-      )}
 
     </div>
   );

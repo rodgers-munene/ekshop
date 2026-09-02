@@ -12,6 +12,42 @@ export function formatKES(amount: number | string): string {
     }).format(num);
 }
 
+// Deterministic per-day randomness: same seed string (e.g. today's date)
+// always yields the same shuffle, so a page reload doesn't reshuffle content,
+// but the picks change once the seed rolls over to a new day.
+function hashSeed(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function seededShuffle<T>(items: T[], seed: string): T[] {
+  const random = mulberry32(hashSeed(seed));
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+export function todaysSeed(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function truncate(str: string, length: number): string {
     if (str.length <= length) return str;
     return str.slice(0, length).trimEnd() + "...";
