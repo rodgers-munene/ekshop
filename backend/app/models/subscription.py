@@ -12,6 +12,7 @@ def utcnow():
 
 
 class SubscriptionStatus(str, enum.Enum):
+    pending_payment = "pending_payment"
     active = "active"
     cancelled = "cancelled"
     past_due = "past_due"

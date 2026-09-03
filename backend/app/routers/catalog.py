@@ -210,13 +210,27 @@ def delete_category(
     summary="Seller creates a product"
 )
 def create_product(payload: ProductCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    # locks the shop row for the transaction so two concurrent creates near the
+    # plan's product cap can't both pass the count check before either commits
     shop = db.query(Shop).filter(
         Shop.seller_id == current_user.id
-    ).first()
-    
+    ).with_for_update().first()
+
     if not shop:
         raise HTTPException(status_code=404, detail="Shop doesn't exist.")
-    
+
+    max_products = shop.subscription.plan.max_products if shop.subscription else None
+    if max_products is not None:
+        current_count = db.query(func.count(Product.id)).filter(
+            Product.shop_id == shop.id,
+            Product.status != ProductStatus.draft,
+        ).scalar()
+        if current_count >= max_products:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your plan allows up to {max_products} published products. Upgrade to list more.",
+            )
+
     product_data = payload.model_dump(exclude={"variants"})
     product = Product(**product_data, shop_id=shop.id)
     

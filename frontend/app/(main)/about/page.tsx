@@ -36,7 +36,7 @@ export default function AboutPage() {
           <h2 className="font-semibold text-base mb-2">Get in touch</h2>
           <p>
             Have a question or want to sell on Ekshop?{" "}
-            <Link href="/register" className="text-amber underline underline-offset-2">Start selling</Link>{" "}
+            <Link href="/register/plan" className="text-amber underline underline-offset-2">Start selling</Link>{" "}
             or reach out to <span className="text-muted">support@ekshop.co.ke</span>.
           </p>
         </section>

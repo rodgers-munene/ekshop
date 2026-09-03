@@ -13,8 +13,8 @@ const COLUMNS = [
   {
     title: "Make Money with Us",
     links: [
-      { label: "Sell on Ekshop", href: "/register" },
-      { label: "Become a Verified Seller", href: "/register" },
+      { label: "Sell on Ekshop", href: "/register/plan" },
+      { label: "Become a Verified Seller", href: "/register/plan" },
       { label: "Seller Dashboard", href: "/dashboard" },
     ],
   },

@@ -287,7 +287,7 @@ export default async function HomePage() {
             </p>
           </div>
           <div className="shrink-0 flex gap-2 sm:gap-3">
-            <Link href="/register" className="btn-accent px-4! py-2! text-xs sm:px-6! sm:py-2.5! sm:text-base">
+            <Link href="/register/plan" className="btn-accent px-4! py-2! text-xs sm:px-6! sm:py-2.5! sm:text-base">
               Start Selling →
             </Link>
             <Link href="/products" className="btn-outline-dark px-4! py-2! text-xs sm:px-6! sm:py-2.5! sm:text-base">

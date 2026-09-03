@@ -28,17 +28,25 @@ export async function POST(req: NextRequest) {
 
   // register
   if (action === "register") {
-    const { first_name, last_name, phone, county, role } = body;
+    const { first_name, last_name, phone, county, role, shop_name, plan_code } = body;
     const registerRes = await fetch(`${BASE_URL}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, first_name, last_name, phone, county, role }),
+      body: JSON.stringify({ email, password, first_name, last_name, phone, county, role, shop_name, plan_code }),
     });
+    const registerJson = await registerRes.json().catch(() => ({}));
     if (!registerRes.ok) {
-      const error = await registerRes.json().catch(() => ({}));
-      return NextResponse.json({ detail: error.detail ?? "Registration failed" }, { status: registerRes.status });
+      return NextResponse.json({ detail: registerJson.detail ?? "Registration failed" }, { status: registerRes.status });
     }
-    // Accounts start as "pending" until the verification email is confirmed;
+    // Sellers get redirected straight to Paystack; their account activates on payment
+    // confirmation, not email verification, so there's no "pending" stop-here case for them.
+    if (registerJson.authorization_url) {
+      return NextResponse.json({
+        authorization_url: registerJson.authorization_url,
+        reference: registerJson.reference,
+      });
+    }
+    // Buyer accounts start as "pending" until the verification email is confirmed;
     // logging in immediately would 403, so stop here instead of falling through.
     return NextResponse.json({ pending_verification: true });
   }

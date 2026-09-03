@@ -9,6 +9,8 @@ from app.models.user import User
 from app.models.commerce import OrderGroup, OrderGroupStatus, OrderStatus, Order
 from app.models.payment import PaymentIntent, Payment, PaymentStatus
 from app.models.analytics import EventType
+from app.models.subscription import Subscription
+from app.services.subscriptions import activate_subscription
 from app.schemas.payment import (
     StkPushRequest,
     StkPushResponse,
@@ -205,7 +207,19 @@ async def paystack_callback(request: Request, db: Session = Depends(get_db)):
 
     intent = db.query(PaymentIntent).filter(PaymentIntent.provider_ref == reference).first()
     if not intent:
-        return {"status": "ignored"}
+        # not an order payment — check whether it's a seller subscription payment instead,
+        # since Paystack sends every event to this one webhook URL regardless of which
+        # flow initiated the transaction
+        subscription = db.query(Subscription).filter(Subscription.provider_ref == reference).first()
+        if not subscription:
+            return {"status": "ignored"}
+
+        if tx.get("status") != "success":
+            return {"status": "recorded"}
+
+        activate_subscription(subscription)
+        db.commit()
+        return {"status": "recorded"}
 
     # idempotency check, don't process the same payment twice
     existing = db.query(Payment).filter(Payment.provider_ref == reference).first()

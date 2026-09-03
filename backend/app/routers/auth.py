@@ -1,8 +1,11 @@
 import logging
+import re
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -18,36 +21,64 @@ from app.core.security import (
 from app.dependencies.auth import bearer_scheme, get_current_user
 from app.dependencies.database import get_db
 from app.services import email as email_service
+from app.services import paystack
+from app.services.subscriptions import activate_subscription
+from app.models.shop import Shop, ShopStatus
+from app.models.subscription import Subscription, SubscriptionPlan, SubscriptionStatus
 from app.models.user import (
     EmailVerification,
     EmailVerificationPurpose,
     PasswordReset,
     RefreshToken,
     User,
+    UserRole,
     UserStatus,
 )
-from app.schemas.user import LoginRequest, ResetPasswordRequest, TokenResponse, UserCreate, UserRead
+from app.schemas.user import LoginRequest, RegisterResponse, ResetPasswordRequest, TokenResponse, UserCreate, UserRead
+from app.schemas.subscription import (
+    ResumePaymentRequest,
+    ResumePaymentResponse,
+    SubscriptionStatusResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
+def _generate_unique_shop_slug(db: Session, name: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-") or "shop"
+    slug = base
+    suffix = 1
+    while db.query(Shop).filter(Shop.slug == slug).first():
+        suffix += 1
+        slug = f"{base}-{suffix}"
+    return slug
+
+
 @router.post(
     "/register",
-    response_model=UserRead,
+    response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new account",
     description="""
 Create a new buyer or seller account.
 
-**Flow:**
+**Buyers:**
 1. Validates that the email is not already taken.
-2. Hashes the password with bcrypt.
-3. Creates the user with status `pending` (cannot log in yet).
-4. Generates a 24-hour email verification token and saves it.
-5. (Production) Sends a verification email. In dev, the token is printed to the terminal.
+2. Creates the user with status `pending` (cannot log in yet).
+3. Generates a 24-hour email verification token and emails it.
+   The account remains `pending` until `/auth/verify-email` is called.
 
-The account remains `pending` until `/auth/verify-email` is called with the token.
+**Sellers** (requires `shop_name` and `plan_code`):
+1. Validates the email and looks up the chosen `SubscriptionPlan`.
+2. Creates the user, a `Shop` (status `pending`), and a `Subscription`
+   (status `pending_payment`) to the chosen plan.
+3. Initializes a Paystack transaction for the plan's monthly price and
+   returns its `authorization_url` for the client to redirect to.
+
+No verification email is sent for sellers — payment confirmation (via the
+Paystack webhook, or `/auth/subscription-status`) is what activates the
+user, the shop, and the subscription.
 """,
 )
 @limiter.limit("5/minute")
@@ -67,6 +98,59 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
     db.add(user)
     db.flush()
 
+    if payload.role == UserRole.seller:
+        plan = db.query(SubscriptionPlan).filter(
+            SubscriptionPlan.code == payload.plan_code,
+            SubscriptionPlan.is_active == True,
+        ).first()
+        if not plan:
+            db.rollback()
+            raise HTTPException(status_code=404, detail="Unknown or inactive plan")
+
+        shop = Shop(
+            seller_id=user.id,
+            name=payload.shop_name,
+            slug=_generate_unique_shop_slug(db, payload.shop_name),
+            status=ShopStatus.pending,
+        )
+        db.add(shop)
+        try:
+            db.flush()
+        except IntegrityError:
+            # two concurrent registrations computed the same slug before either committed
+            db.rollback()
+            raise HTTPException(status_code=409, detail="That shop name is taken, please try a different one")
+
+        subscription = Subscription(
+            shop_id=shop.id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.pending_payment,
+        )
+        db.add(subscription)
+        db.flush()
+
+        reference = f"eks_sub_{uuid.uuid4().hex[:20]}"
+        try:
+            result = paystack.initialize_transaction(
+                email=user.email,
+                amount=plan.price_monthly,
+                reference=reference,
+                callback_url=f"{settings.FRONTEND_URL}/register/payment-status?ref={reference}",
+            )
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=502, detail=f"Paystack error: {str(e)}")
+
+        subscription.provider_ref = reference
+        db.commit()
+        db.refresh(user)
+
+        return RegisterResponse(
+            user=user,
+            authorization_url=result["authorization_url"],
+            reference=reference,
+        )
+
     verification = EmailVerification(
         user_id=user.id,
         token=generate_short_token(32),
@@ -82,7 +166,7 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
     except Exception as e:
         logger.warning("Failed to send verification email to %s: %s", user.email, e)
 
-    return user
+    return RegisterResponse(user=user)
 
 
 @router.post(
@@ -125,6 +209,70 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     return {"message": "Email verified. You can now log in."}
 
 
+@router.get(
+    "/subscription-status/{reference}",
+    response_model=SubscriptionStatusResponse,
+    summary="Check a pending seller subscription's payment status",
+    description="""
+Used by the registration payment-return page — the seller isn't logged in
+yet at this point, so this endpoint requires no auth.
+
+If the subscription is still `pending_payment`, re-checks Paystack directly
+in case the webhook hasn't landed yet (same reconciliation pattern used for
+order payments in `/payments/paystack/verify/{reference}`).
+""",
+)
+def subscription_status(reference: str, db: Session = Depends(get_db)):
+    subscription = db.query(Subscription).filter(Subscription.provider_ref == reference).first()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="No subscription found for this reference")
+
+    if subscription.status == SubscriptionStatus.pending_payment:
+        try:
+            result = paystack.verify_transaction(reference)
+        except Exception:
+            result = {}
+        if result.get("status") == "success":
+            activate_subscription(subscription)
+            db.commit()
+
+    return SubscriptionStatusResponse(status=subscription.status, shop_slug=subscription.shop.slug)
+
+
+@router.post(
+    "/resume-payment",
+    response_model=ResumePaymentResponse,
+    summary="Retry payment for an abandoned seller registration",
+    description="""
+Generates a fresh Paystack transaction for a subscription that is still
+`pending_payment` — for a seller who closed the checkout tab before paying.
+""",
+)
+def resume_payment(payload: ResumePaymentRequest, db: Session = Depends(get_db)):
+    subscription = db.query(Subscription).filter(
+        Subscription.provider_ref == payload.reference,
+        Subscription.status == SubscriptionStatus.pending_payment,
+    ).first()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="No pending payment found for this reference")
+
+    new_reference = f"eks_sub_{uuid.uuid4().hex[:20]}"
+    try:
+        result = paystack.initialize_transaction(
+            email=subscription.shop.seller.email,
+            amount=subscription.plan.price_monthly,
+            reference=new_reference,
+            callback_url=f"{settings.FRONTEND_URL}/register/payment-status?ref={new_reference}",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Paystack error: {str(e)}")
+
+    subscription.provider_ref = new_reference
+    db.commit()
+
+    return ResumePaymentResponse(authorization_url=result["authorization_url"], reference=new_reference)
+
+
 @router.post(
     "/login",
     response_model=TokenResponse,
@@ -155,6 +303,11 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if user.status == UserStatus.pending:
+        if user.role == UserRole.seller:
+            raise HTTPException(
+                status_code=403,
+                detail="Your registration payment hasn't been confirmed yet. Complete payment to activate your shop.",
+            )
         raise HTTPException(status_code=403, detail="Please verify your email first")
 
     if user.status == UserStatus.suspended:

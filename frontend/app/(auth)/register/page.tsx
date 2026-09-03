@@ -1,46 +1,89 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { getSellerPlan } from "@/lib/plans";
 
-const schema = z.object({
-  first_name: z.string().min(2, "First name is required"),
-  last_name: z.string().min(2, "Last name is required"),
-  email: z.string().email("Enter a valid email"),
-  phone: z.string().min(9, "Enter a valid phone number"),
-  county: z.string().min(2, "County is required"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["buyer", "seller"]),
-});
+const schema = z
+  .object({
+    first_name: z.string().min(2, "First name is required"),
+    last_name: z.string().min(2, "Last name is required"),
+    email: z.string().email("Enter a valid email"),
+    phone: z.string().min(9, "Enter a valid phone number"),
+    county: z.string().min(2, "County is required"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    role: z.enum(["buyer", "seller"]),
+    shop_name: z.string().optional(),
+  })
+  .refine((data) => data.role !== "seller" || !!data.shop_name?.trim(), {
+    message: "Shop name is required",
+    path: ["shop_name"],
+  });
 
 type RegisterForm = z.infer<typeof schema>;
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterPageInner />
+    </Suspense>
+  );
+}
+
+function RegisterPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const planCode = searchParams.get("plan");
+  const selectedPlan = getSellerPlan(planCode);
+  const initialRole = searchParams.get("role") === "seller" && selectedPlan ? "seller" : "buyer";
+
   const [loading, setLoading] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<RegisterForm>({
     resolver: zodResolver(schema),
-    defaultValues: { role: "buyer" },
+    defaultValues: { role: initialRole },
   });
 
   const role = watch("role");
 
+  function handleSellerToggle() {
+    if (!selectedPlan) {
+      router.push("/register/plan");
+      return;
+    }
+    setValue("role", "seller");
+  }
+
   async function onSubmit(data: RegisterForm) {
+    if (data.role === "seller" && !selectedPlan) {
+      router.push("/register/plan");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "register", ...data }),
+        body: JSON.stringify({
+          action: "register",
+          ...data,
+          plan_code: data.role === "seller" ? selectedPlan?.code : undefined,
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
         toast.error(json.detail ?? "Registration failed");
+        return;
+      }
+      if (json.authorization_url) {
+        window.location.href = json.authorization_url;
         return;
       }
       setRegisteredEmail(data.email);
@@ -88,7 +131,7 @@ export default function RegisterPage() {
           </p>
 
           {/* Role toggle */}
-          <div className="flex rounded-lg border border-border overflow-hidden mb-6">
+          <div className="flex rounded-lg border border-border overflow-hidden mb-3">
             <button
               type="button"
               onClick={() => setValue("role", "buyer")}
@@ -98,14 +141,21 @@ export default function RegisterPage() {
             </button>
             <button
               type="button"
-              onClick={() => setValue("role", "seller")}
+              onClick={handleSellerToggle}
               className={`flex-1 py-2 text-sm font-medium transition-colors border-l border-border ${role === "seller" ? "bg-navy text-white" : "hover:bg-surface"}`}
             >
               I&apos;m a Seller
             </button>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          {role === "seller" && selectedPlan && (
+            <p className="text-xs text-muted mb-6">
+              Plan: <strong>{selectedPlan.name}</strong> (KES {selectedPlan.price.toLocaleString()}/month) —{" "}
+              <Link href="/register/plan" className="text-amber underline underline-offset-2">change plan</Link>
+            </p>
+          )}
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 mt-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">First name</label>
@@ -118,6 +168,14 @@ export default function RegisterPage() {
                 {errors.last_name && <p className="text-danger text-xs mt-1">{errors.last_name.message}</p>}
               </div>
             </div>
+
+            {role === "seller" && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Shop name</label>
+                <input {...register("shop_name")} className="input-field" placeholder="Mama Njeri Fashions" />
+                {errors.shop_name && <p className="text-danger text-xs mt-1">{errors.shop_name.message}</p>}
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium mb-1">Email</label>
@@ -154,7 +212,11 @@ export default function RegisterPage() {
               disabled={loading}
               className="btn-accent w-full disabled:opacity-50 mt-2"
             >
-              {loading ? "Creating account..." : `Create ${role === "seller" ? "seller" : ""} account`}
+              {loading
+                ? "Please wait..."
+                : role === "seller"
+                ? "Continue to payment"
+                : "Create account"}
             </button>
           </form>
         </>
