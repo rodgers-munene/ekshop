@@ -233,7 +233,7 @@ def subscription_status(reference: str, db: Session = Depends(get_db)):
         except Exception:
             result = {}
         if result.get("status") == "success":
-            activate_subscription(subscription)
+            activate_subscription(db, subscription)
             db.commit()
 
     return SubscriptionStatusResponse(status=subscription.status, shop_slug=subscription.shop.slug)

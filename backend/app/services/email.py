@@ -150,3 +150,25 @@ def send_new_order_email(to_emails: Iterable[str], order) -> None:
     subject = f"New order #{str(order.id)[:8]} — {shop.name if shop else 'Ekshop'}"
     for to in to_emails:
         _send(to=to, subject=subject, html=body_html)
+
+
+def send_pos_provisioning_email(to_emails: Iterable[str], shop) -> None:
+    """Notify the ops team that a new Duka Premium shop needs a Tara POS
+    account created manually — there is no automated Tara integration yet."""
+    e = html_lib.escape
+    seller = shop.seller
+
+    body_html = f"""
+        <h2>New Duka Premium shop needs a Tara POS account</h2>
+        <p>
+            Shop: <strong>{e(shop.name)}</strong> ({e(shop.slug)})<br>
+            Seller: {e(seller.first_name)} {e(seller.last_name)} — {e(seller.email)}
+            {f" — {e(seller.phone)}" if seller.phone else ""}
+        </p>
+        <p>Please create their Tara POS account and share login details with the seller.</p>
+        <p><a href="{settings.FRONTEND_URL}/admin">Open admin dashboard</a></p>
+    """
+
+    subject = f"Tara POS provisioning needed — {shop.name}"
+    for to in to_emails:
+        _send(to=to, subject=subject, html=body_html)

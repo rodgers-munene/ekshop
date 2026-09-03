@@ -23,6 +23,7 @@ export const SELLER_PLANS = [
       "Order management",
       "Delivery coordination",
       "Featured placement on the Ekshop homepage",
+      "Access to Tara POS",
     ],
     highlight: true,
   },

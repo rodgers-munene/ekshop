@@ -217,7 +217,7 @@ async def paystack_callback(request: Request, db: Session = Depends(get_db)):
         if tx.get("status") != "success":
             return {"status": "recorded"}
 
-        activate_subscription(subscription)
+        activate_subscription(db, subscription)
         db.commit()
         return {"status": "recorded"}
 
