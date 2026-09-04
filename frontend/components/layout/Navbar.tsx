@@ -9,7 +9,7 @@ import { ShoppingCart, User, Search, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 import { AnimatePresence, motion } from "motion/react"
-import { Product, ProductListResponse } from "@/types/interface";
+import { Product, ProductListResponse, Shop } from "@/types/interface";
 import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
 import NotificationBell from "@/components/layout/NotificationBell";
 
@@ -49,6 +49,13 @@ export default function Navbar() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const { data: myShop } = useQuery({
+    queryKey: ["my-shop"],
+    queryFn: () => fetch("/api/dashboard/shop").then((r) => (r.ok ? (r.json() as Promise<Shop>) : null)),
+    enabled: mounted && isAuthenticated && user?.role === "seller",
+    staleTime: 5 * 60 * 1000,
+  });
 
   const { data: suggestions = [], isFetching: suggestionsLoading } = useQuery({
     queryKey: ["search-suggestions", debouncedQuery],
@@ -247,8 +254,13 @@ export default function Navbar() {
                   <Link href="/messages" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface">
                     Messages
                   </Link>
+                  {user?.role === "seller" && myShop && (
+                    <Link href={`/shops/${myShop.slug}`} onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface border-t border-border">
+                      My Duka
+                    </Link>
+                  )}
                   {user?.role === "seller" && (
-                    <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface border-t border-border">
+                    <Link href="/dashboard" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface">
                       Seller Dashboard
                     </Link>
                   )}
