@@ -152,6 +152,50 @@ def send_new_order_email(to_emails: Iterable[str], order) -> None:
         _send(to=to, subject=subject, html=body_html)
 
 
+def send_subscription_reminder_email(to: str, shop, plan_name: str, days_left: int, current_period_end) -> None:
+    e = html_lib.escape
+    link = f"{settings.FRONTEND_URL}/dashboard/billing"
+    day_word = "day" if days_left == 1 else "days"
+    _send(
+        to=to,
+        subject=f"Your Ekshop subscription renews in {days_left} {day_word}",
+        html=f"""
+            <p>Your <strong>{e(plan_name)}</strong> subscription for <strong>{e(shop.name)}</strong>
+            renews on {current_period_end.strftime('%d %b %Y')}.</p>
+            <p><a href="{link}">Renew now</a> to keep your shop live without interruption.</p>
+        """,
+    )
+
+
+def send_subscription_past_due_email(to: str, shop, grace_days: int) -> None:
+    e = html_lib.escape
+    link = f"{settings.FRONTEND_URL}/dashboard/billing"
+
+    _send(
+        to=to,
+        subject="Your Ekshop subscription payment is overdue",
+        html=f"""
+            <p>The subscription payment for <strong>{e(shop.name)}</strong> is overdue.</p>
+            <p>Your shop stays live for {grace_days} more days — <a href="{link}">renew now</a>
+            to avoid it being taken down.</p>
+        """,
+    )
+
+
+def send_subscription_cancelled_email(to: str, shop) -> None:
+    e = html_lib.escape
+    link = f"{settings.FRONTEND_URL}/dashboard/billing"
+    _send(
+        to=to,
+        subject="Your shop has been suspended for non-payment",
+        html=f"""
+            <p><strong>{e(shop.name)}</strong> has been suspended and is no longer visible on Ekshop,
+            because its subscription payment was not received.</p>
+            <p><a href="{link}">Renew now</a> to reactivate your shop.</p>
+        """,
+    )
+
+
 def send_pos_provisioning_email(to_emails: Iterable[str], shop) -> None:
     """Notify the ops team that a new Duka Premium shop needs a Tara POS
     account created manually — there is no automated Tara integration yet."""

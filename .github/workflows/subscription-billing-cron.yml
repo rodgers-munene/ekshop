@@ -1,0 +1,15 @@
+name: Run subscription billing cycle
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily = 06:00 Nairobi
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call billing-cycle endpoint
+        run: |
+          curl -sf -X POST "${{ secrets.BACKEND_BASE_URL }}/internal/cron/billing-cycle" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"

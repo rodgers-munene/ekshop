@@ -214,12 +214,15 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     response_model=SubscriptionStatusResponse,
     summary="Check a pending seller subscription's payment status",
     description="""
-Used by the registration payment-return page — the seller isn't logged in
-yet at this point, so this endpoint requires no auth.
+Used by the registration payment-return page (and the renewal payment-return
+page — the seller may not be looking at an authenticated page at this point
+in either flow), so this endpoint requires no auth.
 
-If the subscription is still `pending_payment`, re-checks Paystack directly
-in case the webhook hasn't landed yet (same reconciliation pattern used for
-order payments in `/payments/paystack/verify/{reference}`).
+If the subscription isn't yet `active`, re-checks Paystack directly in case
+the webhook hasn't landed yet (same reconciliation pattern used for order
+payments in `/payments/paystack/verify/{reference}`). This covers both a
+fresh registration (`pending_payment` -> `active`) and a renewal payment
+(`past_due`/`cancelled` -> `active`).
 """,
 )
 def subscription_status(reference: str, db: Session = Depends(get_db)):
@@ -227,7 +230,7 @@ def subscription_status(reference: str, db: Session = Depends(get_db)):
     if not subscription:
         raise HTTPException(status_code=404, detail="No subscription found for this reference")
 
-    if subscription.status == SubscriptionStatus.pending_payment:
+    if subscription.status != SubscriptionStatus.active:
         try:
             result = paystack.verify_transaction(reference)
         except Exception:

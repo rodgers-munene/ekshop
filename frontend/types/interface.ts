@@ -39,6 +39,23 @@ export interface Shop {
   total_sales: string;
 }
 
+export type SubscriptionStatus = "pending_payment" | "active" | "cancelled" | "past_due" | "trialing";
+
+export interface SubscriptionPlan {
+  code: string;
+  name: string;
+  price_monthly: string;
+  max_products: number | null;
+  commission_rate: string;
+}
+
+export interface Subscription {
+  status: SubscriptionStatus;
+  plan: SubscriptionPlan;
+  current_period_start: string | null;
+  current_period_end: string | null;
+}
+
 // Products
 export interface ProductImage {
   id: string;

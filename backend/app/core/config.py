@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     PAYSTACK_SECRET_KEY: str | None = None
     PAYSTACK_PUBLIC_KEY: str | None = None
 
+    # Shared secret the GitHub Actions cron workflow presents to trigger the
+    # daily subscription billing cycle (POST /internal/cron/billing-cycle)
+    CRON_SECRET: str | None = None
+
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "Ekshop <notifications@mail.ekshop.store>"
 

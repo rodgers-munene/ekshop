@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.limiter import limiter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-from app.routers import auth, users, shop, payments, admin, messaging, investor
+from app.routers import auth, users, shop, payments, admin, messaging, investor, subscriptions, cron
 from app.routers.catalog import categories_router, products_router
 from app.routers.commerce import cart_router, checkout_router, orders_router
 from app.routers.delivery import router as delivery_router
@@ -50,6 +50,8 @@ app.include_router(hero_router)
 app.include_router(deals_router)
 app.include_router(notifications_router)
 app.include_router(geography_router)
+app.include_router(subscriptions.router)
+app.include_router(cron.router)
 
 
 @app.get("/")

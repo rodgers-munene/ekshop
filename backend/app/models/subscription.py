@@ -45,6 +45,8 @@ class Subscription(Base):
     status = Column(Enum(SubscriptionStatus, native_enum=False), default=SubscriptionStatus.trialing, nullable=False)
     current_period_start = Column(DateTime(timezone=True))
     current_period_end = Column(DateTime(timezone=True))
+    reminder_7d_sent_at = Column(DateTime(timezone=True))
+    reminder_1d_sent_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
