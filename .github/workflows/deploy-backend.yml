@@ -80,7 +80,9 @@ jobs:
           chmod 600 /etc/ekshop-backend.env
           docker stop ekshop-backend >/dev/null 2>&1 || true
           docker rm ekshop-backend >/dev/null 2>&1 || true
-          docker run -d --name ekshop-backend --restart unless-stopped -p 127.0.0.1:8000:8000 --env-file /etc/ekshop-backend.env ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+          docker run -d --name ekshop-backend --restart unless-stopped -p 127.0.0.1:8000:8000 --env-file /etc/ekshop-backend.env \
+            --log-driver=awslogs --log-opt awslogs-region=${AWS_REGION} --log-opt awslogs-group=/ekshop/backend --log-opt awslogs-stream=backend \
+            ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
           docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
           EOF
 

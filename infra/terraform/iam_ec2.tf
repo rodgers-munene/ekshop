@@ -41,6 +41,12 @@ data "aws_iam_policy_document" "ec2_instance_permissions" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_secretsmanager_secret.backend.arn]
   }
+
+  # Ship container logs to CloudWatch (docker's awslogs log driver).
+  statement {
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.backend.arn}:*"]
+  }
 }
 
 resource "aws_iam_role_policy" "ec2_instance_permissions" {
