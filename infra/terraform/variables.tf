@@ -28,6 +28,18 @@ variable "ec2_instance_type" {
   default     = "t3.micro"
 }
 
+variable "backend_ami_id" {
+  description = <<-EOT
+    AMI id for the backend instance, pinned deliberately rather than resolved
+    via a "most_recent" data source lookup — that pattern silently drifts
+    (Amazon publishes new AL2023 AMIs regularly) and `terraform apply` would
+    then try to replace the running production instance on an unrelated
+    change. To intentionally upgrade: run `terraform apply`, check the
+    `latest_al2023_ami` output, and copy that value in here.
+  EOT
+  type        = string
+}
+
 variable "plain_env" {
   description = "Non-sensitive backend environment variables (see terraform.tfvars.example)"
   type        = map(string)

@@ -11,6 +11,12 @@ data "aws_subnets" "default" {
   }
 }
 
+# Not wired to aws_instance.backend directly — a "most_recent" lookup
+# resolves to a new AMI id as Amazon publishes updates, and Terraform would
+# then want to replace the running production instance on every apply, even
+# for an unrelated change. The instance uses var.backend_ami_id (a pinned
+# id) instead; check the `latest_al2023_ami` output when you want to
+# deliberately upgrade, then copy it into backend_ami_id yourself.
 data "aws_ami" "al2023" {
   most_recent = true
   owners      = ["amazon"]
@@ -58,7 +64,7 @@ resource "aws_security_group" "backend" {
 }
 
 resource "aws_instance" "backend" {
-  ami                         = data.aws_ami.al2023.id
+  ami                         = var.backend_ami_id
   instance_type               = var.ec2_instance_type
   subnet_id                   = data.aws_subnets.default.ids[0]
   vpc_security_group_ids      = [aws_security_group.backend.id]

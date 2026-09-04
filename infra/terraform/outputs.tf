@@ -31,3 +31,8 @@ output "secrets_manager_secret_arn" {
   description = "Put this in the GitHub repo secret SECRETS_MANAGER_ARN"
   value       = aws_secretsmanager_secret.backend.arn
 }
+
+output "latest_al2023_ami" {
+  description = "Latest AL2023 AMI available. backend_ami_id is pinned and won't track this automatically — copy this value into terraform.tfvars and re-apply only when you deliberately want to upgrade the instance's base image."
+  value       = data.aws_ami.al2023.id
+}
