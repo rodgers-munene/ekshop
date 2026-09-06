@@ -81,7 +81,10 @@ frontend origin and callback URL, then `terraform apply` again (this updates
 the Secrets Manager secret; re-run the GitHub Actions workflow, or manually
 re-run the SSM deploy command, to pick up the change — the running container
 doesn't auto-reload env vars). Also set `secret_env.MPESA_CALLBACK_SECRET` at
-the same time — Safaricom's callback gets rejected with 401 without it.
+the same time — Safaricom's callback gets rejected with 401 without it. If
+`plain_env.MPESA_SHORTCODE` is a Store/Organization number with a separate
+Till number, also set `plain_env.MPESA_TILL_NUMBER` — otherwise Safaricom
+routes the STK push to the wrong account.
 
 ## HTTPS without a purchased domain
 

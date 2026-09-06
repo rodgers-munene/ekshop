@@ -26,6 +26,11 @@ plain_env = {
   PAYSTACK_PUBLIC_KEY        = "pk_live_xxx"
   EMAIL_FROM                 = "Ekshop <no-reply@ekshop.co.ke>"
   MPESA_SHORTCODE             = "174379"
+  # Only set this if MPESA_SHORTCODE above is a Store/Organization number
+  # with a separate Till (Buy Goods) number linked to it — omit entirely for
+  # a plain paybill/till where they're the same number. See the comment on
+  # MPESA_TILL_NUMBER in backend/app/core/config.py.
+  MPESA_TILL_NUMBER           = ""
   MPESA_ENVIRONMENT           = "sandbox"
   # Bare origin only, HTTPS — app/services/mpesa.py appends
   # /payments/mpesa/callback itself. Fill this in with the `backend_url`

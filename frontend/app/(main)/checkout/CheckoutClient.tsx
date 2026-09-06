@@ -241,7 +241,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
   if (step === "polling") {
     const unresolved = pollFailed || pollTimedOut;
     return (
-      <div className="min-h-[60vh] flex items-center justify-center px-4 py-16">
+      <div className="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center px-4 py-16 overflow-y-auto">
         <div className="card w-full max-w-sm p-8 flex flex-col items-center text-center">
           {unresolved ? (
             <>
