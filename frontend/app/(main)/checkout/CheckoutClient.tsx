@@ -83,6 +83,13 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
     if (addr?.phone) setPhone(addr.phone);
   }, [selectedAddressId, addresses]);
 
+  // The polling screen replaces the current step in place (no route change),
+  // so the browser never resets scroll on its own — without this, a buyer
+  // who was scrolled down filling the form would land on a blank viewport.
+  useEffect(() => {
+    if (step === "polling") window.scrollTo({ top: 0 });
+  }, [step]);
+
   // Poll M-Pesa payment status once STK push has been sent. Ticks every
   // second so the UI can show a live countdown, but only actually hits the
   // status endpoint every POLL_INTERVAL_MS.
@@ -241,7 +248,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
   if (step === "polling") {
     const unresolved = pollFailed || pollTimedOut;
     return (
-      <div className="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center px-4 py-16 overflow-y-auto">
+      <div className="min-h-[60vh] flex items-center justify-center px-4 py-16">
         <div className="card w-full max-w-sm p-8 flex flex-col items-center text-center">
           {unresolved ? (
             <>
