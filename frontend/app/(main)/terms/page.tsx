@@ -53,7 +53,7 @@ export default function TermsPage() {
         <section>
           <h2 className="font-semibold text-base mb-2">5. Orders and payments</h2>
           <p>
-            Payments are processed securely through Paystack. By placing an order you authorise Ekshop and its payment
+            Payments are processed securely through Safaricom M-Pesa. By placing an order you authorise Ekshop and its payment
             processor to charge the payment method you provide. Order confirmation does not guarantee availability.
             Sellers may cancel an order if a listed item is unexpectedly out of stock, in which case any payment taken
             will be refunded in full.

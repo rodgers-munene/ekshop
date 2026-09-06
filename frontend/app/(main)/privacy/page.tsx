@@ -18,7 +18,7 @@ export default function PrivacyPage() {
           <ul className="list-disc pl-5 space-y-1">
             <li><strong>Account information:</strong> name, email, phone number, county, and password.</li>
             <li><strong>Order information:</strong> delivery addresses, order history, and communications with Sellers.</li>
-            <li><strong>Payment information:</strong> processed directly by Paystack. Ekshop does not store your card details.</li>
+            <li><strong>Payment information:</strong> checkout payments are processed directly by Safaricom M-Pesa; Sellers&apos; subscription billing is processed by Paystack. Ekshop does not store your M-Pesa PIN or card details.</li>
             <li><strong>Usage data:</strong> pages viewed, products clicked, searches made, and similar activity, used to
               personalise recommendations and improve the platform.</li>
           </ul>
@@ -39,8 +39,9 @@ export default function PrivacyPage() {
         <section>
           <h2 className="font-semibold text-base mb-2">3. Who we share it with</h2>
           <p>
-            We share the minimum necessary information with: Sellers (to fulfil your orders), Paystack (to process
-            payments), delivery partners (to deliver your orders), and service providers who help us operate the
+            We share the minimum necessary information with: Sellers (to fulfil your orders), Safaricom M-Pesa (to
+            process checkout payments) and Paystack (to process seller subscription billing), delivery partners (to
+            deliver your orders), and service providers who help us operate the
             platform (such as email and cloud hosting providers). We do not sell your personal information to third
             parties.
           </p>

@@ -3,15 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { AlertTriangle, RefreshCw, Smartphone } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import { UserAddress } from "@/types/interface";
 import { formatKES, resolveImageUrl as resolveImg, decodeHtml } from "@/lib/utils";
 
-type Step = "review" | "address" | "payment" | "redirecting";
+type Step = "review" | "address" | "payment" | "polling";
+
+const POLL_INTERVAL_MS = 4000;
+// Matches the backend's own grace period before it's willing to actively
+// query Safaricom (see _reconcile_mpesa_intent) — querying any sooner tends
+// to get a spurious premature result. Past this window we stop auto-polling
+// and let the buyer trigger a check manually via "Refresh Status" instead.
+const POLL_TIMEOUT_MS = 20000;
 
 export default function CheckoutClient({ addresses }: { addresses: UserAddress[] }) {
   const router = useRouter();
-  const { items, totalPrice } = useCartStore();
+  const { items, totalPrice, clearCart } = useCartStore();
   const [step, setStep] = useState<Step>("review");
   const [selectedAddressId, setSelectedAddressId] = useState<string>(
     addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? ""
@@ -20,6 +28,16 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [resolvedFeeKey, setResolvedFeeKey] = useState("");
   const requestKeyRef = useRef("");
+
+  const [phone, setPhone] = useState("");
+  const [orderGroupId, setOrderGroupId] = useState("");
+  const [checkoutRequestId, setCheckoutRequestId] = useState("");
+  const [pollFailed, setPollFailed] = useState(false);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
+  const [secondsRemaining, setSecondsRemaining] = useState(POLL_TIMEOUT_MS / 1000);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState("");
+  const phoneTouchedRef = useRef(false);
 
   const subtotal = totalPrice();
   const total = subtotal + deliveryFee;
@@ -56,8 +74,64 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feeKey]);
 
+  // Prefill the payment phone from the selected address, but only until the
+  // buyer edits it themselves — the payment phone may differ from the
+  // delivery contact.
+  useEffect(() => {
+    if (phoneTouchedRef.current) return;
+    const addr = addresses.find((a) => a.id === selectedAddressId);
+    if (addr?.phone) setPhone(addr.phone);
+  }, [selectedAddressId, addresses]);
+
+  // Poll M-Pesa payment status once STK push has been sent. Ticks every
+  // second so the UI can show a live countdown, but only actually hits the
+  // status endpoint every POLL_INTERVAL_MS.
+  useEffect(() => {
+    if (step !== "polling" || !checkoutRequestId) return;
+
+    setSecondsRemaining(POLL_TIMEOUT_MS / 1000);
+
+    let elapsed = 0;
+    const timer = setInterval(async () => {
+      elapsed += 1000;
+      setSecondsRemaining(Math.max(0, Math.round((POLL_TIMEOUT_MS - elapsed) / 1000)));
+
+      if (elapsed % POLL_INTERVAL_MS === 0) {
+        try {
+          const res = await fetch(`/api/mpesa/status/${checkoutRequestId}`);
+          const data = await res.json().catch(() => ({}));
+
+          if (res.ok && data.status === "success") {
+            clearInterval(timer);
+            clearCart();
+            toast.success("Payment confirmed!");
+            router.push(`/orders/${orderGroupId}`);
+            return;
+          }
+
+          if (res.ok && data.status === "failed") {
+            clearInterval(timer);
+            setPollFailed(true);
+            return;
+          }
+        } catch {
+          // transient network error — keep polling until the timeout
+        }
+      }
+
+      if (elapsed >= POLL_TIMEOUT_MS) {
+        clearInterval(timer);
+        setPollTimedOut(true);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, checkoutRequestId]);
+
   async function placeOrder() {
     if (!selectedAddressId) { toast.error("Select a delivery address"); return; }
+    if (!phone.trim()) { toast.error("Enter the phone number to pay with"); return; }
 
     setLoading(true);
     try {
@@ -90,21 +164,9 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
       });
       const orderJson = await orderRes.json();
       if (!orderRes.ok) { toast.error(orderJson.detail ?? "Failed to place order"); return; }
+      setOrderGroupId(orderJson.id);
 
-      // 2. Start a Paystack transaction and get the hosted checkout URL
-      const paystackRes = await fetch("/api/paystack", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_group_id: orderJson.id }),
-      });
-      const paystackJson = await paystackRes.json();
-      if (!paystackRes.ok) { toast.error(paystackJson.detail ?? "Could not start payment"); return; }
-
-      // Cart is intentionally left intact here — it's only cleared once
-      // payment is confirmed (see PaystackReturnHandler). If the buyer
-      // cancels on Paystack's page, they should still have their items.
-      setStep("redirecting");
-      window.location.href = paystackJson.authorization_url;
+      await sendStkPush(orderJson.id);
     } catch {
       toast.error("Something went wrong. Try again.");
     } finally {
@@ -112,19 +174,112 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
     }
   }
 
-  if (items.length === 0 && step !== "redirecting") {
+  async function sendStkPush(targetOrderGroupId: string) {
+    setPollFailed(false);
+    setPollTimedOut(false);
+    setRefreshMessage("");
+
+    const res = await fetch("/api/mpesa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_group_id: targetOrderGroupId, phone }),
+    });
+    const json = await res.json();
+    if (!res.ok) { toast.error(json.detail ?? "Could not start M-Pesa payment"); return; }
+
+    setCheckoutRequestId(json.checkout_request_id);
+    setStep("polling");
+  }
+
+  async function retry() {
+    if (!orderGroupId) return;
+    setLoading(true);
+    try {
+      await sendStkPush(orderGroupId);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Manual one-off re-check for the "Refresh Status" button shown after the
+  // poller gives up — the buyer may have finished entering their PIN after
+  // our poll window closed, so this re-asks without sending a new STK push.
+  async function refreshStatus() {
+    if (!checkoutRequestId) return;
+    setRefreshing(true);
+    setRefreshMessage("");
+    try {
+      const res = await fetch(`/api/mpesa/status/${checkoutRequestId}`);
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.status === "success") {
+        clearCart();
+        toast.success("Payment confirmed!");
+        router.push(`/orders/${orderGroupId}`);
+        return;
+      }
+
+      if (res.ok && data.status === "failed") {
+        setPollTimedOut(false);
+        setPollFailed(true);
+        return;
+      }
+
+      setRefreshMessage("Still waiting for confirmation. Give it a moment and check again.");
+    } catch {
+      setRefreshMessage("Couldn't check status. Try again.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  if (items.length === 0 && step !== "polling") {
     router.replace("/cart");
     return null;
   }
 
-  if (step === "redirecting") {
+  if (step === "polling") {
+    const unresolved = pollFailed || pollTimedOut;
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 py-16">
-        <div className="text-5xl mb-4">💳</div>
-        <h2 className="text-2xl font-extrabold mb-2">Taking you to Paystack…</h2>
-        <p className="text-muted text-sm max-w-xs mb-6">
-          Complete your payment on the secure Paystack checkout page. You&apos;ll be redirected back here once it&apos;s done.
-        </p>
+      <div className="min-h-[60vh] flex items-center justify-center px-4 py-16">
+        <div className="card w-full max-w-sm p-8 flex flex-col items-center text-center">
+          {unresolved ? (
+            <>
+              <AlertTriangle size={40} className="text-amber mb-4" />
+              <h2 className="text-2xl font-extrabold mb-2">We couldn&apos;t confirm your payment</h2>
+              <p className="text-muted text-sm mb-2">
+                The prompt may have been cancelled, timed out, or could still be processing. Refresh to check the
+                latest status, or try again.
+              </p>
+              {refreshMessage && <p className="text-xs text-muted mb-2">{refreshMessage}</p>}
+              <div className="flex flex-col gap-2 w-full mt-4">
+                <button
+                  onClick={refreshStatus}
+                  disabled={refreshing}
+                  className="btn-accent disabled:opacity-40 w-full gap-2"
+                >
+                  <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+                  {refreshing ? "Checking…" : "Refresh Status"}
+                </button>
+                <button onClick={retry} disabled={loading} className="btn-outline disabled:opacity-40 w-full">
+                  {loading ? "Retrying…" : "Try again"}
+                </button>
+              </div>
+              <button onClick={() => router.push(`/orders/${orderGroupId}`)} className="text-sm text-muted underline underline-offset-2 mt-3">
+                View order
+              </button>
+            </>
+          ) : (
+            <>
+              <Smartphone size={40} className="text-amber mb-4" />
+              <h2 className="text-2xl font-extrabold mb-2">Check your phone</h2>
+              <p className="text-muted text-sm mb-2">
+                Enter your M-Pesa PIN on the prompt sent to {phone} to complete your payment of {formatKES(total)}.
+              </p>
+              <p className="text-amber text-sm font-medium">Processing... ({secondsRemaining}s)</p>
+            </>
+          )}
+        </div>
       </div>
     );
   }
@@ -198,10 +353,18 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
             <div className="px-5 py-3 border-b border-border bg-surface">
               <h2 className="font-semibold">3. Payment</h2>
             </div>
-            <div className="p-4">
+            <div className="p-4 space-y-2">
               <p className="text-xs text-muted">
-                You&apos;ll be redirected to Paystack&apos;s secure checkout to pay by card or bank.
+                We&apos;ll send an M-Pesa prompt to this number. Enter your PIN there to complete payment.
               </p>
+              <label className="block text-xs font-medium text-muted">M-Pesa phone number</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => { phoneTouchedRef.current = true; setPhone(e.target.value); }}
+                placeholder="07XX XXX XXX"
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
+              />
             </div>
           </section>
         </div>

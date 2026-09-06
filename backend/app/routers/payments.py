@@ -1,5 +1,7 @@
+import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -14,6 +16,7 @@ from app.services.subscriptions import activate_subscription
 from app.schemas.payment import (
     StkPushRequest,
     StkPushResponse,
+    MpesaStatusResponse,
     PaystackInitRequest,
     PaystackInitResponse,
     PaystackVerifyResponse,
@@ -23,6 +26,12 @@ from app.services import recommendations as rec_service
 from app.services.notifications import create_notification, notify_admins_of_new_order
 
 router = APIRouter(prefix="/payments", tags=["payments"])
+logger = logging.getLogger(__name__)
+
+
+def verify_mpesa_callback_token(token: str | None = Query(default=None)) -> None:
+    if not settings.MPESA_CALLBACK_SECRET or token != settings.MPESA_CALLBACK_SECRET:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid callback token")
 
 
 def _mark_order_paid(db: Session, order_group_id: uuid.UUID) -> None:
@@ -67,12 +76,17 @@ def mpesa_stk_push(
     if not order_group:
         raise HTTPException(404, "Order not found or already paid")
 
+    try:
+        phone = mpesa.normalize_phone(payload.phone)
+    except ValueError:
+        raise HTTPException(422, "Enter a valid Safaricom phone number")
+
     # call Safaricom
     try:
         token = mpesa.get_access_token()
         result = mpesa.initiate_stk_push(
             access_token=token,
-            phone=payload.phone,
+            phone=phone,
             amount=int(float(order_group.total)),  # M-Pesa needs integer KES
             order_ref=str(order_group.id)[:12],    # max 12 chars
         )
@@ -96,13 +110,15 @@ def mpesa_stk_push(
     )
     
     
-@router.post("/mpesa/callback")
+@router.post("/mpesa/callback", dependencies=[Depends(verify_mpesa_callback_token)])
 async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
-    callback = data["Body"]["stkCallback"]
-
-    result_code = callback["ResultCode"]
-    checkout_request_id = callback["CheckoutRequestID"]
+    try:
+        callback = data["Body"]["stkCallback"]
+        result_code = callback["ResultCode"]
+        checkout_request_id = callback["CheckoutRequestID"]
+    except (KeyError, TypeError):
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}  # malformed body, ignore
 
     # find the PaymentIntent Safaricom is responding to
     intent = db.query(PaymentIntent).filter(
@@ -114,14 +130,38 @@ async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
 
     if result_code != 0:
         # payment failed, record it, leave order as pending_payment
+        logger.warning(
+            "M-Pesa STK push failed for CheckoutRequestID=%s: ResultCode=%s ResultDesc=%r",
+            checkout_request_id, result_code, callback.get("ResultDesc"),
+        )
         intent.status = "failed"
         db.commit()
         return {"ResultCode": 0, "ResultDesc": "Accepted"}
 
     # payment succeeded, extract metadata from callback
-    items = {i["Name"]: i["Value"] for i in callback["CallbackMetadata"]["Item"]}
+    try:
+        items = {i["Name"]: i["Value"] for i in callback["CallbackMetadata"]["Item"]}
+    except (KeyError, TypeError):
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}  # malformed body, ignore
     receipt = items.get("MpesaReceiptNumber")
     amount = items.get("Amount")
+
+    if intent.status == PaymentStatus.success:
+        # already marked paid — most likely our own reconciliation query beat
+        # this callback to it (see _reconcile_mpesa_intent's placeholder
+        # provider_ref). Backfill the real receipt onto that row instead of
+        # creating a second Payment / re-firing _mark_order_paid.
+        placeholder = db.query(Payment).filter(
+            Payment.order_group_id == intent.order_group_id,
+            Payment.provider == "mpesa",
+            Payment.provider_ref == f"mpesa_query_{intent.provider_ref}",
+        ).first()
+        if placeholder:
+            placeholder.provider_ref = receipt
+            placeholder.amount = str(amount)
+            placeholder.raw_response = data
+            db.commit()
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}
 
     # idempotency check, don't process the same payment twice
     existing = db.query(Payment).filter(Payment.provider_ref == receipt).first()
@@ -145,6 +185,108 @@ async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
 
     db.commit()
     return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+
+def _reconcile_mpesa_intent(db: Session, intent: PaymentIntent) -> PaymentStatus:
+    """Actively asks Safaricom for the result of an STK push when our own
+    callback hasn't arrived (or never will), mirroring
+    _reconcile_paystack_intent below. Unlike the callback, the query API
+    doesn't return a receipt number, so success here is recorded under a
+    clearly-labeled placeholder provider_ref that a later real callback can
+    backfill (see the intent.status == success guard in mpesa_callback)."""
+    if intent.status in (PaymentStatus.success, PaymentStatus.failed):
+        return intent.status
+
+    # Safaricom's STK query API routinely returns a spurious non-zero
+    # ResultCode when asked too soon after the push — before the buyer has
+    # even seen the prompt on their phone. Give the async callback a fair
+    # chance to arrive on its own first; only fall back to actively querying
+    # once enough time has passed that the callback is genuinely late.
+    if datetime.now(timezone.utc) - intent.created_at < timedelta(seconds=20):
+        return intent.status
+
+    try:
+        token = mpesa.get_access_token()
+        result = mpesa.query_stk_push_status(token, intent.provider_ref)
+    except Exception as e:
+        raise HTTPException(502, f"M-Pesa error: {str(e)}")
+
+    if result.get("pending"):
+        return intent.status
+
+    if str(result.get("ResultCode")) == "0":
+        placeholder_ref = f"mpesa_query_{intent.provider_ref}"
+        existing = db.query(Payment).filter(Payment.provider_ref == placeholder_ref).first()
+        if not existing:
+            payment = Payment(
+                order_group_id=intent.order_group_id,
+                user_id=intent.user_id,
+                provider="mpesa",
+                provider_ref=placeholder_ref,
+                amount=intent.amount,
+                status=PaymentStatus.success,
+                raw_response=result,
+            )
+            db.add(payment)
+            intent.status = PaymentStatus.success
+            _mark_order_paid(db, intent.order_group_id)
+            db.commit()
+    else:
+        intent.status = PaymentStatus.failed
+        db.commit()
+
+    return intent.status
+
+
+@router.get("/mpesa/status/{checkout_request_id}", response_model=MpesaStatusResponse)
+def mpesa_status(
+    checkout_request_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Polled by the checkout page while the buyer completes the STK push
+    prompt on their phone — there's no browser redirect step for M-Pesa the
+    way there is for Paystack, so this is the only way the frontend finds
+    out the outcome short of waiting on the webhook."""
+    intent = db.query(PaymentIntent).filter(
+        PaymentIntent.provider_ref == checkout_request_id,
+        PaymentIntent.user_id == current_user.id,
+        PaymentIntent.provider == "mpesa",
+    ).first()
+    if not intent:
+        raise HTTPException(404, "Payment not found")
+
+    status_ = _reconcile_mpesa_intent(db, intent)
+    return MpesaStatusResponse(
+        status=status_,
+        order_group_id=intent.order_group_id,
+        checkout_request_id=checkout_request_id,
+    )
+
+
+@router.get("/mpesa/status-by-order/{order_group_id}", response_model=MpesaStatusResponse)
+def mpesa_status_by_order(
+    order_group_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Fallback for a buyer whose checkout tab closed before the poller
+    resolved. Looks up the latest M-Pesa payment intent for this order and
+    re-checks it against Safaricom directly."""
+    intent = db.query(PaymentIntent).filter(
+        PaymentIntent.order_group_id == order_group_id,
+        PaymentIntent.user_id == current_user.id,
+        PaymentIntent.provider == "mpesa",
+    ).order_by(PaymentIntent.created_at.desc()).first()
+    if not intent:
+        raise HTTPException(404, "No M-Pesa payment found for this order")
+
+    status_ = _reconcile_mpesa_intent(db, intent)
+    return MpesaStatusResponse(
+        status=status_,
+        order_group_id=intent.order_group_id,
+        checkout_request_id=intent.provider_ref,
+    )
 
 
 @router.post("/paystack/initialize", response_model=PaystackInitResponse, status_code=201)

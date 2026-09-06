@@ -17,7 +17,7 @@ export default function AboutPage() {
           <p>
             Ekshop is an online marketplace built for Kenya, connecting buyers with verified sellers across the
             country. Whether you&apos;re shopping for electronics, fashion, home goods, or supporting a local hustle,
-            Ekshop makes it easy to discover products, pay securely with M-Pesa or Paystack, and get your order
+            Ekshop makes it easy to discover products, pay securely with M-Pesa, and get your order
             delivered nationwide.
           </p>
         </section>

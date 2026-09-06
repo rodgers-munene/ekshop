@@ -42,9 +42,9 @@ export default function RefundPolicyPage() {
         <section>
           <h2 className="font-semibold text-base mb-2">3. How refunds work</h2>
           <p>
-            Once a return is approved by the Seller (or by Ekshop in a disputed case), the refund is issued to the
-            payment method used at checkout. Paystack refunds typically reflect within 5–10 business days, depending
-            on your bank.
+            Once a return is approved by the Seller (or by Ekshop in a disputed case), the refund is sent back to the
+            M-Pesa number used at checkout. M-Pesa refunds are typically much faster than card refunds and often
+            reflect within minutes to a few hours of being issued.
           </p>
         </section>
 

@@ -13,7 +13,7 @@ export default function PaymentStatusCheck({ orderGroupId }: { orderGroupId: str
   const check = async () => {
     setChecking(true);
     try {
-      const res = await fetch(`/api/paystack/verify-order/${orderGroupId}`);
+      const res = await fetch(`/api/mpesa/status-by-order/${orderGroupId}`);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.status === "success") {
         clearCart();
@@ -22,9 +22,9 @@ export default function PaymentStatusCheck({ orderGroupId }: { orderGroupId: str
       } else if (res.ok && data.status === "failed") {
         toast.error("Payment failed. Please try again.");
       } else if (res.status === 404) {
-        toast("No M-Pesa/card payment found yet for this order.");
+        toast("No M-Pesa payment found yet for this order.");
       } else {
-        toast("Still pending on Paystack's side. Try again in a moment.");
+        toast("Still pending — the confirmation from Safaricom hasn't reached us yet. Try again in a moment.");
       }
     } catch {
       toast.error("Could not check payment status. Try again.");
@@ -36,11 +36,11 @@ export default function PaymentStatusCheck({ orderGroupId }: { orderGroupId: str
   return (
     <div className="card p-4 mb-6 flex items-center justify-between gap-4 bg-amber/10 border-amber/30">
       <p className="text-sm text-ink">
-        Already paid but it&apos;s still showing pending? This can happen if the payment page
-        didn&apos;t redirect back after you completed it on your phone.
+        Already paid but it&apos;s still showing pending? This can happen if the
+        confirmation from Safaricom hasn&apos;t reached us yet.
       </p>
       <button onClick={check} disabled={checking} className="btn-accent whitespace-nowrap disabled:opacity-60">
-        {checking ? "Checking…" : "I've paid — check status"}
+        {checking ? "Checking…" : "I've paid, check status"}
       </button>
     </div>
   );

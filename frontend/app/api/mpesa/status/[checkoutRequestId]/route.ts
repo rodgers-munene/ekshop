@@ -1,19 +1,17 @@
 import { cookies } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export async function POST(req: NextRequest) {
+export async function GET(_req: Request, { params }: { params: Promise<{ checkoutRequestId: string }> }) {
+  const { checkoutRequestId } = await params;
   const cookieStore = await cookies();
   const token = cookieStore.get("ekshop_token")?.value;
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
-  const body = await req.json();
-
-  const res = await fetch(`${BASE_URL}/payments/paystack/initialize`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
+  const res = await fetch(`${BASE_URL}/payments/mpesa/status/${checkoutRequestId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
   });
 
   const data = await res.json().catch(() => ({}));

@@ -9,7 +9,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ orderGr
   const token = cookieStore.get("ekshop_token")?.value;
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
-  const res = await fetch(`${BASE_URL}/payments/paystack/verify-order/${orderGroupId}`, {
+  const res = await fetch(`${BASE_URL}/payments/mpesa/status-by-order/${orderGroupId}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });

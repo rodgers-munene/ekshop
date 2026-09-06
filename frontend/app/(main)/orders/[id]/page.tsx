@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { serverFetch, ServerFetchError } from "@/lib/server-api";
 import { OrderGroup } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
-import PaystackReturnHandler from "./PaystackReturnHandler";
 import PaymentStatusCheck from "./PaymentStatusCheck";
 import DeliveryTracker from "./DeliveryTracker";
 
@@ -35,8 +34,6 @@ export default async function OrderDetailPage({ params }: Props) {
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 md:px-6 py-6">
-      <PaystackReturnHandler />
-
       {/* Header */}
       <div className="flex items-center gap-3 mb-2">
         <Link href="/orders" className="text-xs text-muted hover:text-amber underline">← Orders</Link>

@@ -27,9 +27,12 @@ plain_env = {
   EMAIL_FROM                 = "Ekshop <no-reply@ekshop.co.ke>"
   MPESA_SHORTCODE             = "174379"
   MPESA_ENVIRONMENT           = "sandbox"
-  # Fill this in with the EC2 Elastic IP (`terraform output backend_url`)
-  # once the instance exists, then re-apply.
-  MPESA_CALLBACK_URL          = "http://your-elastic-ip/payments/mpesa/callback"
+  # Bare origin only, HTTPS — app/services/mpesa.py appends
+  # /payments/mpesa/callback itself. Fill this in with the `backend_url`
+  # terraform output (the sslip.io HTTPS URL, see README's "HTTPS without a
+  # purchased domain") once the instance exists, then re-apply. Must also
+  # set secret_env.MPESA_CALLBACK_SECRET below or callbacks get 401'd.
+  MPESA_CALLBACK_URL          = "https://your-elastic-ip-with-dashes.sslip.io"
   AWS_REGION                  = "eu-west-1"
   AWS_S3_BUCKET                = ""
   AWS_S3_PUBLIC_URL            = ""
@@ -44,6 +47,9 @@ secret_env = {
   MPESA_CONSUMER_KEY    = "your_consumer_key"
   MPESA_CONSUMER_SECRET = "your_consumer_secret"
   MPESA_PASSKEY         = "your_passkey"
+  # Shared secret Safaricom's callback echoes back as ?token=. Generate with:
+  #   openssl rand -hex 32
+  MPESA_CALLBACK_SECRET = "generate-with-openssl-rand--hex-32"
   AWS_ACCESS_KEY_ID     = ""
   AWS_SECRET_ACCESS_KEY = ""
   # Shared secret the GitHub Actions billing-cycle cron presents to

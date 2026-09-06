@@ -48,3 +48,9 @@ class PaystackInitResponse(BaseModel):
 class PaystackVerifyResponse(BaseModel):
     status: PaymentStatus
     order_group_id: uuid.UUID
+
+
+class MpesaStatusResponse(BaseModel):
+    status: PaymentStatus
+    order_group_id: uuid.UUID
+    checkout_request_id: str

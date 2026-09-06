@@ -15,15 +15,29 @@ class Settings(BaseSettings):
     # Primary frontend origin, used to build payment provider redirect URLs
     FRONTEND_URL: str = "http://localhost:3000"
 
-    # M-Pesa Daraja API: built but not yet linked into checkout (Daraja app
-    # is not production-approved yet; Paystack is the live payment provider)
+    # M-Pesa Daraja API: the live checkout payment provider. Paystack is kept
+    # only for seller subscription billing (see PAYSTACK_* below).
     MPESA_CONSUMER_KEY: str | None = None
     MPESA_CONSUMER_SECRET: str | None = None
     MPESA_SHORTCODE: str = "174379"
     MPESA_PASSKEY: str | None = None
+    # Set only when the shortcode above is a Store/Organization number with a
+    # separate Till (Buy Goods) number linked to it — the STK push password
+    # is built from MPESA_SHORTCODE (what the passkey is bound to), but the
+    # till receiving the money must be passed separately as PartyB. Leave
+    # unset for a plain paybill/till where they're the same number.
+    MPESA_TILL_NUMBER: str | None = None
     MPESA_ENVIRONMENT: str = "sandbox"
+    # Bare origin (e.g. https://x.sslip.io) — app/services/mpesa.py appends
+    # the /payments/mpesa/callback path itself. Must be HTTPS in production.
     MPESA_CALLBACK_URL: str | None = None
+    # Shared secret appended as a query token on the callback URL, since
+    # Safaricom's callback carries no signature (unlike Paystack's HMAC
+    # webhook) and we can't dictate headers on its request to us — same
+    # spirit as CRON_SECRET below, just carried in the URL instead.
+    MPESA_CALLBACK_SECRET: str | None = None
 
+    # Paystack: seller subscription billing only (checkout uses M-Pesa above).
     PAYSTACK_SECRET_KEY: str | None = None
     PAYSTACK_PUBLIC_KEY: str | None = None
 
