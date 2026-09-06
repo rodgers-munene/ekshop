@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.dependencies.database import get_db
+from app.routers.payments import reconcile_stale_mpesa_intents
 from app.services.subscriptions import run_billing_cycle
 
 router = APIRouter(prefix="/internal/cron", tags=["internal"])
@@ -28,3 +29,21 @@ def run_billing_cycle_endpoint(
     _: None = Depends(verify_cron_secret),
 ):
     return run_billing_cycle(db)
+
+
+@router.post(
+    "/mpesa-reconcile",
+    summary="Sweep stuck-pending M-Pesa payment intents (cron-triggered)",
+    description="""
+Actively re-queries Safaricom for any M-Pesa STK push still sitting in
+`pending` status a while after being initiated — covers a buyer who closed
+the tab before the callback arrived (or before it ever would have) and
+never revisited the order page to trigger the manual fallback. Triggered
+periodically by an external scheduler (GitHub Actions), not user-facing.
+""",
+)
+def run_mpesa_reconcile_endpoint(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_cron_secret),
+):
+    return reconcile_stale_mpesa_intents(db)

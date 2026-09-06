@@ -36,6 +36,11 @@ def verify_mpesa_callback_token(token: str | None = Query(default=None)) -> None
 
 def _mark_order_paid(db: Session, order_group_id: uuid.UUID) -> None:
     order_group = db.query(OrderGroup).filter(OrderGroup.id == order_group_id).first()
+    if order_group.status == OrderGroupStatus.paid:
+        # already processed by another path (e.g. a reconciliation query
+        # racing a late callback for the same intent) — avoid re-notifying
+        # the buyer/admins and double-logging purchase events.
+        return
     order_group.status = OrderGroupStatus.paid
     for order in order_group.orders:
         order.status = OrderStatus.confirmed
@@ -75,6 +80,29 @@ def mpesa_stk_push(
     ).first()
     if not order_group:
         raise HTTPException(404, "Order not found or already paid")
+
+    # Guard against double-charging on retry: if this order already has an
+    # STK push in flight (or one we last saw as "failed", which can be a
+    # false negative — see _reconcile_mpesa_intent's grace period), check
+    # its real status with Safaricom before sending a brand new push. Without
+    # this, a genuine late success on the old intent plus a fresh retry could
+    # both land as separate payments for the same order.
+    existing_intent = db.query(PaymentIntent).filter(
+        PaymentIntent.order_group_id == order_group.id,
+        PaymentIntent.provider == "mpesa",
+    ).order_by(PaymentIntent.created_at.desc()).first()
+
+    if existing_intent:
+        resolved = _reconcile_mpesa_intent(db, existing_intent)
+        if resolved != PaymentStatus.failed:
+            return StkPushResponse(
+                message=(
+                    "Payment already confirmed"
+                    if resolved == PaymentStatus.success
+                    else "A payment request is still pending for this order — check your phone"
+                ),
+                checkout_request_id=existing_intent.provider_ref,
+            )
 
     try:
         phone = mpesa.normalize_phone(payload.phone)
@@ -232,10 +260,56 @@ def _reconcile_mpesa_intent(db: Session, intent: PaymentIntent) -> PaymentStatus
             _mark_order_paid(db, intent.order_group_id)
             db.commit()
     else:
+        logger.warning(
+            "M-Pesa STK query resolved CheckoutRequestID=%s as failed: ResultCode=%s ResultDesc=%r",
+            intent.provider_ref, result.get("ResultCode"), result.get("ResultDesc"),
+        )
         intent.status = PaymentStatus.failed
         db.commit()
 
     return intent.status
+
+
+def reconcile_stale_mpesa_intents(db: Session) -> dict:
+    """Sweeps M-Pesa PaymentIntents stuck in `pending` — covers a buyer who
+    closed the tab (or lost connectivity) before the callback arrived and
+    never revisited the order page to trigger the manual /status-by-order
+    fallback, so a delayed or dropped Daraja callback doesn't leave the
+    order in limbo forever. Meant to be called periodically by an external
+    scheduler (see cron.py), not from any user-facing request.
+
+    Bounded to intents created in the last 24h: older ones are certainly
+    abandoned, and querying Safaricom for very old CheckoutRequestIDs mostly
+    just risks noisy/unexpected error responses for no benefit.
+    """
+    now = datetime.now(timezone.utc)
+    stale = db.query(PaymentIntent).filter(
+        PaymentIntent.provider == "mpesa",
+        PaymentIntent.status == PaymentStatus.pending,
+        PaymentIntent.created_at <= now - timedelta(seconds=20),
+        PaymentIntent.created_at >= now - timedelta(hours=24),
+    ).all()
+
+    tally = {"success": 0, "failed": 0, "still_pending": 0, "errors": 0}
+    for intent in stale:
+        try:
+            resolved = _reconcile_mpesa_intent(db, intent)
+        except Exception:
+            logger.exception(
+                "Stale M-Pesa sweep: failed to reconcile CheckoutRequestID=%s",
+                intent.provider_ref,
+            )
+            tally["errors"] += 1
+            continue
+
+        if resolved == PaymentStatus.success:
+            tally["success"] += 1
+        elif resolved == PaymentStatus.failed:
+            tally["failed"] += 1
+        else:
+            tally["still_pending"] += 1
+
+    return {"checked": len(stale), **tally}
 
 
 @router.get("/mpesa/status/{checkout_request_id}", response_model=MpesaStatusResponse)
