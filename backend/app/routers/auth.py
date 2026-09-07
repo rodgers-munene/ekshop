@@ -218,11 +218,15 @@ Used by the registration payment-return page (and the renewal payment-return
 page — the seller may not be looking at an authenticated page at this point
 in either flow), so this endpoint requires no auth.
 
-If the subscription isn't yet `active`, re-checks Paystack directly in case
-the webhook hasn't landed yet (same reconciliation pattern used for order
-payments in `/payments/paystack/verify/{reference}`). This covers both a
-fresh registration (`pending_payment` -> `active`) and a renewal payment
-(`past_due`/`cancelled` -> `active`).
+If this reference's payment hasn't yet been applied, re-checks Paystack
+directly in case the webhook hasn't landed yet (same reconciliation pattern
+used for order payments in `/payments/paystack/verify/{reference}`). This
+covers a fresh registration (`pending_payment` -> `active`), a renewal
+payment (`past_due`/`cancelled` -> `active`), and an early renewal (already
+`active`, extending the period) — the check is keyed on whether *this*
+reference was applied, not on `status == active`, since an early renewal
+starts out already active and would otherwise be reported as confirmed
+before Paystack has actually settled it.
 """,
 )
 def subscription_status(reference: str, db: Session = Depends(get_db)):
@@ -230,7 +234,8 @@ def subscription_status(reference: str, db: Session = Depends(get_db)):
     if not subscription:
         raise HTTPException(status_code=404, detail="No subscription found for this reference")
 
-    if subscription.status != SubscriptionStatus.active:
+    payment_confirmed = subscription.last_activated_ref == reference
+    if not payment_confirmed:
         try:
             result = paystack.verify_transaction(reference)
         except Exception:
@@ -238,8 +243,13 @@ def subscription_status(reference: str, db: Session = Depends(get_db)):
         if result.get("status") == "success":
             activate_subscription(db, subscription)
             db.commit()
+            payment_confirmed = subscription.last_activated_ref == reference
 
-    return SubscriptionStatusResponse(status=subscription.status, shop_slug=subscription.shop.slug)
+    return SubscriptionStatusResponse(
+        status=subscription.status,
+        shop_slug=subscription.shop.slug,
+        payment_confirmed=payment_confirmed,
+    )
 
 
 @router.post(
@@ -307,9 +317,19 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
     if user.status == UserStatus.pending:
         if user.role == UserRole.seller:
+            shop = db.query(Shop).filter(Shop.seller_id == user.id).first()
+            reference = shop.subscription.provider_ref if shop and shop.subscription else None
+            # Structured so the login page can send the seller straight back into
+            # Paystack checkout instead of leaving them stuck with no next step —
+            # they have no email with a payment link to fall back on either, since
+            # sellers don't get the verify-email flow buyers do.
             raise HTTPException(
                 status_code=403,
-                detail="Your registration payment hasn't been confirmed yet. Complete payment to activate your shop.",
+                detail={
+                    "code": "seller_payment_pending",
+                    "message": "Your registration payment hasn't been confirmed yet. Complete payment to activate your shop.",
+                    "reference": reference,
+                },
             )
         raise HTTPException(status_code=403, detail="Please verify your email first")
 

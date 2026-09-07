@@ -7,7 +7,6 @@ from app.core.config import settings
 from app.dependencies.auth import require_seller
 from app.dependencies.database import get_db
 from app.models.shop import Shop
-from app.models.subscription import SubscriptionStatus
 from app.models.user import User
 from app.schemas.subscription import RenewSubscriptionResponse, SubscriptionRead
 from app.services import paystack
@@ -42,9 +41,12 @@ def get_my_subscription(
     summary="Start a renewal payment for my subscription",
     description="""
 Generates a fresh Paystack transaction for the current plan's monthly price.
-Does not change the subscription's status — it only flips to `active` once
-the payment is confirmed (via the Paystack webhook, or `/auth/subscription-status`),
-same as the original registration payment.
+Works whether the subscription is past_due/cancelled (reactivating it) or
+still active (an early renewal, at the seller's option — no need to wait
+for the current 30-day period to end). Does not change the subscription's
+status itself — it only flips to (or stays) `active`, with the period
+extended, once the payment is confirmed (via the Paystack webhook, or
+`/auth/subscription-status`), same as the original registration payment.
 """,
 )
 def renew_subscription(
@@ -52,9 +54,6 @@ def renew_subscription(
     current_user: User = Depends(require_seller),
 ):
     subscription = _get_my_subscription(db, current_user)
-
-    if subscription.status == SubscriptionStatus.active:
-        raise HTTPException(status_code=400, detail="Your subscription is already active")
 
     reference = f"eks_sub_{uuid.uuid4().hex[:20]}"
     try:

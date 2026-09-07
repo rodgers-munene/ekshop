@@ -7,6 +7,9 @@ from app.models.subscription import SubscriptionStatus
 class SubscriptionStatusResponse(BaseModel):
     status: SubscriptionStatus
     shop_slug: Optional[str] = None
+    # Whether *this specific* payment reference has been applied — distinct from
+    # `status == active`, which for an early renewal is already true beforehand.
+    payment_confirmed: bool = False
 
 
 class ResumePaymentRequest(BaseModel):

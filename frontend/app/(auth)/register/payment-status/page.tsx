@@ -43,7 +43,7 @@ function PaymentStatusPageInner() {
           if (intervalId) clearInterval(intervalId);
           return;
         }
-        if (data.status === "active") {
+        if (data.payment_confirmed) {
           setStatus("active");
           setShopSlug(data.shop_slug ?? null);
           if (intervalId) clearInterval(intervalId);

@@ -42,7 +42,7 @@ function RenewalPaymentStatusPageInner() {
           if (intervalId) clearInterval(intervalId);
           return;
         }
-        if (data.status === "active") {
+        if (data.payment_confirmed) {
           setStatus("active");
           if (intervalId) clearInterval(intervalId);
         } else {
@@ -82,8 +82,8 @@ function RenewalPaymentStatusPageInner() {
           </>
         ) : status === "active" ? (
           <>
-            <h2 className="text-2xl font-bold mb-2">Your shop is active again!</h2>
-            <p className="text-muted text-sm mb-6">Payment confirmed. Your subscription has been renewed.</p>
+            <h2 className="text-2xl font-bold mb-2">Subscription renewed!</h2>
+            <p className="text-muted text-sm mb-6">Payment confirmed. Your subscription period has been extended.</p>
             <Link href="/dashboard/billing" className="btn-accent inline-block">Back to billing →</Link>
           </>
         ) : (

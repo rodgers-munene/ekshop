@@ -42,6 +42,7 @@ class Subscription(Base):
     plan_id = Column(UUID(as_uuid=True), ForeignKey("subscription_plans.id"), nullable=False)
     provider_ref = Column(String(100))
     customer_ref = Column(String(100))
+    last_activated_ref = Column(String(100))
     status = Column(Enum(SubscriptionStatus, native_enum=False), default=SubscriptionStatus.trialing, nullable=False)
     current_period_start = Column(DateTime(timezone=True))
     current_period_end = Column(DateTime(timezone=True))

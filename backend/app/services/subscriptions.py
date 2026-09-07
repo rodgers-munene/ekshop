@@ -19,14 +19,19 @@ PAST_DUE_GRACE_DAYS = 3
 
 def activate_subscription(db: Session, subscription: Subscription) -> None:
     """Flips a pending-payment (or lapsed) subscription, and its shop + seller,
-    to active for a fresh 30-day period.
+    to active. Also handles an *early* renewal — a seller paying again while
+    already active, to push their expiry date out without waiting for the
+    current period to lapse — by extending current_period_end instead of
+    resetting it, so the days already paid for aren't discarded.
 
-    Idempotent: calling this on an already-active subscription is a no-op, so
-    both the Paystack webhook and the status-reconciliation endpoint can call
-    it without double-processing a payment. Also used to reactivate a renewal
-    payment from `past_due`/`cancelled`, not just the original `pending_payment`.
+    Idempotent per payment: calling this again for a provider_ref that was
+    already applied is a no-op, so both the Paystack webhook and the
+    status-reconciliation endpoint can call it without double-processing the
+    same payment. This is tracked via last_activated_ref rather than
+    `status == active`, since that would also swallow a genuine early
+    renewal (a second payment while status is already active).
     """
-    if subscription.status == SubscriptionStatus.active:
+    if subscription.provider_ref is not None and subscription.provider_ref == subscription.last_activated_ref:
         return
 
     # only true the very first time this subscription is ever activated —
@@ -34,9 +39,18 @@ def activate_subscription(db: Session, subscription: Subscription) -> None:
     is_first_activation = subscription.current_period_start is None
 
     now = datetime.now(timezone.utc)
+    extending_active_period = (
+        subscription.status == SubscriptionStatus.active
+        and subscription.current_period_end is not None
+        and subscription.current_period_end > now
+    )
+
     subscription.status = SubscriptionStatus.active
-    subscription.current_period_start = now
-    subscription.current_period_end = now + timedelta(days=SUBSCRIPTION_PERIOD_DAYS)
+    subscription.last_activated_ref = subscription.provider_ref
+    if not extending_active_period:
+        subscription.current_period_start = now
+    period_base = subscription.current_period_end if extending_active_period else now
+    subscription.current_period_end = period_base + timedelta(days=SUBSCRIPTION_PERIOD_DAYS)
     subscription.reminder_7d_sent_at = None
     subscription.reminder_1d_sent_at = None
 

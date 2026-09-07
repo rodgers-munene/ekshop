@@ -55,16 +55,16 @@ export default async function BillingPage() {
           <span className="font-semibold">{formatDate(subscription.current_period_end)}</span>
         </div>
 
-        {needsRenewal && (
-          <div className="pt-2 border-t border-border">
-            <p className="text-sm text-muted mb-3">
-              {subscription.status === "cancelled"
-                ? "Your shop is suspended and hidden from Ekshop until you renew."
-                : "Renew now to avoid your shop being taken down."}
-            </p>
-            <RenewButton />
-          </div>
-        )}
+        <div className="pt-2 border-t border-border">
+          <p className="text-sm text-muted mb-3">
+            {subscription.status === "cancelled"
+              ? "Your shop is suspended and hidden from Ekshop until you renew."
+              : subscription.status === "past_due"
+              ? "Renew now to avoid your shop being taken down."
+              : "Renew early any time to extend your subscription — no need to wait for it to run out."}
+          </p>
+          <RenewButton label={needsRenewal ? "Renew now" : "Renew early"} />
+        </div>
       </div>
     </div>
   );

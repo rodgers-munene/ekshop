@@ -22,6 +22,7 @@ function LoginPageInner() {
   const searchParams = useSearchParams();
   const { setUser } = useAuthStore();
   const [loading, setLoading] = useState(false);
+  const [resumingPayment, setResumingPayment] = useState(false);
 
   const {
     register,
@@ -30,6 +31,27 @@ function LoginPageInner() {
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
+
+  async function resumeSellerPayment(reference: string) {
+    setResumingPayment(true);
+    try {
+      const res = await fetch("/api/paystack/subscription-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference }),
+      });
+      const data = await res.json();
+      if (res.ok && data.authorization_url) {
+        window.location.href = data.authorization_url;
+        return;
+      }
+      toast.error(data.detail ?? "Couldn't resume your payment. Please try registering again or contact support.");
+    } catch {
+      toast.error("Couldn't resume your payment. Please try registering again or contact support.");
+    } finally {
+      setResumingPayment(false);
+    }
+  }
 
   async function onSubmit(data: LoginForm) {
     setLoading(true);
@@ -43,7 +65,17 @@ function LoginPageInner() {
       const json = await res.json();
 
       if (!res.ok) {
-        toast.error(json.detail ?? "Login failed");
+        const detail = json.detail;
+        if (detail && typeof detail === "object" && detail.code === "seller_payment_pending") {
+          if (detail.reference) {
+            toast.message("Taking you back to complete your registration payment…");
+            await resumeSellerPayment(detail.reference);
+          } else {
+            toast.error(detail.message ?? "Your registration payment hasn't been confirmed yet.");
+          }
+          return;
+        }
+        toast.error(typeof detail === "string" ? detail : "Login failed");
         return;
       }
 
@@ -132,10 +164,10 @@ function LoginPageInner() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || resumingPayment}
               className="btn-accent w-full disabled:opacity-50"
             >
-              {loading ? "Signing in..." : "Sign in"}
+              {resumingPayment ? "Redirecting to payment..." : loading ? "Signing in..." : "Sign in"}
             </button>
           </form>
         </div>
