@@ -53,3 +53,13 @@ class Subscription(Base):
 
     shop = relationship("Shop", back_populates="subscription")
     plan = relationship("SubscriptionPlan", back_populates="subscriptions")
+
+    @property
+    def awaiting_first_payment(self) -> bool:
+        """True for a subscription that has never had a real payment confirmed —
+        either a pre-subscription-system shop backfilled straight to `active`
+        with a 30-day window to pick a real plan (see migration
+        f2a6c91b8d47), or (in principle) a `pending_payment`/`trialing`
+        subscription. `status` alone can't distinguish this from a genuinely
+        paid-up subscription, since the backfill sets status to `active`."""
+        return self.last_activated_ref is None

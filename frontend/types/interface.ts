@@ -54,6 +54,9 @@ export interface Subscription {
   plan: SubscriptionPlan;
   current_period_start: string | null;
   current_period_end: string | null;
+  // True while `status` is "active" only because of the one-time backfill
+  // grace window, not because the seller has ever actually paid.
+  awaiting_first_payment: boolean;
 }
 
 // Products

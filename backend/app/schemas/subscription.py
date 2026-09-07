@@ -36,6 +36,10 @@ class SubscriptionRead(BaseModel):
     plan: SubscriptionPlanRead
     current_period_start: Optional[datetime]
     current_period_end: Optional[datetime]
+    # True while `status` is active only because of the one-time backfill grace
+    # window (or, in principle, before any payment has ever been confirmed) —
+    # distinct from a subscription that's actually paid up.
+    awaiting_first_payment: bool
 
     model_config = {"from_attributes": True}
 
