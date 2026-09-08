@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.delivery import Notification
 from app.models.shop import ShopStatus
-from app.models.subscription import Subscription, SubscriptionStatus
+from app.models.subscription import BillingInterval, Subscription, SubscriptionStatus
 from app.models.user import UserStatus
 from app.services import email as email_service
 from app.services.notifications import notify_admins_of_pos_provisioning
@@ -12,7 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-SUBSCRIPTION_PERIOD_DAYS = 30
+PERIOD_DAYS_BY_INTERVAL = {BillingInterval.monthly: 30, BillingInterval.annual: 365}
 REMINDER_DAYS_BEFORE_EXPIRY = (7, 1)
 PAST_DUE_GRACE_DAYS = 3
 
@@ -30,6 +30,12 @@ def activate_subscription(db: Session, subscription: Subscription) -> None:
     same payment. This is tracked via last_activated_ref rather than
     `status == active`, since that would also swallow a genuine early
     renewal (a second payment while status is already active).
+
+    A seller switching plans (or billing interval) has that choice staged on
+    pending_plan_id/pending_billing_interval by the renew endpoint rather
+    than applied immediately — applying it only here, once payment is
+    confirmed, stops an abandoned checkout from granting a higher plan's
+    limits for free.
     """
     if subscription.provider_ref is not None and subscription.provider_ref == subscription.last_activated_ref:
         return
@@ -45,12 +51,20 @@ def activate_subscription(db: Session, subscription: Subscription) -> None:
         and subscription.current_period_end > now
     )
 
+    if subscription.pending_plan_id is not None:
+        subscription.plan_id = subscription.pending_plan_id
+        subscription.pending_plan_id = None
+    if subscription.pending_billing_interval is not None:
+        subscription.billing_interval = subscription.pending_billing_interval
+        subscription.pending_billing_interval = None
+
     subscription.status = SubscriptionStatus.active
     subscription.last_activated_ref = subscription.provider_ref
     if not extending_active_period:
         subscription.current_period_start = now
     period_base = subscription.current_period_end if extending_active_period else now
-    subscription.current_period_end = period_base + timedelta(days=SUBSCRIPTION_PERIOD_DAYS)
+    period_days = PERIOD_DAYS_BY_INTERVAL[BillingInterval(subscription.billing_interval)]
+    subscription.current_period_end = period_base + timedelta(days=period_days)
     subscription.reminder_7d_sent_at = None
     subscription.reminder_1d_sent_at = None
 

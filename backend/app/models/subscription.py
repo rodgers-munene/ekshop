@@ -19,6 +19,11 @@ class SubscriptionStatus(str, enum.Enum):
     trialing = "trialing"
 
 
+class BillingInterval(str, enum.Enum):
+    monthly = "monthly"
+    annual = "annual"
+
+
 class SubscriptionPlan(Base):
     __tablename__ = "subscription_plans"
 
@@ -26,12 +31,13 @@ class SubscriptionPlan(Base):
     name = Column(String(100), nullable=False)
     code = Column(String(50), unique=True, nullable=False)
     price_monthly = Column(String(20), nullable=False)
+    price_yearly = Column(String(20))
     max_products = Column(Integer)
     commission_rate = Column(String(10), nullable=False)
     features = Column(JSONB)
     is_active = Column(Boolean, default=True, nullable=False)
 
-    subscriptions = relationship("Subscription", back_populates="plan")
+    subscriptions = relationship("Subscription", foreign_keys="Subscription.plan_id", back_populates="plan")
 
 
 class Subscription(Base):
@@ -40,6 +46,14 @@ class Subscription(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     shop_id = Column(UUID(as_uuid=True), ForeignKey("shops.id", ondelete="CASCADE"), unique=True, nullable=False)
     plan_id = Column(UUID(as_uuid=True), ForeignKey("subscription_plans.id"), nullable=False)
+    billing_interval = Column(
+        Enum(BillingInterval, native_enum=False), default=BillingInterval.monthly, nullable=False
+    )
+    # Plan/interval a seller has picked but not yet paid for — applied by
+    # activate_subscription() only once payment is confirmed, so an abandoned
+    # checkout can't grant a higher plan's limits for free.
+    pending_plan_id = Column(UUID(as_uuid=True), ForeignKey("subscription_plans.id"))
+    pending_billing_interval = Column(Enum(BillingInterval, native_enum=False))
     provider_ref = Column(String(100))
     customer_ref = Column(String(100))
     last_activated_ref = Column(String(100))
@@ -52,7 +66,8 @@ class Subscription(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     shop = relationship("Shop", back_populates="subscription")
-    plan = relationship("SubscriptionPlan", back_populates="subscriptions")
+    plan = relationship("SubscriptionPlan", foreign_keys=[plan_id], back_populates="subscriptions")
+    pending_plan = relationship("SubscriptionPlan", foreign_keys=[pending_plan_id])
 
     @property
     def awaiting_first_payment(self) -> bool:

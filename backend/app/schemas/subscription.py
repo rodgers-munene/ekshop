@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
-from app.models.subscription import SubscriptionStatus
+from app.models.subscription import BillingInterval, SubscriptionStatus
 
 
 class SubscriptionStatusResponse(BaseModel):
@@ -25,6 +25,7 @@ class SubscriptionPlanRead(BaseModel):
     code: str
     name: str
     price_monthly: str
+    price_yearly: Optional[str]
     max_products: Optional[int]
     commission_rate: str
 
@@ -34,6 +35,7 @@ class SubscriptionPlanRead(BaseModel):
 class SubscriptionRead(BaseModel):
     status: SubscriptionStatus
     plan: SubscriptionPlanRead
+    billing_interval: BillingInterval
     current_period_start: Optional[datetime]
     current_period_end: Optional[datetime]
     # True while `status` is active only because of the one-time backfill grace
@@ -42,6 +44,13 @@ class SubscriptionRead(BaseModel):
     awaiting_first_payment: bool
 
     model_config = {"from_attributes": True}
+
+
+class RenewSubscriptionRequest(BaseModel):
+    # Omit both to renew the current plan/interval as-is (the simple retry
+    # path). Set either to switch — applied only once payment confirms.
+    plan_code: Optional[str] = None
+    billing_interval: Optional[BillingInterval] = None
 
 
 class RenewSubscriptionResponse(BaseModel):

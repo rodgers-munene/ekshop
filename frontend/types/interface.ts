@@ -40,11 +40,13 @@ export interface Shop {
 }
 
 export type SubscriptionStatus = "pending_payment" | "active" | "cancelled" | "past_due" | "trialing";
+export type BillingInterval = "monthly" | "annual";
 
 export interface SubscriptionPlan {
   code: string;
   name: string;
   price_monthly: string;
+  price_yearly: string | null;
   max_products: number | null;
   commission_rate: string;
 }
@@ -52,6 +54,7 @@ export interface SubscriptionPlan {
 export interface Subscription {
   status: SubscriptionStatus;
   plan: SubscriptionPlan;
+  billing_interval: BillingInterval;
   current_period_start: string | null;
   current_period_end: string | null;
   // True while `status` is "active" only because of the one-time backfill

@@ -1,7 +1,7 @@
 import { serverFetch } from "@/lib/server-api";
-import { Subscription } from "@/types/interface";
+import { Subscription, SubscriptionPlan } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
-import RenewButton from "@/components/dashboard/RenewButton";
+import PlanPicker from "@/components/dashboard/PlanPicker";
 
 const STATUS_COPY: Record<Subscription["status"], { label: string; tone: string }> = {
   active: { label: "Active", tone: "text-success" },
@@ -23,7 +23,10 @@ function daysLeft(iso: string | null): number {
 }
 
 export default async function BillingPage() {
-  const subscription = await serverFetch<Subscription>("/subscriptions/me").catch(() => null);
+  const [subscription, plans] = await Promise.all([
+    serverFetch<Subscription>("/subscriptions/me").catch(() => null),
+    serverFetch<SubscriptionPlan[]>("/subscriptions/plans").catch(() => []),
+  ]);
 
   if (!subscription) {
     return (
@@ -69,7 +72,11 @@ export default async function BillingPage() {
         </div>
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted">Price</span>
-          <span className="font-semibold">{formatKES(subscription.plan.price_monthly)} / month</span>
+          <span className="font-semibold">
+            {subscription.billing_interval === "annual" && subscription.plan.price_yearly
+              ? `${formatKES(subscription.plan.price_yearly)} / year`
+              : `${formatKES(subscription.plan.price_monthly)} / month`}
+          </span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted">Status</span>
@@ -84,7 +91,12 @@ export default async function BillingPage() {
 
         <div className="pt-2 border-t border-border">
           <p className="text-sm text-muted mb-3">{helpText}</p>
-          <RenewButton label={buttonLabel} />
+          <PlanPicker
+            plans={plans}
+            currentPlanCode={subscription.plan.code}
+            currentInterval={subscription.billing_interval}
+            defaultLabel={buttonLabel}
+          />
         </div>
       </div>
     </div>
