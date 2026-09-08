@@ -52,14 +52,14 @@ export default function PlanPicker({
 
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-lg border border-border p-1 bg-background">
+      <div className="inline-flex rounded-lg border border-border p-1 bg-surface">
         {(["monthly", "annual"] as const).map((option) => (
           <button
             key={option}
             type="button"
             onClick={() => setInterval(option)}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              interval === option ? "bg-accent text-white" : "text-muted"
+              interval === option ? "bg-amber text-ink font-semibold" : "text-muted"
             }`}
           >
             {option === "monthly" ? "Billed monthly" : "Billed annually"}
@@ -77,7 +77,7 @@ export default function PlanPicker({
               type="button"
               onClick={() => setPlanCode(plan.code)}
               className={`text-left rounded-lg border p-4 transition-colors ${
-                selected ? "border-accent ring-1 ring-accent" : "border-border"
+                selected ? "border-amber ring-1 ring-amber" : "border-border"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
