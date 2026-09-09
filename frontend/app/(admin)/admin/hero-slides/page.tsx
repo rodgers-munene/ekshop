@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { HeroSlide } from "@/types/interface";
 import { resolveImageUrl } from "@/lib/utils";
+import { prepareImageForUpload } from "@/lib/image";
 
 export default function AdminHeroSlidesPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -34,7 +35,7 @@ export default function AdminHeroSlidesPage() {
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", await prepareImageForUpload(file));
       if (title.trim()) formData.append("title", title.trim());
       if (linkUrl.trim()) formData.append("link_url", linkUrl.trim());
       formData.append("sort_order", sortOrder || "0");

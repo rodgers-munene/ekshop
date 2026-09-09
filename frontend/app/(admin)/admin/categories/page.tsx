@@ -7,6 +7,7 @@ import { Trash2, Upload } from "lucide-react";
 import { PaginatedResponse, Category } from "@/types/interface";
 import Pagination from "@/components/admin/Pagination";
 import { resolveImageUrl } from "@/lib/utils";
+import { prepareImageForUpload, ICON_MAX_EDGE } from "@/lib/image";
 
 const LIMIT = 20;
 
@@ -73,7 +74,7 @@ export default function AdminCategoriesPage() {
     setUploadingIconFor(catId);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", await prepareImageForUpload(file, ICON_MAX_EDGE));
       const res = await fetch(`/api/admin/categories/${catId}/icon`, { method: "POST", body: formData });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(data.detail ?? "Could not upload icon"); return; }

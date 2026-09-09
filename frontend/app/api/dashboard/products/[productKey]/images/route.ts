@@ -15,6 +15,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
   });
-  const data = await res.json().catch(() => ({}));
-  return NextResponse.json(data, { status: res.status });
+  // Rejections from the reverse proxy in front of the API (nginx's 413 when an
+  // upload exceeds client_max_body_size, its 502/504 when the app is down) come
+  // back as HTML, so there is no `detail` to forward. Synthesise one, otherwise
+  // the client can only report a bare status code.
+  const body = await res.text();
+  try {
+    return NextResponse.json(JSON.parse(body), { status: res.status });
+  } catch {
+    if (res.ok) return NextResponse.json({}, { status: res.status });
+    const detail =
+      res.status === 413
+        ? "Image is too large to upload. Please use a smaller file."
+        : `Upload failed (${res.status}).`;
+    return NextResponse.json({ detail }, { status: res.status });
+  }
 }

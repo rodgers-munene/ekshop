@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { Category, Product } from "@/types/interface";
 import { resolveImageUrl } from "@/lib/utils";
+import { prepareImageForUpload } from "@/lib/image";
 
 interface VariantRow {
   name: string;
@@ -83,7 +84,7 @@ export default function ProductForm({
 
   async function uploadImage(productId: string, file: File, isPrimary: boolean) {
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", await prepareImageForUpload(file));
     formData.append("is_primary", String(isPrimary));
     const res = await fetch(`/api/dashboard/products/${productId}/images`, {
       method: "POST",
@@ -91,8 +92,21 @@ export default function ProductForm({
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      toast.error(data.detail ?? `Could not upload ${file.name}`);
+      toast.error(data.detail ? `${file.name}: ${data.detail}` : `Could not upload ${file.name}`);
+      return false;
     }
+    return true;
+  }
+
+  // Uploads every pending image, returning how many failed. The primary photo is
+  // the first one that actually uploads, so a failure on the first file doesn't
+  // leave the product without a primary image.
+  async function uploadPendingImages(productId: string, hasExistingPrimary: boolean) {
+    let uploaded = 0;
+    for (const file of pendingImages) {
+      if (await uploadImage(productId, file, !hasExistingPrimary && uploaded === 0)) uploaded++;
+    }
+    return pendingImages.length - uploaded;
   }
 
   async function removeExistingImage(imageId: string) {
@@ -144,11 +158,12 @@ export default function ProductForm({
           return;
         }
 
-        for (const [i, file] of pendingImages.entries()) {
-          await uploadImage(created.id, file, i === 0);
+        const failed = await uploadPendingImages(created.id, false);
+        if (failed > 0) {
+          toast.warning(`Product created, but ${failed} of ${pendingImages.length} images failed to upload. Edit the product to try again.`);
+        } else {
+          toast.success("Product created!");
         }
-
-        toast.success("Product created!");
         router.push("/dashboard/products");
         router.refresh();
       } else if (product) {
@@ -173,9 +188,7 @@ export default function ProductForm({
           return;
         }
 
-        for (const [i, file] of pendingImages.entries()) {
-          await uploadImage(product.id, file, existingImages.length === 0 && i === 0);
-        }
+        const failed = await uploadPendingImages(product.id, existingImages.length > 0);
 
         for (const v of variants) {
           if (!v.name || !v.value) continue;
@@ -192,7 +205,11 @@ export default function ProductForm({
           });
         }
 
-        toast.success("Product updated!");
+        if (failed > 0) {
+          toast.warning(`Product updated, but ${failed} of ${pendingImages.length} images failed to upload.`);
+        } else {
+          toast.success("Product updated!");
+        }
         router.push("/dashboard/products");
         router.refresh();
       }
@@ -295,7 +312,7 @@ export default function ProductForm({
       {/* Images */}
       <div className="card p-5">
         <h2 className="font-semibold mb-3">Images</h2>
-        <p className="text-xs text-muted mb-3">JPEG, PNG or WebP, up to 5MB each. First image is the primary photo.</p>
+        <p className="text-xs text-muted mb-3">JPEG, PNG or WebP. Large photos are resized automatically. First image is the primary photo.</p>
 
         {(existingImages.length > 0 || pendingImages.length > 0) && (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
