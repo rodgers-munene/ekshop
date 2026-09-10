@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-type Status = "verifying" | "success" | "redirecting" | "error";
+type Status = "verifying" | "success" | "sellerSuccess" | "error";
 
 function VerifyEmailInner() {
   const searchParams = useSearchParams();
@@ -29,14 +29,9 @@ function VerifyEmailInner() {
         }
 
         const data = await res.json().catch(() => ({}));
-        // Sellers verify before they pay: verification is what opens their
-        // Paystack transaction, so send them there rather than to sign-in.
-        if (data.next === "payment" && data.authorization_url) {
-          setStatus("redirecting");
-          window.location.href = data.authorization_url;
-          return;
-        }
-        setStatus("success");
+        // A seller isn't active yet -- payment is still outstanding -- so they
+        // get their own copy pointing at the activate screen behind sign-in.
+        setStatus(data.seller ? "sellerSuccess" : "success");
       } catch {
         setStatus("error");
       }
@@ -57,10 +52,14 @@ function VerifyEmailInner() {
           </>
         )}
 
-        {status === "redirecting" && (
+        {status === "sellerSuccess" && (
           <>
             <h1 className="text-2xl font-bold mb-2">Email verified 🎉</h1>
-            <p className="text-muted text-sm">Taking you to payment to activate your shop…</p>
+            <p className="text-muted text-sm mb-6">
+              Sign in to finish setting up — you&apos;ll be able to confirm your plan and
+              activate your shop from your dashboard.
+            </p>
+            <Link href="/login" className="btn-accent inline-block">Sign in →</Link>
           </>
         )}
 

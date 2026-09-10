@@ -160,8 +160,8 @@ function RegisterPageInner() {
             {role === "seller" ? (
               <p className="text-muted text-sm mb-6">
                 We sent a verification link to <strong>{registeredEmail}</strong>. Click it to
-                confirm your email, and we&apos;ll take you straight to payment to activate
-                your shop.
+                confirm your email, then sign in to confirm your plan and activate your
+                shop.
               </p>
             ) : (
               <p className="text-muted text-sm mb-6">

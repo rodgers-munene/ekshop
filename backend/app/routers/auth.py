@@ -56,17 +56,6 @@ def _generate_unique_shop_slug(db: Session, name: str) -> str:
     return slug
 
 
-def _subscription_amount(subscription: Subscription) -> str:
-    """Price to charge for this subscription's current plan and interval.
-
-    Mirrors the same choice made in `/subscriptions/renew`.
-    """
-    plan = subscription.plan
-    if subscription.billing_interval == "annual" and plan.price_yearly:
-        return plan.price_yearly
-    return plan.price_monthly
-
-
 def _email_is_verified(db: Session, user: User) -> bool:
     """Whether this user has confirmed their email address.
 
@@ -116,11 +105,12 @@ shape it was typed in, and the county must match one of the 47 rows in the
    (status `pending_payment`) to the chosen plan.
 3. Sends the same verification email buyers get.
 
-Sellers verify their email *before* paying: `/auth/verify-email` is what
-initializes the Paystack transaction and returns its `authorization_url`.
-Registration deliberately doesn't, so an unverified address can't open a
-payment session. Payment confirmation (via the Paystack webhook, or
-`/auth/subscription-status`) then activates the user, the shop, and the
+Sellers verify their email *before* they can pay, and registration
+deliberately opens no payment session, so an unverified address can never
+reach checkout. After verifying they sign in and land on the locked
+dashboard, where payment is started from `/subscriptions/me/renew`.
+Payment confirmation (via the Paystack webhook, or
+`/auth/subscription-status`) is what activates the user, the shop, and the
 subscription.
 """,
 )
@@ -212,15 +202,11 @@ Confirm an email address using the token sent during registration.
 2. Marks the token as used (one-time use).
 3. **Buyers:** sets the user's status from `pending` → `active`; they can log in.
 4. **Sellers:** the account stays `pending`, because payment is what activates a
-   seller. Instead, this opens the Paystack transaction for their pending
-   subscription and returns `authorization_url` for the client to redirect to.
-   A seller therefore always verifies before they can pay.
+   seller. They can sign in from here all the same — `/auth/login` issues a
+   token once the email is verified — and the dashboard renders locked until
+   the subscription is paid for.
 
-The response carries `next` (`"login"` or `"payment"`) so the client knows
-which of those two just happened.
-
-Tokens expire after **24 hours**. After expiry, the user must re-register
-or a resend endpoint must be added.
+Tokens expire after **24 hours**; `/auth/resend-verification` issues a new one.
 """,
 )
 def verify_email(token: str, db: Session = Depends(get_db)):
@@ -243,41 +229,20 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == verification.user_id).first()
     verification.used_at = datetime.now(timezone.utc)
 
-    if user.role == UserRole.seller:
-        shop = db.query(Shop).filter(Shop.seller_id == user.id).first()
-        subscription = shop.subscription if shop else None
+    # A seller stays `pending` -- payment, not verification, is what activates
+    # them. They can still sign in from here: login issues a token once the
+    # email is verified, and the dashboard renders locked until they pay.
+    if user.role != UserRole.seller:
+        user.status = UserStatus.active
 
-        if subscription and subscription.status == SubscriptionStatus.pending_payment:
-            reference = f"eks_sub_{uuid.uuid4().hex[:20]}"
-            try:
-                result = paystack.initialize_transaction(
-                    email=user.email,
-                    amount=_subscription_amount(subscription),
-                    reference=reference,
-                    callback_url=f"{settings.FRONTEND_URL}/register/payment-status?ref={reference}",
-                )
-            except Exception as e:
-                # Rolls back the used_at stamp too, so the link stays live and
-                # the seller can just click it again once Paystack recovers.
-                db.rollback()
-                raise HTTPException(status_code=502, detail=f"Paystack error: {str(e)}")
-
-            subscription.provider_ref = reference
-            db.commit()
-
-            return {
-                "message": "Email verified. Complete payment to activate your shop.",
-                "next": "payment",
-                "authorization_url": result["authorization_url"],
-                "reference": reference,
-            }
-
-        # Falls through for a buyer, and for the rare seller with nothing left
-        # to pay — a subscription already settled, or none at all on an account
-        # predating subscriptions. Either way there's no gate left to hold them.
-
-    user.status = UserStatus.active
     db.commit()
+
+    if user.role == UserRole.seller:
+        return {
+            "message": "Email verified. Sign in to activate your shop.",
+            "next": "login",
+            "seller": True,
+        }
 
     return {"message": "Email verified. You can now log in.", "next": "login"}
 
@@ -389,22 +354,14 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if user.status == UserStatus.pending:
-        # A pending seller is stuck at one of two different steps, and the two
-        # need different instructions.
-        if user.role == UserRole.seller and _email_is_verified(db, user):
-            shop = db.query(Shop).filter(Shop.seller_id == user.id).first()
-            reference = shop.subscription.provider_ref if shop and shop.subscription else None
-            # Structured so the login page can send the seller straight back into
-            # Paystack checkout instead of leaving them stuck with no next step.
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "code": "seller_payment_pending",
-                    "message": "Your registration payment hasn't been confirmed yet. Complete payment to activate your shop.",
-                    "reference": reference,
-                },
-            )
-        raise HTTPException(status_code=403, detail="Please verify your email first")
+        # A seller who has verified but not yet paid is let in on purpose: they
+        # get a session and land on the locked dashboard, where they can choose
+        # to pay, switch plan, or just look around. The paywall is enforced per
+        # endpoint from there (see dependencies.auth), not by refusing login.
+        # Everyone else pending -- buyers, and sellers who never verified --
+        # still stops here.
+        if not (user.role == UserRole.seller and _email_is_verified(db, user)):
+            raise HTTPException(status_code=403, detail="Please verify your email first")
 
     if user.status == UserStatus.suspended:
         raise HTTPException(status_code=403, detail="Account suspended. Contact support.")

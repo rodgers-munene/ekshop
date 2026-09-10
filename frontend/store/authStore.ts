@@ -7,6 +7,9 @@ export interface AuthUser{
     first_name: string;
     last_name: string;
     role: "buyer" | "seller" | "admin";
+    // "pending" for a seller who hasn't completed their first subscription
+    // payment yet -- the dashboard renders locked for them.
+    status: string;
     phone?: string;
     avatar_url?:  string
 }

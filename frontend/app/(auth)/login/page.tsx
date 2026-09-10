@@ -22,7 +22,6 @@ function LoginPageInner() {
   const searchParams = useSearchParams();
   const { setUser } = useAuthStore();
   const [loading, setLoading] = useState(false);
-  const [resumingPayment, setResumingPayment] = useState(false);
   // Set when login reports the account is unverified, so we can offer a fresh
   // link — verification tokens expire after 24 hours, and for a seller that
   // link is the only route to payment.
@@ -36,27 +35,6 @@ function LoginPageInner() {
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
-
-  async function resumeSellerPayment(reference: string) {
-    setResumingPayment(true);
-    try {
-      const res = await fetch("/api/paystack/subscription-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference }),
-      });
-      const data = await res.json();
-      if (res.ok && data.authorization_url) {
-        window.location.href = data.authorization_url;
-        return;
-      }
-      toast.error(data.detail ?? "Couldn't resume your payment. Please try registering again or contact support.");
-    } catch {
-      toast.error("Couldn't resume your payment. Please try registering again or contact support.");
-    } finally {
-      setResumingPayment(false);
-    }
-  }
 
   async function resendVerification(email: string) {
     setResending(true);
@@ -89,15 +67,6 @@ function LoginPageInner() {
 
       if (!res.ok) {
         const detail = json.detail;
-        if (detail && typeof detail === "object" && detail.code === "seller_payment_pending") {
-          if (detail.reference) {
-            toast.message("Taking you back to complete your registration payment…");
-            await resumeSellerPayment(detail.reference);
-          } else {
-            toast.error(detail.message ?? "Your registration payment hasn't been confirmed yet.");
-          }
-          return;
-        }
         if (typeof detail === "string" && detail.toLowerCase().includes("verify your email")) {
           setUnverifiedEmail(data.email);
           toast.error(detail);
@@ -111,7 +80,11 @@ function LoginPageInner() {
       toast.success(`Welcome back, ${json.user.first_name}!`);
 
       const next = searchParams.get("next");
-      if (next) {
+      // An unpaid seller can only use the dashboard's activate screen, so send
+      // them there rather than to a `next` they'd find locked.
+      if (json.user.role === "seller" && json.user.status !== "active") {
+        router.push("/dashboard");
+      } else if (next) {
         router.push(next);
       } else if (json.user.role === "seller" || json.user.role === "admin") {
         router.push("/dashboard");
@@ -210,10 +183,10 @@ function LoginPageInner() {
 
             <button
               type="submit"
-              disabled={loading || resumingPayment}
+              disabled={loading}
               className="btn-accent w-full disabled:opacity-50"
             >
-              {resumingPayment ? "Redirecting to payment..." : loading ? "Signing in..." : "Sign in"}
+              {loading ? "Signing in..." : "Sign in"}
             </button>
           </form>
         </div>

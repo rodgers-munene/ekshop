@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import update, delete
 
-from app.dependencies.auth import get_current_active_user
+from app.dependencies.auth import get_current_active_user, get_current_user_allow_unpaid_seller
 from app.dependencies.database import get_db
 from app.models.user import User
 from app.models.delivery import Notification as NotificationModel
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/users", tags=["users"])
     summary="Get my profile",
     description="Returns the profile of the currently authenticated user.",
 )
-def get_profile_details(current_user: User = Depends(get_current_active_user)):
+def get_profile_details(current_user: User = Depends(get_current_user_allow_unpaid_seller)):
     return current_user
 
 

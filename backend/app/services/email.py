@@ -29,7 +29,7 @@ def send_verification_email(to: str, token: str, is_seller: bool = False) -> Non
     # Sellers verify before paying, so the link is the way into checkout for
     # them, not the last step. Saying so avoids them abandoning at the inbox.
     next_step = (
-        "to confirm your address and continue to payment"
+        "to confirm your address, then sign in to activate your shop"
         if is_seller
         else "to activate your account"
     )

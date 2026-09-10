@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.dependencies.auth import require_seller
+from app.dependencies.auth import require_seller_allow_unpaid
 from app.dependencies.database import get_db
 from app.models.shop import Shop
 from app.models.subscription import SubscriptionPlan
@@ -45,7 +45,7 @@ def list_plans(db: Session = Depends(get_db)):
 )
 def get_my_subscription(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_seller),
+    current_user: User = Depends(require_seller_allow_unpaid),
 ):
     return _get_my_subscription(db, current_user)
 
@@ -72,7 +72,7 @@ payment is confirmed (via the Paystack webhook, or
 def renew_subscription(
     body: RenewSubscriptionRequest = RenewSubscriptionRequest(),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_seller),
+    current_user: User = Depends(require_seller_allow_unpaid),
 ):
     subscription = _get_my_subscription(db, current_user)
 

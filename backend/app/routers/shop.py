@@ -5,7 +5,11 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import update, func
 
-from app.dependencies.auth import get_current_active_user, require_seller
+from app.dependencies.auth import (
+    get_current_active_user,
+    get_current_user_allow_unpaid_seller,
+    require_seller,
+)
 from app.dependencies.database import get_db
 from app.schemas.shop import (
     ShopCreate,
@@ -77,7 +81,7 @@ def create_shop(
 )
 def get_my_shop(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user_allow_unpaid_seller),
 ):
     shop = db.query(Shop).filter(Shop.seller_id == current_user.id).first()
 
