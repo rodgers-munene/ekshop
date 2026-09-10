@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-type Status = "verifying" | "success" | "error";
+type Status = "verifying" | "success" | "redirecting" | "error";
 
 function VerifyEmailInner() {
   const searchParams = useSearchParams();
@@ -23,7 +23,20 @@ function VerifyEmailInner() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "verify-email", token }),
         });
-        setStatus(res.ok ? "success" : "error");
+        if (!res.ok) {
+          setStatus("error");
+          return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        // Sellers verify before they pay: verification is what opens their
+        // Paystack transaction, so send them there rather than to sign-in.
+        if (data.next === "payment" && data.authorization_url) {
+          setStatus("redirecting");
+          window.location.href = data.authorization_url;
+          return;
+        }
+        setStatus("success");
       } catch {
         setStatus("error");
       }
@@ -41,6 +54,13 @@ function VerifyEmailInner() {
           <>
             <h1 className="text-2xl font-bold mb-2">Verifying your email…</h1>
             <p className="text-muted text-sm">This will just take a moment.</p>
+          </>
+        )}
+
+        {status === "redirecting" && (
+          <>
+            <h1 className="text-2xl font-bold mb-2">Email verified 🎉</h1>
+            <p className="text-muted text-sm">Taking you to payment to activate your shop…</p>
           </>
         )}
 

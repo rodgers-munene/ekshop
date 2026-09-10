@@ -13,6 +13,7 @@ from app.schemas.user import UserRead, UserUpdate, Notification
 from app.schemas.commerce import UserAddressRead, UserAddressCreate, UserAddressUpdate
 from app.schemas.catalog import ProductRead
 from app.services import recommendations as rec_service
+from app.services.geography import resolve_county_name
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -33,6 +34,12 @@ def get_profile_details(current_user: User = Depends(get_current_active_user)):
     response_model=UserRead,
 )
 def update_profile_details(payload: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    if payload.county is not None:
+        try:
+            payload.county = resolve_county_name(db, payload.county)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
     # Update the current user's profile
     update_stmt = (
         update(User)

@@ -24,14 +24,21 @@ def _send(to: str, subject: str, html: str) -> None:
     response.raise_for_status()
 
 
-def send_verification_email(to: str, token: str) -> None:
+def send_verification_email(to: str, token: str, is_seller: bool = False) -> None:
     link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+    # Sellers verify before paying, so the link is the way into checkout for
+    # them, not the last step. Saying so avoids them abandoning at the inbox.
+    next_step = (
+        "to confirm your address and continue to payment"
+        if is_seller
+        else "to activate your account"
+    )
     _send(
         to=to,
         subject="Verify your Ekshop account",
         html=f"""
             <p>Welcome to Ekshop!</p>
-            <p><a href="{link}">Click here to verify your email</a> to activate your account.</p>
+            <p><a href="{link}">Click here to verify your email</a> {next_step}.</p>
             <p>This link expires in 24 hours.</p>
         """,
     )

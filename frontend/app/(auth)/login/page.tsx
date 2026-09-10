@@ -23,6 +23,11 @@ function LoginPageInner() {
   const { setUser } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [resumingPayment, setResumingPayment] = useState(false);
+  // Set when login reports the account is unverified, so we can offer a fresh
+  // link — verification tokens expire after 24 hours, and for a seller that
+  // link is the only route to payment.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
 
   const {
     register,
@@ -53,8 +58,26 @@ function LoginPageInner() {
     }
   }
 
+  async function resendVerification(email: string) {
+    setResending(true);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resend-verification", email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      toast.success(data.message ?? "If that account still needs verifying, we've sent a new link");
+    } catch {
+      toast.error("Couldn't send a new link. Try again in a moment.");
+    } finally {
+      setResending(false);
+    }
+  }
+
   async function onSubmit(data: LoginForm) {
     setLoading(true);
+    setUnverifiedEmail(null);
     try {
       const res = await fetch("/api/auth", {
         method: "POST",
@@ -73,6 +96,11 @@ function LoginPageInner() {
           } else {
             toast.error(detail.message ?? "Your registration payment hasn't been confirmed yet.");
           }
+          return;
+        }
+        if (typeof detail === "string" && detail.toLowerCase().includes("verify your email")) {
+          setUnverifiedEmail(data.email);
+          toast.error(detail);
           return;
         }
         toast.error(typeof detail === "string" ? detail : "Login failed");
@@ -126,6 +154,24 @@ function LoginPageInner() {
               Create one
             </Link>
           </p>
+
+          {unverifiedEmail && (
+            <div className="mb-6 rounded-lg border border-border bg-surface p-4">
+              <p className="text-sm font-medium mb-1">Your email isn&apos;t verified yet</p>
+              <p className="text-muted text-xs mb-3">
+                Check your inbox for the link we sent to <strong>{unverifiedEmail}</strong>.
+                Links expire after 24 hours.
+              </p>
+              <button
+                type="button"
+                onClick={() => resendVerification(unverifiedEmail)}
+                disabled={resending}
+                className="text-amber underline underline-offset-2 text-xs disabled:opacity-50"
+              >
+                {resending ? "Sending…" : "Send me a new link"}
+              </button>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
 

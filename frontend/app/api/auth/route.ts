@@ -38,16 +38,9 @@ export async function POST(req: NextRequest) {
     if (!registerRes.ok) {
       return NextResponse.json({ detail: registerJson.detail ?? "Registration failed" }, { status: registerRes.status });
     }
-    // Sellers get redirected straight to Paystack; their account activates on payment
-    // confirmation, not email verification, so there's no "pending" stop-here case for them.
-    if (registerJson.authorization_url) {
-      return NextResponse.json({
-        authorization_url: registerJson.authorization_url,
-        reference: registerJson.reference,
-      });
-    }
-    // Buyer accounts start as "pending" until the verification email is confirmed;
+    // Both roles start as "pending" until the verification email is confirmed;
     // logging in immediately would 403, so stop here instead of falling through.
+    // Sellers reach Paystack from the verify-email step, not from here.
     return NextResponse.json({ pending_verification: true });
   }
 
@@ -58,6 +51,15 @@ export async function POST(req: NextRequest) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return NextResponse.json({ detail: data.detail ?? "Verification failed" }, { status: res.status });
     return NextResponse.json(data);
+  }
+
+  // resend verification email
+  if (action === "resend-verification") {
+    const res = await fetch(`${BASE_URL}/auth/resend-verification?email=${encodeURIComponent(email)}`, {
+      method: "POST",
+    });
+    const data = await res.json().catch(() => ({}));
+    return NextResponse.json(data, { status: res.status });
   }
 
   // forgot password

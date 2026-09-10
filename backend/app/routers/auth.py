@@ -22,6 +22,7 @@ from app.dependencies.auth import bearer_scheme, get_current_user
 from app.dependencies.database import get_db
 from app.services import email as email_service
 from app.services import paystack
+from app.services.geography import resolve_county_name
 from app.services.subscriptions import activate_subscription
 from app.models.shop import Shop, ShopStatus
 from app.models.subscription import Subscription, SubscriptionPlan, SubscriptionStatus
@@ -55,6 +56,41 @@ def _generate_unique_shop_slug(db: Session, name: str) -> str:
     return slug
 
 
+def _subscription_amount(subscription: Subscription) -> str:
+    """Price to charge for this subscription's current plan and interval.
+
+    Mirrors the same choice made in `/subscriptions/renew`.
+    """
+    plan = subscription.plan
+    if subscription.billing_interval == "annual" and plan.price_yearly:
+        return plan.price_yearly
+    return plan.price_monthly
+
+
+def _email_is_verified(db: Session, user: User) -> bool:
+    """Whether this user has confirmed their email address.
+
+    `status` can't answer this on its own for sellers: they stay `pending`
+    after verifying, because payment is what activates them.
+
+    Sellers who registered before verification was added to the seller flow
+    have no `email_verifications` row at all and were never sent a link. They
+    count as verified here, otherwise they'd be told to check an inbox for an
+    email that does not exist.
+    """
+    verifications = (
+        db.query(EmailVerification)
+        .filter(
+            EmailVerification.user_id == user.id,
+            EmailVerification.purpose == EmailVerificationPurpose.email_verify,
+        )
+        .all()
+    )
+    if not verifications:
+        return True
+    return any(v.used_at is not None for v in verifications)
+
+
 @router.post(
     "/register",
     response_model=RegisterResponse,
@@ -62,6 +98,11 @@ def _generate_unique_shop_slug(db: Session, name: str) -> str:
     summary="Register a new account",
     description="""
 Create a new buyer or seller account.
+
+Names, phone number and county are validated and normalised first (see
+`app.core.validators`): the phone is stored as `2547XXXXXXXX` whatever
+shape it was typed in, and the county must match one of the 47 rows in the
+`counties` table.
 
 **Buyers:**
 1. Validates that the email is not already taken.
@@ -73,12 +114,14 @@ Create a new buyer or seller account.
 1. Validates the email and looks up the chosen `SubscriptionPlan`.
 2. Creates the user, a `Shop` (status `pending`), and a `Subscription`
    (status `pending_payment`) to the chosen plan.
-3. Initializes a Paystack transaction for the plan's monthly price and
-   returns its `authorization_url` for the client to redirect to.
+3. Sends the same verification email buyers get.
 
-No verification email is sent for sellers — payment confirmation (via the
-Paystack webhook, or `/auth/subscription-status`) is what activates the
-user, the shop, and the subscription.
+Sellers verify their email *before* paying: `/auth/verify-email` is what
+initializes the Paystack transaction and returns its `authorization_url`.
+Registration deliberately doesn't, so an unverified address can't open a
+payment session. Payment confirmation (via the Paystack webhook, or
+`/auth/subscription-status`) then activates the user, the shop, and the
+subscription.
 """,
 )
 @limiter.limit("5/minute")
@@ -86,13 +129,18 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    try:
+        county = resolve_county_name(db, payload.county)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     user = User(
         email=payload.email,
         password_hash=hash_password(payload.password),
         first_name=payload.first_name,
         last_name=payload.last_name,
         phone=payload.phone,
-        county=payload.county,
+        county=county,
         role=payload.role,
     )
     db.add(user)
@@ -121,6 +169,8 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
             db.rollback()
             raise HTTPException(status_code=409, detail="That shop name is taken, please try a different one")
 
+        # No Paystack transaction yet: the seller opens one by verifying their
+        # email, so a scraped or mistyped address can't reach checkout.
         subscription = Subscription(
             shop_id=shop.id,
             plan_id=plan.id,
@@ -128,28 +178,6 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
         )
         db.add(subscription)
         db.flush()
-
-        reference = f"eks_sub_{uuid.uuid4().hex[:20]}"
-        try:
-            result = paystack.initialize_transaction(
-                email=user.email,
-                amount=plan.price_monthly,
-                reference=reference,
-                callback_url=f"{settings.FRONTEND_URL}/register/payment-status?ref={reference}",
-            )
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=502, detail=f"Paystack error: {str(e)}")
-
-        subscription.provider_ref = reference
-        db.commit()
-        db.refresh(user)
-
-        return RegisterResponse(
-            user=user,
-            authorization_url=result["authorization_url"],
-            reference=reference,
-        )
 
     verification = EmailVerification(
         user_id=user.id,
@@ -162,7 +190,11 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
     db.refresh(user)
 
     try:
-        email_service.send_verification_email(user.email, verification.token)
+        email_service.send_verification_email(
+            user.email,
+            verification.token,
+            is_seller=user.role == UserRole.seller,
+        )
     except Exception as e:
         logger.warning("Failed to send verification email to %s: %s", user.email, e)
 
@@ -173,12 +205,19 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
     "/verify-email",
     summary="Verify email address",
     description="""
-Activate an account using the token sent during registration.
+Confirm an email address using the token sent during registration.
 
 **Flow:**
 1. Looks up the token in `email_verifications`: must be unused and not expired.
-2. Sets the user's status from `pending` → `active`.
-3. Marks the token as used (one-time use).
+2. Marks the token as used (one-time use).
+3. **Buyers:** sets the user's status from `pending` → `active`; they can log in.
+4. **Sellers:** the account stays `pending`, because payment is what activates a
+   seller. Instead, this opens the Paystack transaction for their pending
+   subscription and returns `authorization_url` for the client to redirect to.
+   A seller therefore always verifies before they can pay.
+
+The response carries `next` (`"login"` or `"payment"`) so the client knows
+which of those two just happened.
 
 Tokens expire after **24 hours**. After expiry, the user must re-register
 or a resend endpoint must be added.
@@ -202,11 +241,45 @@ def verify_email(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Token has expired")
 
     user = db.query(User).filter(User.id == verification.user_id).first()
-    user.status = UserStatus.active
     verification.used_at = datetime.now(timezone.utc)
+
+    if user.role == UserRole.seller:
+        shop = db.query(Shop).filter(Shop.seller_id == user.id).first()
+        subscription = shop.subscription if shop else None
+
+        if subscription and subscription.status == SubscriptionStatus.pending_payment:
+            reference = f"eks_sub_{uuid.uuid4().hex[:20]}"
+            try:
+                result = paystack.initialize_transaction(
+                    email=user.email,
+                    amount=_subscription_amount(subscription),
+                    reference=reference,
+                    callback_url=f"{settings.FRONTEND_URL}/register/payment-status?ref={reference}",
+                )
+            except Exception as e:
+                # Rolls back the used_at stamp too, so the link stays live and
+                # the seller can just click it again once Paystack recovers.
+                db.rollback()
+                raise HTTPException(status_code=502, detail=f"Paystack error: {str(e)}")
+
+            subscription.provider_ref = reference
+            db.commit()
+
+            return {
+                "message": "Email verified. Complete payment to activate your shop.",
+                "next": "payment",
+                "authorization_url": result["authorization_url"],
+                "reference": reference,
+            }
+
+        # Falls through for a buyer, and for the rare seller with nothing left
+        # to pay — a subscription already settled, or none at all on an account
+        # predating subscriptions. Either way there's no gate left to hold them.
+
+    user.status = UserStatus.active
     db.commit()
 
-    return {"message": "Email verified. You can now log in."}
+    return {"message": "Email verified. You can now log in.", "next": "login"}
 
 
 @router.get(
@@ -316,13 +389,13 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if user.status == UserStatus.pending:
-        if user.role == UserRole.seller:
+        # A pending seller is stuck at one of two different steps, and the two
+        # need different instructions.
+        if user.role == UserRole.seller and _email_is_verified(db, user):
             shop = db.query(Shop).filter(Shop.seller_id == user.id).first()
             reference = shop.subscription.provider_ref if shop and shop.subscription else None
             # Structured so the login page can send the seller straight back into
-            # Paystack checkout instead of leaving them stuck with no next step —
-            # they have no email with a payment link to fall back on either, since
-            # sellers don't get the verify-email flow buyers do.
+            # Paystack checkout instead of leaving them stuck with no next step.
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -437,6 +510,52 @@ def logout(
         db.commit()
 
     return {"message": "Logged out"}
+
+
+@router.post(
+    "/resend-verification",
+    summary="Send a fresh email verification link",
+    description="""
+Re-send the verification email for an account still waiting on it.
+
+Verification tokens expire after 24 hours, and this is the only way back for
+someone who let one lapse or lost the email — which matters most for sellers,
+since they can't reach payment until they verify.
+
+Like `/auth/forgot-password`, this **always returns the same response** so it
+can't be used to discover which addresses are registered. Nothing is sent for
+an account that is already active, or for a seller who has verified and is
+only waiting on payment (they get sent back to checkout from the login page
+instead). Previously-issued tokens are left valid until they expire.
+""",
+)
+@limiter.limit("3/minute")
+def resend_verification(request: Request, email: str, db: Session = Depends(get_db)):
+    generic_response = {"message": "If that account still needs verifying, we've sent a new link"}
+
+    user = db.query(User).filter(User.email == email.strip().lower()).first()
+    if not user or user.status != UserStatus.pending or _email_is_verified(db, user):
+        return generic_response
+
+    verification = EmailVerification(
+        user_id=user.id,
+        token=generate_short_token(32),
+        purpose=EmailVerificationPurpose.email_verify,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+    )
+    db.add(verification)
+    db.commit()
+
+    try:
+        email_service.send_verification_email(
+            user.email,
+            verification.token,
+            is_seller=user.role == UserRole.seller,
+        )
+    except Exception as e:
+        logger.warning("Failed to resend verification email to %s: %s", user.email, e)
+
+    return generic_response
 
 
 @router.post(

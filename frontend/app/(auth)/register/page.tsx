@@ -4,26 +4,60 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { getSellerPlan } from "@/lib/plans";
+import { isValidKenyanPhone, normalizeKenyanPhone } from "@/lib/phone";
+import type { County } from "@/types/interface";
+
+// These mirror app/core/validators.py. Letters, spaces, hyphens, apostrophes
+// and periods cover real names (Murang'a, Mary-Anne, initials) while keeping
+// out the digits, URLs and random punctuation that bot signups arrive with.
+const NAME_RE = /^\p{L}[\p{L} '\-.]*$/u;
+const SHOP_NAME_RE = /^[\p{L}\p{N} '\-.,&()/]+$/u;
+
+const nameField = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(2, `${label} must be at least 2 characters`)
+    .max(50, `${label} must be at most 50 characters`)
+    .regex(NAME_RE, `${label} can only contain letters, spaces, hyphens and apostrophes`);
 
 const schema = z
   .object({
-    first_name: z.string().min(2, "First name is required"),
-    last_name: z.string().min(2, "Last name is required"),
-    email: z.string().email("Enter a valid email"),
-    phone: z.string().min(9, "Enter a valid phone number"),
-    county: z.string().min(2, "County is required"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    first_name: nameField("First name"),
+    last_name: nameField("Last name"),
+    email: z.email("Enter a valid email"),
+    phone: z
+      .string()
+      .trim()
+      .refine(isValidKenyanPhone, "Enter a valid Kenyan mobile number, e.g. 0712 345 678"),
+    county: z.string().min(1, "Select your county"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(128, "Password must be at most 128 characters"),
     role: z.enum(["buyer", "seller"]),
     shop_name: z.string().optional(),
   })
   .refine((data) => data.role !== "seller" || !!data.shop_name?.trim(), {
     message: "Shop name is required",
     path: ["shop_name"],
-  });
+  })
+  .refine(
+    (data) => {
+      if (data.role !== "seller") return true;
+      const name = data.shop_name?.trim() ?? "";
+      return name.length >= 2 && name.length <= 60 && SHOP_NAME_RE.test(name);
+    },
+    {
+      message: "Shop name must be 2-60 characters, letters and numbers only",
+      path: ["shop_name"],
+    },
+  );
 
 type RegisterForm = z.infer<typeof schema>;
 
@@ -47,10 +81,18 @@ function RegisterPageInner() {
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<RegisterForm>({
     resolver: zodResolver(schema),
-    defaultValues: { role: initialRole },
+    defaultValues: { role: initialRole, county: "" },
   });
 
   const role = watch("role");
+
+  // The 47 counties come from the counties table, the same source the backend
+  // validates against, so the two can't drift apart.
+  const { data: counties, isError: countiesFailed } = useQuery({
+    queryKey: ["geography", "counties"],
+    queryFn: () => fetch("/api/geography/counties").then((r) => r.json()) as Promise<County[]>,
+    staleTime: Infinity,
+  });
 
   function handleSellerToggle() {
     if (!selectedPlan) {
@@ -74,18 +116,17 @@ function RegisterPageInner() {
         body: JSON.stringify({
           action: "register",
           ...data,
+          phone: normalizeKenyanPhone(data.phone) ?? data.phone,
           plan_code: data.role === "seller" ? selectedPlan?.code : undefined,
         }),
       });
       const json = await res.json();
       if (!res.ok) {
-        toast.error(json.detail ?? "Registration failed");
+        toast.error(typeof json.detail === "string" ? json.detail : "Registration failed");
         return;
       }
-      if (json.authorization_url) {
-        window.location.href = json.authorization_url;
-        return;
-      }
+      // Both roles stop here now: sellers verify their email before they can
+      // reach payment, so there's no Paystack redirect at this step.
       setRegisteredEmail(data.email);
     } catch {
       toast.error("Something went wrong. Try again.");
@@ -116,10 +157,18 @@ function RegisterPageInner() {
         {registeredEmail ? (
           <>
             <h2 className="text-3xl font-bold mb-2">Check your inbox</h2>
-            <p className="text-muted text-sm mb-6">
-              We sent a verification link to <strong>{registeredEmail}</strong>. Click it to
-              activate your account, then sign in.
-            </p>
+            {role === "seller" ? (
+              <p className="text-muted text-sm mb-6">
+                We sent a verification link to <strong>{registeredEmail}</strong>. Click it to
+                confirm your email, and we&apos;ll take you straight to payment to activate
+                your shop.
+              </p>
+            ) : (
+              <p className="text-muted text-sm mb-6">
+                We sent a verification link to <strong>{registeredEmail}</strong>. Click it to
+                activate your account, then sign in.
+              </p>
+            )}
             <Link href="/login" className="btn-accent inline-block">Go to sign in →</Link>
           </>
         ) : (
@@ -185,14 +234,30 @@ function RegisterPageInner() {
 
             <div>
               <label className="block text-sm font-medium mb-1">Phone</label>
-              <input type="tel" {...register("phone")} className="input-field" placeholder="0712 345 678" />
-              {errors.phone && <p className="text-danger text-xs mt-1">{errors.phone.message}</p>}
+              <input type="tel" inputMode="tel" {...register("phone")} className="input-field" placeholder="0712 345 678" />
+              {errors.phone ? (
+                <p className="text-danger text-xs mt-1">{errors.phone.message}</p>
+              ) : (
+                <p className="text-muted text-xs mt-1">Safaricom, Airtel or Telkom line. Used for orders and M-Pesa.</p>
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-1">County</label>
-              <input {...register("county")} className="input-field" placeholder="Nairobi" />
+              <select {...register("county")} className="input-field">
+                <option value="" disabled>
+                  {counties ? "Select your county" : "Loading counties…"}
+                </option>
+                {counties?.map((c) => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
               {errors.county && <p className="text-danger text-xs mt-1">{errors.county.message}</p>}
+              {countiesFailed && (
+                <p className="text-danger text-xs mt-1">
+                  Couldn&apos;t load the county list. Refresh the page and try again.
+                </p>
+              )}
             </div>
 
             <div>
@@ -215,7 +280,7 @@ function RegisterPageInner() {
               {loading
                 ? "Please wait..."
                 : role === "seller"
-                ? "Continue to payment"
+                ? "Verify email to continue"
                 : "Create account"}
             </button>
           </form>
