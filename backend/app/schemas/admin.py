@@ -66,6 +66,22 @@ class PromotionRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PeriodFigures(BaseModel):
+    revenue: str
+    orders: int
+    average_order_value: str
+    new_users: int
+    new_shops: int
+
+
+class PeriodToDateMetrics(BaseModel):
+    """A to-date window (month or year) alongside the same span of the
+    previous month/year, so the dashboard can show a like-for-like change."""
+    start: datetime
+    current: PeriodFigures
+    previous: PeriodFigures
+
+
 class AdminStatsRead(BaseModel):
     total_users: int
     total_buyers: int
@@ -78,6 +94,8 @@ class AdminStatsRead(BaseModel):
     orders_7d: int
     revenue_total: str
     revenue_7d: str
+    mtd: PeriodToDateMetrics
+    ytd: PeriodToDateMetrics
 
 
 class AdminTrendPoint(BaseModel):

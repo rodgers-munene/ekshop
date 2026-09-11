@@ -29,6 +29,8 @@ from app.schemas.admin import (
     OrderNotificationRecipientCreate,
     OrderNotificationRecipientRead,
     OrderNotificationRecipientUpdate,
+    PeriodFigures,
+    PeriodToDateMetrics,
     PromotionCreate,
     PromotionRead,
     PromotionUpdate,
@@ -46,6 +48,56 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 # ── Stats ────────────────────────────────────────────────────────────────────
+
+# Month/year boundaries are Kenyan calendar boundaries, not UTC ones — an
+# order placed at 01:00 EAT on the 1st belongs to the new month. Kenya is a
+# fixed UTC+3 with no DST, so a fixed offset is exact (see services/mpesa.py).
+EAT = timezone(timedelta(hours=3), "EAT")
+
+
+def _period_figures(db: Session, start: datetime, end: datetime) -> PeriodFigures:
+    revenue, orders = (
+        db.query(
+            func.coalesce(func.sum(cast(OrderGroup.total, Numeric)), 0),
+            func.count(OrderGroup.id),
+        )
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= start,
+            OrderGroup.created_at < end,
+        )
+        .one()
+    )
+    revenue = Decimal(revenue).quantize(Decimal("0.01"))
+    aov = (revenue / orders).quantize(Decimal("0.01")) if orders else Decimal("0.00")
+
+    new_users = (
+        db.query(func.count(User.id)).filter(User.created_at >= start, User.created_at < end).scalar() or 0
+    )
+    new_shops = (
+        db.query(func.count(Shop.id)).filter(Shop.created_at >= start, Shop.created_at < end).scalar() or 0
+    )
+
+    return PeriodFigures(
+        revenue=str(revenue),
+        orders=orders,
+        average_order_value=str(aov),
+        new_users=new_users,
+        new_shops=new_shops,
+    )
+
+
+def _period_to_date(db: Session, start: datetime, previous_start: datetime, now: datetime) -> PeriodToDateMetrics:
+    # Compare against the same elapsed span of the previous period, capped at
+    # that period's end — so MTD on 31 March compares against all of February
+    # rather than spilling into March.
+    previous_end = min(previous_start + (now - start), start)
+    return PeriodToDateMetrics(
+        start=start,
+        current=_period_figures(db, start, now),
+        previous=_period_figures(db, previous_start, previous_end),
+    )
+
 
 @router.get("/stats", response_model=AdminStatsRead)
 def get_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
@@ -71,6 +123,12 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
         Decimal("0"),
     )
 
+    now = datetime.now(EAT)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    previous_month_start = (month_start - timedelta(days=1)).replace(day=1)
+    year_start = month_start.replace(month=1)
+    previous_year_start = year_start.replace(year=year_start.year - 1)
+
     return AdminStatsRead(
         total_users=total_users,
         total_buyers=total_buyers,
@@ -83,6 +141,8 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
         orders_7d=orders_7d,
         revenue_total=str(revenue_total),
         revenue_7d=str(revenue_7d),
+        mtd=_period_to_date(db, month_start, previous_month_start, now),
+        ytd=_period_to_date(db, year_start, previous_year_start, now),
     )
 
 

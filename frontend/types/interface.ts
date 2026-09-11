@@ -241,6 +241,22 @@ export interface AdminStats {
   orders_7d: number;
   revenue_total: string;
   revenue_7d: string;
+  mtd: PeriodToDateMetrics;
+  ytd: PeriodToDateMetrics;
+}
+
+export interface PeriodFigures {
+  revenue: string;
+  orders: number;
+  average_order_value: string;
+  new_users: number;
+  new_shops: number;
+}
+
+export interface PeriodToDateMetrics {
+  start: string;
+  current: PeriodFigures;
+  previous: PeriodFigures;
 }
 
 export interface AdminTrendPoint {
