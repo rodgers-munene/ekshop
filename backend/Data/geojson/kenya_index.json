@@ -1,0 +1,311 @@
+{
+ "kenya_counties": [],
+ "kenya_constituencies": [
+  {
+   "constituency_code": 10,
+   "constituency": "KINANGO",
+   "county": "KWALE",
+   "county_code": 2,
+   "centroid": [
+    39.546189,
+    -3.995446
+   ]
+  },
+  {
+   "constituency_code": 11,
+   "constituency": "KILIFI NORTH",
+   "county": "KILIFI",
+   "county_code": 3,
+   "centroid": [
+    39.776708,
+    -3.597685
+   ]
+  },
+  {
+   "constituency_code": 12,
+   "constituency": "KILIFI SOUTH",
+   "county": "KILIFI",
+   "county_code": 3,
+   "centroid": [
+    39.713094,
+    -3.904387
+   ]
+  },
+  {
+   "constituency_code": 148,
+   "constituency": "MARAKWET WEST",
+   "county": "WEST POKOT",
+   "county_code": 24,
+   "centroid": [
+    35.465201,
+    1.010929
+   ]
+  },
+  {
+   "constituency_code": 182,
+   "constituency": "NAROK WEST",
+   "county": "NAROK",
+   "county_code": 33,
+   "centroid": [
+    35.350022,
+    -0.976728
+   ]
+  },
+  {
+   "constituency_code": 83,
+   "constituency": "MBOONI",
+   "county": "MAKUENI",
+   "county_code": 17,
+   "centroid": [
+    37.655643,
+    -1.753218
+   ]
+  },
+  {
+   "constituency_code": 68,
+   "constituency": "MWINGI WEST",
+   "county": "KITUI",
+   "county_code": 15,
+   "centroid": [
+    37.836066,
+    -0.90904
+   ]
+  }
+ ],
+ "kenya_wards": [
+  {
+   "ward_code": "TcWlRA6LpLB",
+   "ward": "Syokimau-mulolongo Ward",
+   "subcounty": "Athi River Sub County",
+   "subcounty_code": "BxfsSc6Svrc",
+   "county": "Machakos",
+   "county_code": 16,
+   "population": 42154,
+   "centroid": [
+    36.950184,
+    -1.400028
+   ]
+  },
+  {
+   "ward_code": "nNiOxPPdyhk",
+   "ward": "Lwandanyi Ward",
+   "subcounty": "Sirisia Sub County",
+   "subcounty_code": "whWfFA9D7td",
+   "county": "Bungoma",
+   "county_code": 39,
+   "population": 39802,
+   "centroid": [
+    34.394052,
+    0.757028
+   ]
+  },
+  {
+   "ward_code": "ONNWmIVc48N",
+   "ward": "Kanyasa Ward",
+   "subcounty": "Nyatike Sub County",
+   "subcounty_code": "D2lsuEzZAJP",
+   "county": "Migori",
+   "county_code": 44,
+   "population": 14331,
+   "centroid": [
+    34.174497,
+    -0.770454
+   ]
+  },
+  {
+   "ward_code": "kTPK3jU6vdp",
+   "ward": "Mitamboni Ward",
+   "subcounty": "Kathiani Sub County",
+   "subcounty_code": "iCey76HYgLP",
+   "county": "Machakos",
+   "county_code": 16,
+   "population": 30055,
+   "centroid": [
+    37.278948,
+    -1.338574
+   ]
+  },
+  {
+   "ward_code": "UMeXjZoZxct",
+   "ward": "Matayos South Ward",
+   "subcounty": "Matayos Sub County",
+   "subcounty_code": "tvkI2HSIRW9",
+   "county": "Busia",
+   "county_code": 40,
+   "population": 30874,
+   "centroid": [
+    34.206469,
+    0.376362
+   ]
+  },
+  {
+   "ward_code": "Yh0tdzyDjHY",
+   "ward": "Charagita Ward",
+   "subcounty": "Oljoroorok Sub County",
+   "subcounty_code": "fVSw60UAC3W",
+   "county": "NYANDARUA",
+   "county_code": 18,
+   "population": 21824,
+   "centroid": [
+    36.252877,
+    -0.174381
+   ]
+  },
+  {
+   "ward_code": "SRbWfuqghtn",
+   "ward": "Mboghoni Ward",
+   "subcounty": "Taveta Sub County",
+   "subcounty_code": "jNzRdAwjaQ1",
+   "county": "TAITA TAVETA",
+   "county_code": 6,
+   "population": 20648,
+   "centroid": [
+    37.691657,
+    -3.418893
+   ]
+  },
+  {
+   "ward_code": "VG4qlKr4Z2A",
+   "ward": "Malaba South Ward",
+   "subcounty": "Teso North Sub County",
+   "subcounty_code": "GpEIlwz3FvT",
+   "county": "Busia",
+   "county_code": 40,
+   "population": 19250,
+   "centroid": [
+    34.324641,
+    0.611054
+   ]
+  },
+  {
+   "ward_code": "xPmSqaPoPFT",
+   "ward": "Amukura East Ward",
+   "subcounty": "Teso South Sub County",
+   "subcounty_code": "EhchjCHkhJ9",
+   "county": "Busia",
+   "county_code": 40,
+   "population": 23357,
+   "centroid": [
+    34.281808,
+    0.499496
+   ]
+  },
+  {
+   "ward_code": "VAOZFeKsbAT",
+   "ward": "Amukura Central Ward",
+   "subcounty": "Teso South Sub County",
+   "subcounty_code": "EhchjCHkhJ9",
+   "county": "Busia",
+   "county_code": 40,
+   "population": 20756,
+   "centroid": [
+    34.284276,
+    0.509305
+   ]
+  },
+  {
+   "ward_code": "TaCopZQ4jLn",
+   "ward": "Njoro Ward",
+   "subcounty": "Njoro  Sub County",
+   "subcounty_code": "gSJXzH1DM75",
+   "county": "Nakuru",
+   "county_code": 32,
+   "population": 57429,
+   "centroid": [
+    35.943465,
+    -0.316519
+   ]
+  },
+  {
+   "ward_code": "l7oNy9qaqWe",
+   "ward": "Mai Mahiu Ward",
+   "subcounty": "Naivasha  Sub County",
+   "subcounty_code": "yZJJPoSGhY6",
+   "county": "Nakuru",
+   "county_code": 32,
+   "population": 29796,
+   "centroid": [
+    36.574676,
+    -0.967403
+   ]
+  },
+  {
+   "ward_code": "hV1NZb8gSOe",
+   "ward": "Nachola Ward",
+   "subcounty": "Samburu North Sub County",
+   "subcounty_code": "E2DGjZRlwbY",
+   "county": "SAMBURU",
+   "county_code": 25,
+   "population": 11622,
+   "centroid": [
+    36.646949,
+    1.396205
+   ]
+  },
+  {
+   "ward_code": "kNhuVMT4NIA",
+   "ward": "Masige West Ward",
+   "subcounty": "Bobasi Sub County",
+   "subcounty_code": "cooDDG3Lh3A",
+   "county": "Kisii",
+   "county_code": 45,
+   "population": 18492,
+   "centroid": [
+    34.80916,
+    -0.871268
+   ]
+  },
+  {
+   "ward_code": "u15fCmBOYHT",
+   "ward": "Bassi Bogetaorio Ward",
+   "subcounty": "Bobasi Sub County",
+   "subcounty_code": "cooDDG3Lh3A",
+   "county": "Kisii",
+   "county_code": 45,
+   "population": 34166,
+   "centroid": [
+    34.850392,
+    -0.888432
+   ]
+  },
+  {
+   "ward_code": "kpL4HsQ7YZ5",
+   "ward": "Sokoke Ward",
+   "subcounty": "Ganze Sub County",
+   "subcounty_code": "x7qUMtZZvo9",
+   "county": "Kilifi",
+   "county_code": 3,
+   "population": 43543,
+   "centroid": [
+    39.772748,
+    -3.246575
+   ]
+  },
+  {
+   "ward_code": "nResMsI1yRw",
+   "ward": "Garashi Ward",
+   "subcounty": "Magarini Sub County",
+   "subcounty_code": "KMWrMZrlO5u",
+   "county": "Kilifi",
+   "county_code": 3,
+   "population": 25781,
+   "centroid": [
+    39.908622,
+    -3.16444
+   ]
+  },
+  {
+   "ward_code": "tZfKaFDQcdW",
+   "ward": "Makina Ward",
+   "subcounty": "Kibra  Sub County",
+   "subcounty_code": "LO5he3DtiFG",
+   "county": "Nairobi",
+   "county_code": 47,
+   "population": 35028,
+   "centroid": [
+    36.788144,
+    -1.30928
+   ]
+  }
+ ]
+}
