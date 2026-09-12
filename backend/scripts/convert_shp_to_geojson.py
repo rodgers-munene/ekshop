@@ -187,13 +187,56 @@ index_wards = convert(
     build_index=True,
 )
 
-index = {"kenya_counties": index_counties, "kenya_constituencies": index_constituencies, "kenya_wards": index_wards}
+index_subcounties = convert(
+    os.path.join(BASE, "ke_subcounty", "ke_subcounty"),
+    lambda r: {
+        "subcounty": str(r["subcounty"]).strip(),
+        "subcounty_code": str(r["scpcode"]).strip(),
+        "dhis2_id": str(r["dhis2_id"]).strip(),
+        "county": str(r["county"]).strip(),
+        "county_code": county_codes.get(str(r["county"]).strip().upper()),
+        "province": str(r["province"]).strip(),
+        "province_code": str(r["provpcode"]).strip(),
+    },
+    "kenya_subcounties",
+    build_index=True,
+)
+
+index_locations = convert(
+    os.path.join(BASE, "kenlocations", "Ken_Locations", "Ken_Locations"),
+    lambda r: {
+        "location": str(r["LOCNAME"]).strip(),
+        "location_code": int(r["LOCID"]),
+    },
+    "kenya_locations",
+    build_index=True,
+)
+
+index_sublocations = convert(
+    os.path.join(BASE, "kensublocations", "Ken_Sublocations", "Ken_Sublocations"),
+    lambda r: {
+        "sublocation": str(r["SLNAME"]).strip(),
+        "sublocation_code": int(r["SLID"]),
+        "location_code": int(r["SLID"]) // 100,
+    },
+    "kenya_sublocations",
+    build_index=True,
+)
+
+index = {
+    "kenya_counties": index_counties,
+    "kenya_constituencies": index_constituencies,
+    "kenya_subcounties": index_subcounties,
+    "kenya_wards": index_wards,
+    "kenya_locations": index_locations,
+    "kenya_sublocations": index_sublocations,
+}
 with open(os.path.join(OUT, "kenya_index.json"), "w", encoding="utf-8") as f:
     json.dump(index, f, ensure_ascii=False, indent=1)
 
-for name in ("kenya_counties", "kenya_constituencies", "kenya_wards"):
+for name in index:
     p = os.path.join(OUT, name + ".geojson")
     sz = os.path.getsize(p) / 1024 / 1024
     print(f"{name}.geojson  {sz:.2f} MB")
-print(f"kenya_index.json  {os.path.getsize(os.path.join(OUT,'kenya_index.json'))/1024:.1f} KB")
+print(f"kenya_index.json  {os.path.getsize(os.path.join(OUT, 'kenya_index.json'))/1024:.1f} KB")
 print("features:", {k: len(v) for k, v in index.items()})
