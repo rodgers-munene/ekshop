@@ -23,6 +23,7 @@ const COLUMNS = [
     links: [
       { label: "Secure Checkout with Paystack", href: "/checkout" },
       { label: "Order Tracking", href: "/orders" },
+      { label: "Top Rated Products", href: "/ratings" },
       { label: "Delivery Areas", href: "/products" },
     ],
   },

@@ -42,7 +42,7 @@ export default function PrivacyPage() {
             We share the minimum necessary information with: Sellers (to fulfil your orders), Safaricom M-Pesa (to
             process checkout payments) and Paystack (to process seller subscription billing), delivery partners (to
             deliver your orders), and service providers who help us operate the
-            platform (such as email and cloud hosting providers). We do not sell your personal information to third
+            platform (such as Google(Emails, Location) and cloud hosting providers). We do not sell your personal information to third
             parties.
           </p>
         </section>

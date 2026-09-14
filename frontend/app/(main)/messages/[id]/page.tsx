@@ -70,6 +70,9 @@ export default function ConversationPage() {
     <div className="w-full max-w-2xl mx-auto px-4 md:px-6 py-6 flex flex-col h-[80vh]">
       <div className="flex items-center gap-3 mb-4">
         <Link href="/messages" className="text-xs text-muted hover:text-amber underline">← Messages</Link>
+        <span className="text-sm font-medium truncate flex-1 min-w-0">
+          {conversation.shop_name ?? "Shop"}
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">

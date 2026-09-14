@@ -117,6 +117,17 @@ export interface ProductListResponse {
   results: Product[];
 }
 
+// Reviews
+export interface Review {
+  id: string;
+  product_id: string;
+  buyer_id?: string;
+  rating: number;
+  body?: string;
+  helpful_count: number;
+  created_at: string;
+}
+
 // Orders
 export interface OrderItem {
   id: string;

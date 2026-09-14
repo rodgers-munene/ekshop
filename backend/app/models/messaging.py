@@ -24,6 +24,10 @@ class Conversation(Base):
     shop = relationship("Shop", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
 
+    @property
+    def shop_name(self):
+        return self.shop.name if self.shop else None
+
 
 class Message(Base):
     __tablename__ = "messages"

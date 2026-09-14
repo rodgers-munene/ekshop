@@ -8,6 +8,7 @@ import { formatKES, decodeHtml, resolveImageUrl } from "@/lib/utils";
 import AddToCart from "./AddToCart";
 import ProductCard from "@/components/ProductCard";
 import ProductImageGallery from "./ProductImageGallery";
+import ProductReviews from "@/components/ProductReviews";
 import ViewTracker from "./ViewTracker";
 
 interface Props {
@@ -247,6 +248,11 @@ export default async function ProductDetailPage({ params }: Props) {
             </div>
           </div>
         )}
+
+        {/* Ratings & Reviews */}
+        <div className="py-8">
+          <ProductReviews productId={product.id} />
+        </div>
       </div>
     </>
   );

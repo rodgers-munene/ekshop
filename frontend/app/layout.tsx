@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, DM_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import QueryProvider from "@/lib/query-provider";
+import PwaHelper from "@/components/PwaHelper";
 import "./globals.css";
 
 const fraunces = Fraunces({

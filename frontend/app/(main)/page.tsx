@@ -14,6 +14,7 @@ import { Product, Category, ProductListResponse, PaginatedResponse, ShopSummary,
 import ProductRail from "@/components/ProductRail";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import DealsCardSlideshow from "@/components/DealsCardSlideshow";
+import Marquee from "@/components/Marquee";
 
 export default async function HomePage() {
   const cookieStore = await cookies();
@@ -73,8 +74,22 @@ export default async function HomePage() {
     .filter((rail): rail is { category: Category; products: Product[] } => rail !== null)
     .slice(0, 4);
 
+  const marqueeItems = [
+    "Free returns within 7 days",
+    "Pay safely with M-Pesa",
+    "Nationwide delivery across Kenya",
+    "100% verified sellers",
+    "Shop today's flash deals",
+    "New products added daily",
+    "Top-rated picks from real buyers",
+    "24/7 customer support",
+  ];
+
   return (
     <div className="w-full">
+
+      {/* ── Promo marquee (right → left) ───────────────────── */}
+      <Marquee items={marqueeItems} />
 
       {/* ── Full-bleed hero ─────────────────────────────────── */}
       <HeroSlideshow slides={heroSlides} fallbackImageUrl={featuredProduct?.images?.[0]?.url} />

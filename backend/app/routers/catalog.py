@@ -263,6 +263,7 @@ def get_products(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     county: Optional[str] = None,
+    sort: str = Query("newest", pattern="^(newest|rating|price_asc|price_desc)$"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, le=100),
     db: Session = Depends(get_db)
@@ -319,7 +320,23 @@ def get_products(
     skip = (page - 1) * limit
 
     if relevance is not None:
-        query = query.order_by(desc(relevance), Product.popularity.desc(), Product.created_at.desc())
+        # When searching, relevance still wins (sort applies as a tie-break).
+        if sort == "rating":
+            query = query.order_by(
+                desc(relevance), desc(Product.rating_avg), desc(Product.rating_count), Product.created_at.desc()
+            )
+        elif sort == "price_asc":
+            query = query.order_by(desc(relevance), cast(Product.price, Numeric).asc())
+        elif sort == "price_desc":
+            query = query.order_by(desc(relevance), cast(Product.price, Numeric).desc())
+        else:
+            query = query.order_by(desc(relevance), Product.popularity.desc(), Product.created_at.desc())
+    elif sort == "rating":
+        query = query.order_by(desc(Product.rating_avg), desc(Product.rating_count), Product.created_at.desc())
+    elif sort == "price_asc":
+        query = query.order_by(cast(Product.price, Numeric).asc())
+    elif sort == "price_desc":
+        query = query.order_by(cast(Product.price, Numeric).desc())
     else:
         query = query.order_by(Product.created_at.desc())
 

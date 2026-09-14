@@ -22,6 +22,7 @@ class ConversationRead(BaseModel):
     id: uuid.UUID
     buyer_id: uuid.UUID
     shop_id: uuid.UUID
+    shop_name: Optional[str] = None
     last_message_at: datetime
     messages: List[MessageRead] = []
 

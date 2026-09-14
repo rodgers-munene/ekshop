@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, Settings, User as UserIcon } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { useCartStore } from "@/store/cartStore";
 import { resolveImageUrl } from "@/lib/utils";
 import { User } from "@/types/interface";
 
@@ -18,6 +19,7 @@ export default function HeaderAccountMenu({ user }: { user: User }) {
       body: JSON.stringify({ action: "logout" }),
     });
     clearUser();
+    useCartStore.getState().clearCart();
     router.push("/");
   }
 

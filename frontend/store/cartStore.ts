@@ -51,11 +51,13 @@ export const useCartStore = create<CartState>()(
                 }),
 
             removeItem: (product_id, variant_id) => {
-                set((state) => {
-                    return {
-                        items: state.items.filter((i) => !(i.product_id !== product_id && i.variant_id !== variant_id))
-                    }
-                });
+                set((state) => ({
+                    items: state.items.filter(
+                        (i) =>
+                            i.product_id !== product_id ||
+                            (i.variant_id ?? null) !== (variant_id ?? null)
+                    ),
+                }));
             },
 
             updateQuantity: (product_id, quantity, variant_id) =>

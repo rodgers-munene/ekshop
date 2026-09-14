@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # daily subscription billing cycle (POST /internal/cron/billing-cycle)
     CRON_SECRET: str | None = None
 
+    # Slug of the shop that acts as Ekshop's support desk for buyer chats
+    # (POST /conversations/support). Unset stops support conversations.
+    SUPPORT_SHOP_SLUG: str | None = "ekshop-support"
+
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "Ekshop <notifications@mail.ekshop.store>"
 

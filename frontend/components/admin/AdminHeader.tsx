@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, LogOut, ShieldCheck } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { useCartStore } from "@/store/cartStore";
 import { User } from "@/types/interface";
 
 export default function AdminHeader({ user }: { user: User }) {
@@ -17,6 +18,7 @@ export default function AdminHeader({ user }: { user: User }) {
       body: JSON.stringify({ action: "logout" }),
     });
     clearUser();
+    useCartStore.getState().clearCart();
     router.push("/");
   }
 

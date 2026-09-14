@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import { AuthUser } from "@/store/authStore";
+import { useCartStore } from "@/store/cartStore";
 
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -77,6 +78,9 @@ function LoginPageInner() {
       }
 
       setUser(json.user as AuthUser);
+      // The cart persists per-browser, so start the new session with a clean
+      // cart rather than inheriting whatever the previous user left behind.
+      useCartStore.getState().clearCart();
       toast.success(`Welcome back, ${json.user.first_name}!`);
 
       const next = searchParams.get("next");

@@ -25,9 +25,9 @@ export default function TermsPage() {
         <section>
           <h2 className="font-semibold text-base mb-2">2. The marketplace model</h2>
           <p>
-            Ekshop is a marketplace, not a retailer. Products listed on the platform are owned, priced, and fulfilled by
+            Ekshop is a marketplace, not a retailer. Products listed on the platform are owned, and priced by
             individual Sellers. Ekshop is not a party to the contract of sale between a Buyer and a Seller, though we
-            facilitate checkout, payment processing, and dispute support as described below.
+            facilitate checkout, payment processing, Order fullfilment and dispute support as described below.
           </p>
         </section>
 

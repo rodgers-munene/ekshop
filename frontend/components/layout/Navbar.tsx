@@ -122,6 +122,7 @@ export default function Navbar() {
       body: JSON.stringify({ action: "logout" }),
     });
     clearUser();
+    useCartStore.getState().clearCart();
     router.push("/");
   }
 
@@ -253,6 +254,12 @@ export default function Navbar() {
                   </Link>
                   <Link href="/messages" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface">
                     Messages
+                  </Link>
+                  <Link href="/messages" onClick={() => { setAccountOpen(false); }} className="block px-4 py-2 text-sm hover:bg-surface">
+                    Contact Support
+                  </Link>
+                  <Link href="/ratings" onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface">
+                    Top Rated
                   </Link>
                   {user?.role === "seller" && myShop && (
                     <Link href={`/shops/${myShop.slug}`} onClick={() => setAccountOpen(false)} className="block px-4 py-2 text-sm hover:bg-surface border-t border-border">

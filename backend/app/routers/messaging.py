@@ -19,6 +19,7 @@ from app.schemas.messaging import (
     MessageRead,
 )
 from app.services.notifications import create_notification
+from app.core.config import settings
 
 router = APIRouter(prefix="/conversations", tags=["messaging"])
 
@@ -104,6 +105,50 @@ def list_conversations(db: Session = Depends(get_db), current_user: User = Depen
             )
         )
     return summaries
+
+
+@router.post("/support", response_model=ConversationRead, status_code=status.HTTP_201_CREATED)
+def open_support_conversation(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Open (or resume) a chat with Ekshop's support desk.
+
+    The desk is a normal shop flagged via SUPPORT_SHOP_SLUG, so the same
+    participant checks and read/unread handling as buyer-seller chats apply.
+    Sellers/agents using the desk reach the thread through /conversations.
+    """
+    if not settings.SUPPORT_SHOP_SLUG:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Support chat is not available right now. Email support@ekshop.co.ke instead.",
+        )
+
+    support_shop = (
+        db.query(Shop)
+        .filter(Shop.slug == settings.SUPPORT_SHOP_SLUG)
+        .first()
+    )
+    if not support_shop:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Support chat is not available right now. Email support@ekshop.co.ke instead.",
+        )
+    if support_shop.seller_id == current_user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You can't support-chat with your own shop")
+
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.buyer_id == current_user.id, Conversation.shop_id == support_shop.id)
+        .first()
+    )
+    if not conversation:
+        conversation = Conversation(buyer_id=current_user.id, shop_id=support_shop.id)
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+    return conversation
 
 
 @router.get("/{conversation_id}", response_model=ConversationRead)
