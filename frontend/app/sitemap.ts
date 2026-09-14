@@ -1,7 +1,6 @@
 import type { MetadataRoute } from "next";
 import { Product, ShopSummary, ProductListResponse, PaginatedResponse } from "@/types/interface";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL!;
+import { SITE_URL } from "@/lib/site";
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const PAGE_SIZE = 100;
 

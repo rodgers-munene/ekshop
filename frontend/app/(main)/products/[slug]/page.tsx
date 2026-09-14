@@ -3,6 +3,7 @@ import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { serverFetch } from "@/lib/server-api";
+import { SITE_URL as siteUrl } from "@/lib/site";
 import { Product } from "@/types/interface";
 import { formatKES, decodeHtml, resolveImageUrl } from "@/lib/utils";
 import AddToCart from "./AddToCart";
@@ -67,7 +68,17 @@ export default async function ProductDetailPage({ params }: Props) {
     .filter((p) => p.id !== product.id)
     .slice(0, 4);
 
+<<<<<<< Updated upstream
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+=======
+  // Personalised picks for logged-in buyers (requires cookie)
+  const isLoggedIn = Boolean((await cookies()).get("ekshop_token")?.value);
+  const personalised = isLoggedIn
+    ? serverFetch<Product[]>("/recommendations?limit=6").catch(() => [])
+    : Promise.resolve([] as Product[]);
+  const recommendations = (await personalised).filter((p) => p.id !== product.id).slice(0, 6);
+
+>>>>>>> Stashed changes
   const productUrl = `${siteUrl}/products/${product.slug}`;
 
   const jsonLd = {

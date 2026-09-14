@@ -1,0 +1,159 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Zap } from "lucide-react";
+import { Promotion } from "@/types/interface";
+import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function discountPct(p: Promotion): number | null {
+  const product = p.product;
+  if (!product?.compare_price) return null;
+  const comp = parseFloat(product.compare_price);
+  const price = parseFloat(product.price);
+  if (!comp || !price || comp <= price) return null;
+  return Math.round(((comp - price) / comp) * 100);
+}
+
+function timeLeft(diff: number) {
+  const totalSeconds = Math.floor(Math.max(0, diff) / 1000);
+  return {
+    days: Math.floor(totalSeconds / 86400),
+    hours: Math.floor((totalSeconds % 86400) / 3600),
+    minutes: Math.floor((totalSeconds % 3600) / 60),
+    seconds: totalSeconds % 60,
+  };
+}
+
+export default function FlashDeals({ deals }: { deals: Promotion[] }) {
+  const [now, setNow] = useState<number | null>(null);
+
+  const ends = useMemo(
+    () =>
+      deals
+        .map((d) => (d.ends_at ? new Date(d.ends_at).getTime() : null))
+        .filter((t): t is number => t !== null),
+    [deals]
+  );
+
+  const remaining = useMemo(() => {
+    if (now === null) return null;
+    const upcoming = ends.filter((t) => t > now);
+    const targetMs = upcoming.length ? Math.min(...upcoming) : now + DAY_MS;
+    return Math.max(0, targetMs - now);
+  }, [now, ends]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (deals.length === 0) return null;
+
+  const t = remaining === null ? null : timeLeft(remaining);
+  const unit = (v: number) => String(v).padStart(2, "0");
+
+  const pills = t
+    ? [
+        { label: "Days", value: unit(t.days) },
+        { label: "Hrs", value: unit(t.hours) },
+        { label: "Min", value: unit(t.minutes) },
+        { label: "Sec", value: unit(t.seconds) },
+      ]
+    : [];
+
+  return (
+    <section className="px-4 md:px-6 py-4">
+      <div className="card p-5 border-t-4 border-t-amber overflow-hidden">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <h2 className="flex items-center gap-2 text-lg font-extrabold">
+            <Zap size={20} className="text-amber fill-current" />
+            Flash Deals
+          </h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted">
+              Ends in
+            </span>
+            <div className="flex items-center gap-1.5">
+              {t ? (
+                pills.map((p) => (
+                  <div
+                    key={p.label}
+                    className="flex flex-col items-center min-w-12 px-1.5 py-1 rounded-md bg-navy text-white"
+                  >
+                    <span className="text-sm font-bold tabular-nums leading-none">{p.value}</span>
+                    <span className="text-[9px] uppercase tracking-wider text-white/60 mt-0.5">
+                      {p.label}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <span className="text-sm text-muted tabular-nums">--:--:--</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Deal grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {deals.slice(0, 4).map((deal) => {
+            const product = deal.product;
+            if (!product) return null;
+            const pct = discountPct(deal);
+            const image =
+              product.images?.find((img) => img.is_primary) ?? product.images?.[0];
+            return (
+              <Link
+                key={deal.id}
+                href={`/products/${product.slug}`}
+                className="group flex flex-col overflow-hidden rounded-lg border border-border hover:border-amber hover:shadow-sm transition-all"
+              >
+                <div className="relative aspect-square bg-white overflow-hidden">
+                  {image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={resolveImageUrl(image.url)}
+                      alt=""
+                      className="w-full h-full object-contain p-3 group-hover:scale-105 transition-transform duration-300"
+                    />
+                  )}
+                  {pct && (
+                    <span className="absolute top-2 left-2 bg-danger text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide">
+                      -{pct}%
+                    </span>
+                  )}
+                </div>
+                <div className="p-3 flex flex-col gap-1 flex-1">
+                  <h3 className="text-sm font-medium leading-tight line-clamp-2">
+                    {decodeHtml(product.name)}
+                  </h3>
+                  <div className="flex items-baseline gap-x-2 mt-auto pt-1">
+                    <span className="font-bold">{formatKES(product.price)}</span>
+                    {product.compare_price &&
+                      parseFloat(product.compare_price) > parseFloat(product.price) && (
+                        <span className="text-xs text-muted line-through">
+                          {formatKES(product.compare_price)}
+                        </span>
+                      )}
+                  </div>
+                  <span className="text-xs text-danger font-semibold">
+                    {deal.label || "Limited time"}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 text-right">
+          <Link href="/products" className="text-xs text-amber hover:underline">
+            Shop all flash deals →
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
