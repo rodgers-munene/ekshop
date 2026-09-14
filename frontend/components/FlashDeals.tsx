@@ -6,8 +6,6 @@ import { Zap } from "lucide-react";
 import { Promotion } from "@/types/interface";
 import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 function discountPct(p: Promotion): number | null {
   const product = p.product;
   if (!product?.compare_price) return null;
@@ -20,8 +18,7 @@ function discountPct(p: Promotion): number | null {
 function timeLeft(diff: number) {
   const totalSeconds = Math.floor(Math.max(0, diff) / 1000);
   return {
-    days: Math.floor(totalSeconds / 86400),
-    hours: Math.floor((totalSeconds % 86400) / 3600),
+    hours: Math.floor(totalSeconds / 3600),
     minutes: Math.floor((totalSeconds % 3600) / 60),
     seconds: totalSeconds % 60,
   };
@@ -30,20 +27,12 @@ function timeLeft(diff: number) {
 export default function FlashDeals({ deals }: { deals: Promotion[] }) {
   const [now, setNow] = useState<number | null>(null);
 
-  const ends = useMemo(
-    () =>
-      deals
-        .map((d) => (d.ends_at ? new Date(d.ends_at).getTime() : null))
-        .filter((t): t is number => t !== null),
-    [deals]
-  );
-
   const remaining = useMemo(() => {
     if (now === null) return null;
-    const upcoming = ends.filter((t) => t > now);
-    const targetMs = upcoming.length ? Math.min(...upcoming) : now + DAY_MS;
-    return Math.max(0, targetMs - now);
-  }, [now, ends]);
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    return Math.max(0, midnight.getTime() - now);
+  }, [now]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -57,7 +46,6 @@ export default function FlashDeals({ deals }: { deals: Promotion[] }) {
 
   const pills = t
     ? [
-        { label: "Days", value: unit(t.days) },
         { label: "Hrs", value: unit(t.hours) },
         { label: "Min", value: unit(t.minutes) },
         { label: "Sec", value: unit(t.seconds) },
