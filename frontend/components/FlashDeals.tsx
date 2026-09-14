@@ -31,8 +31,8 @@ export default function FlashDeals({ deals }: { deals: Promotion[] }) {
 
   const target = useMemo(() => {
     const upcoming = deals
-      .map((d) => d.ends_at && new Date(d.ends_at).getTime())
-      .filter((t): t is number => Boolean(t) && t > Date.now());
+      .map((d) => (d.ends_at ? new Date(d.ends_at).getTime() : null))
+      .filter((t): t is number => t !== null && t > Date.now());
     return upcoming.length ? Math.min(...upcoming) : Date.now() + 24 * 60 * 60 * 1000;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deals]);

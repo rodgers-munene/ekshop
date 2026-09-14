@@ -29,10 +29,6 @@ export default function PwaHelper() {
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);
-      if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
-        navigator.serviceWorker.getRegistrations().then((regs) =>
-          Promise.all(regs.map((r) => r.unregister()))).catch(() => {});
-      }
     };
   }, []);
 

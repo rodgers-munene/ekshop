@@ -224,6 +224,7 @@ export interface Conversation {
   id: string;
   buyer_id: string;
   shop_id: string;
+  shop_name?: string;
   last_message_at: string;
   messages: Message[];
 }
