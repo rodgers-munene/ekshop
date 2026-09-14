@@ -24,6 +24,23 @@ export const metadata: Metadata = {
     template: "%s | Ekshop",
   },
   description: "Shop from thousands of sellers across Kenya.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Ekshop",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: ["/icons/icon-192x192.png", "/icons/icon-512x512.png"],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0E3D2B",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -31,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${fraunces.variable} ${dmSans.variable}`}>
       <body className="min-h-screen flex flex-col antialiased">
         <QueryProvider>{children}</QueryProvider>
+        <PwaHelper />
         <Toaster
           position="bottom-right"
           toastOptions={{

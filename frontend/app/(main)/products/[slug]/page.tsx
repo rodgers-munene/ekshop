@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cache } from "react";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { serverFetch } from "@/lib/server-api";
@@ -9,6 +10,7 @@ import AddToCart from "./AddToCart";
 import ProductCard from "@/components/ProductCard";
 import ProductImageGallery from "./ProductImageGallery";
 import ProductReviews from "@/components/ProductReviews";
+import ProductRail from "@/components/ProductRail";
 import ViewTracker from "./ViewTracker";
 
 interface Props {
@@ -67,6 +69,13 @@ export default async function ProductDetailPage({ params }: Props) {
   const relatedProducts = related.results
     .filter((p) => p.id !== product.id)
     .slice(0, 4);
+
+  // Personalised picks for logged-in buyers (requires cookie)
+  const isLoggedIn = Boolean((await cookies()).get("ekshop_token")?.value);
+  const personalised = isLoggedIn
+    ? serverFetch<Product[]>("/recommendations?limit=6").catch(() => [])
+    : Promise.resolve([] as Product[]);
+  const recommendations = (await personalised).filter((p) => p.id !== product.id).slice(0, 6);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   const productUrl = `${siteUrl}/products/${product.slug}`;
@@ -246,6 +255,13 @@ export default async function ProductDetailPage({ params }: Props) {
                 <ProductCard key={p.id} product={p} />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Personalised recommendations (logged-in buyers only) */}
+        {recommendations.length > 0 && (
+          <div className="py-8">
+            <ProductRail title="Recommended for you" products={recommendations} viewAllHref="/products" />
           </div>
         )}
 

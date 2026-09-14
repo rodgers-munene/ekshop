@@ -15,6 +15,7 @@ import ProductRail from "@/components/ProductRail";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import DealsCardSlideshow from "@/components/DealsCardSlideshow";
 import Marquee from "@/components/Marquee";
+import FlashDeals from "@/components/FlashDeals";
 
 export default async function HomePage() {
   const cookieStore = await cookies();
@@ -311,6 +312,9 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── Flash Deals (countdown) ─────────────────────────── */}
+      {curatedDeals.length > 0 && <FlashDeals deals={curatedDeals} />}
 
       {/* ── Today's Deals ────────────────────────────────────── */}
       <ProductRail title="Today's Deals" products={dealProducts} viewAllHref="/products" />

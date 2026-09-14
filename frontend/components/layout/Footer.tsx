@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import InstallAppButton from "@/components/InstallAppButton";
 
 const COLUMNS = [
   {
@@ -74,6 +75,9 @@ export default function Footer() {
             height={34}
             className="object-contain h-9 w-auto rounded-full opacity-90"
           />
+          <div className="flex items-center justify-center gap-4">
+            <InstallAppButton />
+          </div>
           <p className="text-xs text-white/50 text-center">
             &copy; {new Date().getFullYear()} Ekshop.store, Inc. or its affiliates. Kenya&apos;s Marketplace.
           </p>
