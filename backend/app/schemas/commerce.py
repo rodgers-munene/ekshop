@@ -49,6 +49,9 @@ class UserAddressCreate(BaseModel):
     exact_location: str
     apartment: Optional[str] = None
     floor: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    sublocation: Optional[str] = None
     is_default: bool = False
 
 
@@ -64,6 +67,9 @@ class UserAddressRead(BaseModel):
     ward: Optional[WardWithLocationRead] = None
     exact_location: Optional[str]
     apartment: Optional[str]
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    sublocation: Optional[str] = None
     is_default: bool
 
     model_config = {"from_attributes": True}
@@ -80,6 +86,9 @@ class UserAddressUpdate(BaseModel):
     exact_location: Optional[str] = None
     apartment: Optional[str] = None
     floor: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    sublocation: Optional[str] = None
     is_default: Optional[bool] = None
 
 

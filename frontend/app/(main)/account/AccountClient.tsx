@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Crosshair, MapPin } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
-import { User, UserAddress, County, SubCounty, Ward } from "@/types/interface";
+import { User, UserAddress, County, SubCounty, Ward, GeoSelection } from "@/types/interface";
+import { reverseGeocode } from "@/lib/geo";
+import LocationPicker from "@/components/geo/LocationPicker";
 
 type Tab = "profile" | "addresses";
 
@@ -44,10 +47,16 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
     exact_location: "",
     areaCode: "+254",
     phoneNumber: "",
+    lat: undefined as number | undefined,
+    lng: undefined as number | undefined,
+    sublocation: "",
   };
   const [newAddr, setNewAddr] = useState(blankAddr);
   const [addingAddr, setAddingAddr] = useState(false);
   const [showAddrForm, setShowAddrForm] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [geoHint, setGeoHint] = useState("");
 
   const { data: counties } = useQuery({
     queryKey: ["geography", "counties"],
@@ -79,6 +88,56 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
     setNewAddr((a) => ({ ...a, subcounty_id, ward_id: "" }));
   }
 
+  function applyGeo(sel: GeoSelection) {
+    setNewAddr((a) => ({
+      ...a,
+      county: sel.county,
+      subcounty_id: sel.subcountyId ?? "",
+      ward_id: sel.wardId ?? "",
+      exact_location: sel.addressHint,
+      lat: sel.lat,
+      lng: sel.lng,
+      sublocation: sel.sublocation ?? "",
+    }));
+    setGeoHint(sel.addressHint);
+  }
+
+  function detectLocation() {
+    if (!navigator.geolocation) {
+      toast.error("Location isn't available on this device. Use the map instead.");
+      return;
+    }
+    setDetecting(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const data = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+        setDetecting(false);
+        if (!data) {
+          toast.error("We couldn't pinpoint your location — use the map instead.");
+          return;
+        }
+        applyGeo({
+          lat: data.lat,
+          lng: data.lng,
+          county: data.county,
+          subcounty: data.subcounty,
+          ward: data.ward,
+          location: data.location,
+          sublocation: data.sublocation,
+          addressHint: data.address_hint,
+          countyId: data.county_id,
+          subcountyId: data.subcounty_id,
+          wardId: data.ward_id,
+        });
+      },
+      () => {
+        setDetecting(false);
+        toast.error("Couldn't get your location. Check browser permission or use the map.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
   async function addAddress() {
     if (!newAddr.ward_id) { toast.error("Please select a subcounty and ward"); return; }
     const subcountyName = subcounties?.find((s) => s.id === newAddr.subcounty_id)?.name ?? "";
@@ -96,12 +155,16 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
           ward_id: newAddr.ward_id,
           exact_location: newAddr.exact_location,
           phone: `${newAddr.areaCode}${newAddr.phoneNumber}`,
+          lat: newAddr.lat,
+          lng: newAddr.lng,
+          sublocation: newAddr.sublocation,
         }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.detail ?? "Failed to add address"); return; }
       setAddresses((prev) => [...prev, data]);
       setNewAddr(blankAddr);
+      setGeoHint("");
       setShowAddrForm(false);
       toast.success("Address added");
     } catch { toast.error("Something went wrong"); }
@@ -187,6 +250,32 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
             ) : (
               <div className="rounded-lg border border-border p-5 space-y-4">
                 <h3 className="font-semibold">New Address</h3>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={detectLocation}
+                    disabled={detecting}
+                    className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:border-amber disabled:opacity-50"
+                  >
+                    <Crosshair size={15} className={detecting ? "animate-spin" : ""} />
+                    {detecting ? "Detecting…" : "Use my location"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapOpen(true)}
+                    className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:border-amber"
+                  >
+                    <MapPin size={15} />
+                    Set pin on map
+                  </button>
+                  {geoHint && (
+                    <p className="text-xs text-ink/70">
+                      Detected: <strong>{geoHint}</strong>
+                      {!newAddr.ward_id && <span className="ml-1 text-muted">(choose the nearest ward below)</span>}
+                    </p>
+                  )}
+                </div>
                 <div>
                   <label className="text-xs font-medium block mb-1">Label (optional)</label>
                   <input value={newAddr.label} onChange={(e) => setNewAddr((a) => ({ ...a, label: e.target.value }))} className="input-field" placeholder="Home / Work" />
@@ -281,6 +370,25 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {mapOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMapOpen(false)}>
+            <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+              <p className="mb-2 text-center text-sm font-medium text-white">
+                Drop the pin where you want delivery
+              </p>
+              <LocationPicker
+                initial={newAddr.lat != null && newAddr.lng != null ? { lat: newAddr.lat, lng: newAddr.lng } : undefined}
+                onCancel={() => setMapOpen(false)}
+                onConfirm={(sel) => {
+                  applyGeo(sel);
+                  setMapOpen(false);
+                  toast.success("Location pinned");
+                }}
+              />
+            </div>
           </div>
         )}
       </div>

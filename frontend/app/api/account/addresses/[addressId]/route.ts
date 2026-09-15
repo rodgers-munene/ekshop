@@ -15,3 +15,20 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ address
   });
   return new NextResponse(null, { status: res.status });
 }
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ addressId: string }> }) {
+  const { addressId } = await params;
+  const cookieStore = await cookies();
+  const token = cookieStore.get("ekshop_token")?.value;
+  if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+
+  const body = await req.json();
+  const res = await fetch(`${BASE_URL}/users/me/addresses/${addressId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  return NextResponse.json(data, { status: res.status });
+}

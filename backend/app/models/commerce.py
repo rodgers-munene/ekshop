@@ -3,7 +3,7 @@ import enum
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, DateTime, Boolean, Enum, ForeignKey,
-    Integer, Text, UniqueConstraint, CheckConstraint, Index
+    Integer, Text, UniqueConstraint, CheckConstraint, Index, Float
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -45,6 +45,9 @@ class UserAddress(Base):
     exact_location = Column(String(255))
     apartment = Column(String(255))
     floor = Column(String(50))
+    lat = Column(Float)
+    lng = Column(Float)
+    sublocation = Column(String(255))
     is_default = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 

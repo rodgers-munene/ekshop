@@ -513,6 +513,50 @@ export interface UserAddress {
   exact_location?: string;
   apartment?: string;
   is_default: boolean;
+  lat?: number;
+  lng?: number;
+  sublocation?: string;
+}
+
+export interface ReverseGeocodeResult {
+  lat: number;
+  lng: number;
+  county: string;
+  subcounty: string;
+  ward: string;
+  location?: string | null;
+  sublocation?: string | null;
+  address_hint: string;
+  county_id?: string | null;
+  subcounty_id?: string | null;
+  ward_id?: string | null;
+}
+
+export interface GeoSearchResult {
+  type: "ward" | "location" | "subcounty" | "sublocation";
+  name: string;
+  subtitle: string;
+  lat: number;
+  lng: number;
+  county?: string | null;
+  subcounty?: string | null;
+  ward?: string | null;
+  location?: string | null;
+  sublocation?: string | null;
+}
+
+export interface GeoSelection {
+  lat: number;
+  lng: number;
+  county: string;
+  subcounty: string;
+  ward: string;
+  location?: string | null;
+  sublocation?: string | null;
+  addressHint: string;
+  countyId?: string | null;
+  subcountyId?: string | null;
+  wardId?: string | null;
 }
 
 // Seller dashboard
