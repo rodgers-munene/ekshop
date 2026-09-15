@@ -171,6 +171,68 @@ class OperationsDeliveryMetrics(BaseModel):
     delivery_revenue: str
 
 
+class CartAbandonedProduct(BaseModel):
+    product_id: Optional[uuid.UUID] = None
+    name: str
+    slug: Optional[str]
+    units: int
+    at_risk_revenue: str
+
+
+class TopPurchasedProduct(BaseModel):
+    product_id: Optional[uuid.UUID] = None
+    name: str
+    slug: Optional[str]
+    units: int
+    revenue: str
+
+
+class CartAbandonmentMetrics(BaseModel):
+    """Real cart-funnel metrics computed from persisted carts and paid orders:
+    how many carts were touched in the window, how many converted to a paid
+    order, which products sit abandoned in carts, and which were bought most."""
+    carts_touched: int
+    converted_carts: int
+    abandoned_carts: int
+    cart_abandonment_rate: float
+    abandoned_units: int
+    at_risk_revenue: str
+    abandoned_products: List[CartAbandonedProduct] = []
+    top_products: List[TopPurchasedProduct] = []
+
+
+class AdminOverviewPeriodMetrics(BaseModel):
+    revenue: str
+    orders: int
+    average_order_value: str
+    new_users: int
+    new_buyers: int
+    new_sellers: int
+    new_shops: int
+    new_products: int
+    cart_abandonment_rate: float
+
+
+class AdminOverviewTotals(BaseModel):
+    total_users: int
+    total_buyers: int
+    total_sellers: int
+    total_shops: int
+    shops_pending_verification: int
+    total_products: int
+    total_orders: int
+    revenue_total: str
+
+
+class AdminOverviewRead(BaseModel):
+    period: str
+    start: datetime
+    metrics: AdminOverviewPeriodMetrics
+    previous: AdminOverviewPeriodMetrics
+    totals: AdminOverviewTotals
+    trend: List[AdminTrendPoint]
+
+
 class OrderNotificationRecipientCreate(BaseModel):
     email: str
     label: Optional[str] = None

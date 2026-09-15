@@ -1,12 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, DM_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import QueryProvider from "@/lib/query-provider";
-<<<<<<< Updated upstream
-=======
 import { SITE_URL } from "@/lib/site";
-import PwaHelper from "@/components/PwaHelper";
->>>>>>> Stashed changes
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -28,8 +24,6 @@ export const metadata: Metadata = {
     template: "%s | Ekshop",
   },
   description: "Shop from thousands of sellers across Kenya.",
-<<<<<<< Updated upstream
-=======
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -43,7 +37,6 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
->>>>>>> Stashed changes
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

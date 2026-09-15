@@ -265,6 +265,65 @@ export interface AdminTrendPoint {
   orders: number;
 }
 
+export interface CartAbandonedProduct {
+  product_id: string | null;
+  name: string;
+  slug: string | null;
+  units: number;
+  at_risk_revenue: string;
+}
+
+export interface TopPurchasedProduct {
+  product_id: string | null;
+  name: string;
+  slug: string | null;
+  units: number;
+  revenue: string;
+}
+
+export interface CartAbandonmentMetrics {
+  carts_touched: number;
+  converted_carts: number;
+  abandoned_carts: number;
+  cart_abandonment_rate: number;
+  abandoned_units: number;
+  at_risk_revenue: string;
+  abandoned_products: CartAbandonedProduct[];
+  top_products: TopPurchasedProduct[];
+}
+
+export interface AdminOverviewPeriodMetrics {
+  revenue: string;
+  orders: number;
+  average_order_value: string;
+  new_users: number;
+  new_buyers: number;
+  new_sellers: number;
+  new_shops: number;
+  new_products: number;
+  cart_abandonment_rate: number;
+}
+
+export interface AdminOverviewTotals {
+  total_users: number;
+  total_buyers: number;
+  total_sellers: number;
+  total_shops: number;
+  shops_pending_verification: number;
+  total_products: number;
+  total_orders: number;
+  revenue_total: string;
+}
+
+export interface AdminOverview {
+  period: string;
+  start: string;
+  metrics: AdminOverviewPeriodMetrics;
+  previous: AdminOverviewPeriodMetrics;
+  totals: AdminOverviewTotals;
+  trend: AdminTrendPoint[];
+}
+
 // Investor
 export interface TopSeller {
   shop_name: string;

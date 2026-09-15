@@ -9,7 +9,15 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies.auth import require_admin
 from app.dependencies.database import get_db
-from app.models.commerce import OrderGroup, OrderGroupStatus, Order, OrderStatus
+from app.models.commerce import (
+    Cart,
+    CartItem,
+    OrderGroup,
+    OrderGroupStatus,
+    Order,
+    OrderItem,
+    OrderStatus,
+)
 from app.models.catalog import Product
 from app.models.delivery import Delivery
 from app.models.order_notifications import OrderNotificationRecipient
@@ -17,8 +25,10 @@ from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
 from app.schemas.admin import (
+    AdminOverviewRead,
     AdminStatsRead,
     AdminTrendPoint,
+    CartAbandonmentMetrics,
     CustomerRetentionMetrics,
     HeroSlideCreate,
     HeroSlideRead,
@@ -152,6 +162,110 @@ def get_stats_trend(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    return _trend_points(db, days)
+
+
+def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOverviewPeriodMetrics:
+    figs = _period_figures(db, since, until)
+    new_buyers = (
+        db.query(func.count(User.id))
+        .filter(User.role == UserRole.buyer, User.created_at >= since, User.created_at < until)
+        .scalar() or 0
+    )
+    new_sellers = (
+        db.query(func.count(User.id))
+        .filter(User.role == UserRole.seller, User.created_at >= since, User.created_at < until)
+        .scalar() or 0
+    )
+    new_products = (
+        db.query(func.count(Product.id))
+        .filter(Product.created_at >= since, Product.created_at < until)
+        .scalar() or 0
+    )
+    sales = dashboard_metrics.get_sales_demand_metrics(db, since, until)
+    return AdminOverviewPeriodMetrics(
+        revenue=figs.revenue,
+        orders=figs.orders,
+        average_order_value=figs.average_order_value,
+        new_users=figs.new_users,
+        new_buyers=new_buyers,
+        new_sellers=new_sellers,
+        new_shops=figs.new_shops,
+        new_products=new_products,
+        cart_abandonment_rate=sales["cart_abandonment_rate"],
+    )
+
+
+@router.get("/stats/overview", response_model=AdminOverviewRead)
+def get_stats_overview(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(14, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    prev_since, prev_until = _previous_bounds(since, until)
+
+    metrics = _overview_period(db, since, until)
+    previous = _overview_period(db, prev_since, prev_until)
+
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    total_buyers = db.query(func.count(User.id)).filter(User.role == UserRole.buyer).scalar() or 0
+    total_sellers = db.query(func.count(User.id)).filter(User.role == UserRole.seller).scalar() or 0
+    total_shops = db.query(func.count(Shop.id)).scalar() or 0
+    shops_pending = db.query(func.count(Shop.id)).filter(Shop.status == ShopStatus.pending).scalar() or 0
+    total_products = db.query(func.count(Product.id)).scalar() or 0
+
+    paid_groups = db.query(OrderGroup).filter(OrderGroup.status == OrderGroupStatus.paid)
+    total_orders = paid_groups.count()
+    revenue_total = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
+
+    return AdminOverviewRead(
+        period=period or "days",
+        start=since,
+        metrics=metrics,
+        previous=previous,
+        totals=AdminOverviewTotals(
+            total_users=total_users,
+            total_buyers=total_buyers,
+            total_sellers=total_sellers,
+            total_shops=total_shops,
+            shops_pending_verification=shops_pending,
+            total_products=total_products,
+            total_orders=total_orders,
+            revenue_total=str(revenue_total),
+        ),
+        trend=_trend_points(db, 14),
+    )
+
+
+# ── Analytics ────────────────────────────────────────────────────────────────
+
+PERIOD_PATTERN = "^(today|yesterday|week|month)$"
+
+
+def _period_bounds(period: Optional[str], days: int) -> tuple[datetime, datetime]:
+    """Map a filter preset to a closed-open window [since, until) in Kenyan time."""
+    now = datetime.now(EAT)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period is None:
+        return now - timedelta(days=days), now
+    if period == "today":
+        return today_start, now
+    if period == "yesterday":
+        return today_start - timedelta(days=1), today_start
+    if period == "week":
+        return now - timedelta(days=7), now
+    return now - timedelta(days=30), now
+
+
+def _previous_bounds(since: datetime, until: datetime) -> tuple[datetime, datetime]:
+    """The like-for-like period immediately before [since, until)."""
+    span = until - since
+    return since - span, since
+
+
+def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
     since = datetime.now(timezone.utc) - timedelta(days=days - 1)
     day_col = func.date_trunc("day", OrderGroup.created_at)
 
@@ -182,46 +296,59 @@ def get_stats_trend(
     return points
 
 
-# ── Analytics ────────────────────────────────────────────────────────────────
-
-def _since(days: int) -> datetime:
-    return datetime.now(timezone.utc) - timedelta(days=days)
-
-
 @router.get("/metrics/merchants", response_model=MerchantActivityMetrics)
 def get_merchant_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(7, ge=1, le=365),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    return dashboard_metrics.get_merchant_activity_metrics(db, _since(days))
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_merchant_activity_metrics(db, since, until)
 
 
 @router.get("/metrics/sales", response_model=SalesDemandMetrics)
 def get_sales_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    return dashboard_metrics.get_sales_demand_metrics(db, _since(days))
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_sales_demand_metrics(db, since, until)
 
 
 @router.get("/metrics/retention", response_model=CustomerRetentionMetrics)
 def get_retention_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    return dashboard_metrics.get_customer_retention_metrics(db, _since(days))
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_customer_retention_metrics(db, since, until)
 
 
 @router.get("/metrics/operations", response_model=OperationsDeliveryMetrics)
 def get_operations_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    return dashboard_metrics.get_operations_delivery_metrics(db, _since(days))
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_operations_delivery_metrics(db, since, until)
+
+
+@router.get("/metrics/cart", response_model=CartAbandonmentMetrics)
+def get_cart_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_cart_abandonment_metrics(db, since, until)
 
 
 # ── Deliveries ───────────────────────────────────────────────────────────────
