@@ -179,6 +179,8 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
             billing_interval=BillingInterval.monthly,
             current_period_start=datetime.now(timezone.utc),
             current_period_end=datetime.now(timezone.utc) + timedelta(days=7),
+            reminder_7d_sent_at=None,
+            reminder_1d_sent_at=None,
         )
         db.add(subscription)
         db.flush()

@@ -203,6 +203,19 @@ def send_subscription_cancelled_email(to: str, shop) -> None:
     )
 
 
+def send_trial_expired_email(to: str, shop, plan_name: str) -> None:
+    e = html_lib.escape
+    link = f"{settings.FRONTEND_URL}/dashboard/billing"
+    _send(
+        to=to,
+        subject="Your Ekshop free trial has ended",
+        html=f"""
+            <p>Your <strong>{e(plan_name)}</strong> free trial for <strong>{e(shop.name)}</strong> has ended.</p>
+            <p>Your shop is now hidden from Ekshop. <a href="{link}">Subscribe now</a> to keep your shop live.</p>
+        """,
+    )
+
+
 def send_pos_provisioning_email(to_emails: Iterable[str], shop) -> None:
     """Notify the ops team that a new Duka Premium shop needs a Tara POS
     account created manually — there is no automated Tara integration yet."""

@@ -7,14 +7,15 @@ from app.models.shop import ShopStatus
 from app.models.subscription import BillingInterval, Subscription, SubscriptionStatus
 from app.models.user import UserStatus
 from app.services import email as email_service
-from app.services.notifications import notify_admins_of_pos_provisioning
+from app.services.notifications import notify_admins_of_pos_provisioning, _notify_seller
 import logging
 
 logger = logging.getLogger(__name__)
 
 PERIOD_DAYS_BY_INTERVAL = {BillingInterval.monthly: 30, BillingInterval.annual: 365}
-REMINDER_DAYS_BEFORE_EXPIRY = (7, 1)
+REMINDER_DAYS_BEFORE_EXPIRY = (3, 1)
 PAST_DUE_GRACE_DAYS = 3
+TRIAL_EXPIRY_NOTIFICATION_DAYS = (3, 1)
 
 
 def activate_subscription(db: Session, subscription: Subscription) -> None:
@@ -87,8 +88,9 @@ def _notify_seller(db: Session, subscription: Subscription, *, type: str, title:
 
 
 def send_renewal_reminders(db: Session) -> int:
-    """Emails sellers whose active subscription is about to expire, once per
-    reminder window per period (reminder_*_sent_at is reset on every activation)."""
+    """Emails sellers whose active or trialing subscription is about to expire,
+    once per reminder window per period (reminder_*_sent_at is reset on every
+    activation)."""
     now = datetime.now(timezone.utc)
     sent = 0
 
@@ -98,7 +100,7 @@ def send_renewal_reminders(db: Session) -> int:
         subscriptions = (
             db.query(Subscription)
             .filter(
-                Subscription.status == SubscriptionStatus.active,
+                Subscription.status.in_([SubscriptionStatus.active, SubscriptionStatus.trialing]),
                 Subscription.current_period_end > window_start,
                 Subscription.current_period_end <= window_end,
                 getattr(Subscription, column).is_(None),
@@ -113,6 +115,13 @@ def send_renewal_reminders(db: Session) -> int:
                     subscription.plan.name,
                     days_left,
                     subscription.current_period_end,
+                )
+                _notify_seller(
+                    db,
+                    subscription,
+                    type="subscription_reminder",
+                    title=f"Your Ekshop subscription renews in {days_left} day{'s' if days_left != 1 else ''}",
+                    body=f"Your {subscription.plan.name} plan for {subscription.shop.name} renews on {subscription.current_period_end.strftime('%d %b %Y')}. Renew now to avoid interruption.",
                 )
             except Exception as e:
                 logger.warning("Failed to send renewal reminder for subscription %s: %s", subscription.id, e)
@@ -142,6 +151,21 @@ def expire_overdue_subscriptions(db: Session) -> int:
             subscription.status = SubscriptionStatus.pending_payment
             subscription.shop.status = ShopStatus.pending
             subscription.shop.seller.status = UserStatus.pending
+            try:
+                email_service.send_trial_expired_email(
+                    subscription.shop.seller.email,
+                    subscription.shop,
+                    subscription.plan.name,
+                )
+            except Exception as e:
+                logger.warning("Failed to send trial-expired email for subscription %s: %s", subscription.id, e)
+            _notify_seller(
+                db,
+                subscription,
+                type="trial_expired",
+                title="Your free trial has ended",
+                body=f"Your {subscription.plan.name} trial for {subscription.shop.name} has ended. Subscribe now to keep your shop live.",
+            )
         else:
             subscription.status = SubscriptionStatus.past_due
             shop = subscription.shop
