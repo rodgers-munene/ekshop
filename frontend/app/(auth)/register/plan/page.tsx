@@ -50,6 +50,9 @@ export default function ChoosePlanPage() {
           ))}
         </div>
 
+        <p className="text-center text-sm text-muted mt-4">
+          All plans include a <strong>7-day free trial</strong>. No payment required to start selling.
+        </p>
         <p className="text-center text-sm text-muted mt-10">
           Already have an account?{" "}
           <Link href="/login" className="text-amber underline underline-offset-2">Sign in</Link>

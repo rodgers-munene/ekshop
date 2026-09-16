@@ -84,10 +84,14 @@ function RegisterPageInner() {
   const [mapOpen, setMapOpen] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [geoHint, setGeoHint] = useState("");
+  const [selectedLat, setSelectedLat] = useState<number | null>(null);
+  const [selectedLng, setSelectedLng] = useState<number | null>(null);
 
   function applyCounty(sel: GeoSelection) {
     setValue("county", sel.county, { shouldValidate: true });
     setGeoHint(sel.addressHint);
+    setSelectedLat(sel.lat);
+    setSelectedLng(sel.lng);
   }
 
   function detectLocation() {
@@ -165,6 +169,8 @@ function RegisterPageInner() {
           ...data,
           phone: normalizeKenyanPhone(data.phone) ?? data.phone,
           plan_code: data.role === "seller" ? selectedPlan?.code : undefined,
+          lat: selectedLat,
+          lng: selectedLng,
         }),
       });
       const json = await res.json();

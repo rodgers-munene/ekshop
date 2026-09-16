@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey, Index, Text
+from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey, Index, Text, Float
 from sqlalchemy.dialects.postgresql import UUID, INET
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -39,6 +39,8 @@ class User(Base):
     phone = Column(String(20))
     county = Column(String(100))
     avatar_url = Column(String(500))
+    lat = Column(Float)
+    lng = Column(Float)
     role = Column(Enum(UserRole, native_enum=False), default=UserRole.buyer, nullable=False)
     status = Column(Enum(UserStatus, native_enum=False), default=UserStatus.pending, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)

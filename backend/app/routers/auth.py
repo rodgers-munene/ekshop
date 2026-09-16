@@ -136,6 +136,8 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
         last_name=payload.last_name,
         phone=payload.phone,
         county=county,
+        lat=payload.lat,
+        lng=payload.lng,
         role=payload.role,
     )
     db.add(user)
@@ -155,6 +157,8 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
             name=payload.shop_name,
             slug=_generate_unique_shop_slug(db, payload.shop_name),
             status=ShopStatus.pending,
+            lat=payload.lat,
+            lng=payload.lng,
         )
         db.add(shop)
         try:
@@ -211,8 +215,10 @@ Confirm an email address using the token sent during registration.
 1. Looks up the token in `email_verifications`: must be unused and not expired.
 2. Marks the token as used (one-time use).
 3. **Buyers:** sets the user's status from `pending` → `active`; they can log in.
-4. **Sellers:** the account stays `pending`, because payment is what activates a
-   seller. They can sign in from here all the same — `/auth/login` issues a
+4. **Sellers on a 7-day free trial:** sets the user's status from `pending` → `active`;
+   they can log in and use the dashboard immediately.
+5. **Sellers without a trial:** the account stays `pending`, because payment is what
+   activates them. They can still sign in from here — `/auth/login` issues a
    token once the email is verified — and the dashboard renders locked until
    the subscription is paid for.
 

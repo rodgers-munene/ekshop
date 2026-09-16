@@ -11,13 +11,13 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     first_name: str
     last_name: str
-    # Required in practice: the county is validated against the counties table
-    # in the register endpoint, which has the database session this doesn't.
     phone: str
     county: str
     role: UserRole = UserRole.buyer
     shop_name: Optional[str] = None
     plan_code: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
     @field_validator("email")
     @classmethod
@@ -57,6 +57,8 @@ class UserRead(BaseModel):
     last_name: str
     phone: Optional[str]
     county: Optional[str]
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     avatar_url: Optional[str]
     role: UserRole
     status: UserStatus
@@ -76,6 +78,8 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     phone: Optional[str] = None
     county: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     avatar_url: Optional[str] = None
 
     # Same rules as registration, so a profile edit can't reintroduce the data

@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey, Integer
+from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey, Integer, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -29,6 +29,8 @@ class Shop(Base):
     banner_url = Column(String(500))
     county = Column(String(100))
     town = Column(String(100))
+    lat = Column(Float)
+    lng = Column(Float)
     ward_id = Column(UUID(as_uuid=True), ForeignKey("wards.id", ondelete="SET NULL"))
     exact_location = Column(String(255))
     phone = Column(String(20))
