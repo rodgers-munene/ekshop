@@ -48,10 +48,18 @@ export default async function BillingPage() {
   const needsRenewal = subscription.status !== "active";
   const remaining = daysLeft(subscription.current_period_end);
 
-  const buttonLabel = isGracePeriod ? "Activate now" : needsRenewal ? "Renew now" : "Renew early";
+  const buttonLabel = isGracePeriod
+    ? "Activate now"
+    : subscription.status === "trialing"
+      ? "Subscribe now"
+      : needsRenewal
+        ? "Renew now"
+        : "Renew early";
 
   let helpText: string;
-  if (isGracePeriod) {
+  if (subscription.status === "trialing") {
+    helpText = `Your ${subscription.plan.name} plan is in a 7-day free trial. Subscribe before ${formatDate(subscription.current_period_end)} to keep your shop live.`;
+  } else if (isGracePeriod) {
     helpText = `You have ${remaining} day${remaining === 1 ? "" : "s"} left to activate your ${subscription.plan.name} plan before it's enforced — activate now to lock it in, no need to wait.`;
   } else if (subscription.status === "cancelled") {
     helpText = "Your shop is suspended and hidden from Ekshop until you renew.";

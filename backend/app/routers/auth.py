@@ -25,7 +25,12 @@ from app.services import paystack
 from app.services.geography import resolve_county_name
 from app.services.subscriptions import activate_subscription
 from app.models.shop import Shop, ShopStatus
-from app.models.subscription import Subscription, SubscriptionPlan, SubscriptionStatus
+from app.models.subscription import (
+    BillingInterval,
+    Subscription,
+    SubscriptionPlan,
+    SubscriptionStatus,
+)
 from app.models.user import (
     EmailVerification,
     EmailVerificationPurpose,
@@ -159,12 +164,17 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
             db.rollback()
             raise HTTPException(status_code=409, detail="That shop name is taken, please try a different one")
 
-        # No Paystack transaction yet: the seller opens one by verifying their
-        # email, so a scraped or mistyped address can't reach checkout.
+        # No payment required up front: the seller gets a 7-day free trial
+        # of the chosen plan. They can use the dashboard and shop immediately
+        # after verifying their email; payment is only needed to continue
+        # after the trial ends.
         subscription = Subscription(
             shop_id=shop.id,
             plan_id=plan.id,
-            status=SubscriptionStatus.pending_payment,
+            status=SubscriptionStatus.trialing,
+            billing_interval=BillingInterval.monthly,
+            current_period_start=datetime.now(timezone.utc),
+            current_period_end=datetime.now(timezone.utc) + timedelta(days=7),
         )
         db.add(subscription)
         db.flush()
@@ -229,10 +239,16 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == verification.user_id).first()
     verification.used_at = datetime.now(timezone.utc)
 
-    # A seller stays `pending` -- payment, not verification, is what activates
-    # them. They can still sign in from here: login issues a token once the
-    # email is verified, and the dashboard renders locked until they pay.
+    # Sellers on a 7-day free trial are activated here so they can use the
+    # dashboard and shop immediately after verifying their email. Sellers
+    # without a trial stay `pending` until their first payment confirms.
     if user.role != UserRole.seller:
+        user.status = UserStatus.active
+    elif (
+        user.shop
+        and user.shop.subscription
+        and user.shop.subscription.status == SubscriptionStatus.trialing
+    ):
         user.status = UserStatus.active
 
     db.commit()

@@ -124,33 +124,40 @@ def send_renewal_reminders(db: Session) -> int:
 
 
 def expire_overdue_subscriptions(db: Session) -> int:
-    """Flips active subscriptions past their current_period_end to past_due.
-    The shop stays live during this grace window."""
+    """Flips active subscriptions past their current_period_end to past_due,
+    and flips expired trial subscriptions back to pending_payment so the
+    seller can complete payment to keep their shop live."""
     now = datetime.now(timezone.utc)
     subscriptions = (
         db.query(Subscription)
         .filter(
-            Subscription.status == SubscriptionStatus.active,
+            Subscription.status.in_([SubscriptionStatus.active, SubscriptionStatus.trialing]),
             Subscription.current_period_end < now,
         )
         .all()
     )
 
     for subscription in subscriptions:
-        subscription.status = SubscriptionStatus.past_due
-        try:
-            email_service.send_subscription_past_due_email(
-                subscription.shop.seller.email, subscription.shop, PAST_DUE_GRACE_DAYS
+        if subscription.status == SubscriptionStatus.trialing:
+            subscription.status = SubscriptionStatus.pending_payment
+            subscription.shop.status = ShopStatus.pending
+            subscription.shop.seller.status = UserStatus.pending
+        else:
+            subscription.status = SubscriptionStatus.past_due
+            shop = subscription.shop
+            try:
+                email_service.send_subscription_past_due_email(
+                    subscription.shop.seller.email, shop, PAST_DUE_GRACE_DAYS
+                )
+            except Exception as e:
+                logger.warning("Failed to send past-due email for subscription %s: %s", subscription.id, e)
+            _notify_seller(
+                db,
+                subscription,
+                type="subscription_past_due",
+                title="Your Ekshop subscription payment is overdue",
+                body=f"Renew within {PAST_DUE_GRACE_DAYS} days to keep {shop.name} live.",
             )
-        except Exception as e:
-            logger.warning("Failed to send past-due email for subscription %s: %s", subscription.id, e)
-        _notify_seller(
-            db,
-            subscription,
-            type="subscription_past_due",
-            title="Your Ekshop subscription payment is overdue",
-            body=f"Renew within {PAST_DUE_GRACE_DAYS} days to keep {subscription.shop.name} live.",
-        )
 
     return len(subscriptions)
 
