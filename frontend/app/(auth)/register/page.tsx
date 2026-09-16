@@ -102,25 +102,30 @@ function RegisterPageInner() {
     setDetecting(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const data = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-        setDetecting(false);
-        if (!data) {
-          toast.error("We couldn't pinpoint your location — use the map instead.");
-          return;
+        try {
+          const data = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          if (!data) {
+            toast.error("We couldn't pinpoint your location — use the map instead.");
+            return;
+          }
+          applyCounty({
+            lat: data.lat,
+            lng: data.lng,
+            county: data.county,
+            subcounty: data.subcounty,
+            ward: data.ward,
+            location: data.location,
+            sublocation: data.sublocation,
+            addressHint: data.address_hint,
+            countyId: data.county_id,
+            subcountyId: data.subcounty_id,
+            wardId: data.ward_id,
+          });
+        } catch {
+          toast.error("Something went wrong while detecting your location. Use the map instead.");
+        } finally {
+          setDetecting(false);
         }
-        applyCounty({
-          lat: data.lat,
-          lng: data.lng,
-          county: data.county,
-          subcounty: data.subcounty,
-          ward: data.ward,
-          location: data.location,
-          sublocation: data.sublocation,
-          addressHint: data.address_hint,
-          countyId: data.county_id,
-          subcountyId: data.subcounty_id,
-          wardId: data.ward_id,
-        });
       },
       () => {
         setDetecting(false);
@@ -370,9 +375,14 @@ function RegisterPageInner() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMapOpen(false)}>
           <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 text-center text-sm font-medium text-white">
-              Drop the pin where you live
+              Drop the pin where you live — switch between Satellite and Streets
             </p>
             <LocationPicker
+              initial={
+                selectedLat != null && selectedLng != null
+                  ? { lat: selectedLat, lng: selectedLng }
+                  : undefined
+              }
               onCancel={() => setMapOpen(false)}
               onConfirm={(sel) => {
                 applyCounty(sel);

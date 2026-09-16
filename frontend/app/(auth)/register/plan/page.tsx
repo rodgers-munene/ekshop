@@ -26,6 +26,9 @@ export default function ChoosePlanPage() {
                   Most popular
                 </span>
               )}
+              <span className="self-start text-xs font-semibold uppercase tracking-wide text-success mb-3">
+                7-day free trial
+              </span>
               <h2 className="text-xl font-bold mb-1">{plan.name}</h2>
               <p className="text-muted text-sm mb-4">{plan.tagline}</p>
               <p className="mb-6">
@@ -50,9 +53,6 @@ export default function ChoosePlanPage() {
           ))}
         </div>
 
-        <p className="text-center text-sm text-muted mt-4">
-          All plans include a <strong>7-day free trial</strong>. No payment required to start selling.
-        </p>
         <p className="text-center text-sm text-muted mt-10">
           Already have an account?{" "}
           <Link href="/login" className="text-amber underline underline-offset-2">Sign in</Link>
