@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Crosshair, Map as MapIcon, Search } from "lucide-react";
 import { MARKER_ICON, NAIROBI_CENTER, searchGeo, reverseGeocode } from "@/lib/geo";
 import type { GeoSearchResult, GeoSelection } from "@/types/interface";
+// Leaflet itself (the JS module) is loaded lazily inside the mount effect so it
+// never executes during server-side prerendering — it references `window` at
+// import time, which breaks the `/register` static export. Only its types are
+// imported here.
+import type { Map as LeafletMap, Marker, TileLayer, LeafletMouseEvent } from "leaflet";
 
 type Basemap = "hybrid" | "osm";
 
@@ -26,10 +30,11 @@ export default function LocationPicker({
   className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
-  const hybridRef = useRef<L.TileLayer | null>(null);
-  const osmRef = useRef<L.TileLayer | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const markerRef = useRef<Marker | null>(null);
+  const hybridRef = useRef<TileLayer | null>(null);
+  const osmRef = useRef<TileLayer | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const requestIdRef = useRef(0);
 
   const [basemap, setBasemap] = useState<Basemap>("hybrid");
@@ -41,42 +46,54 @@ export default function LocationPicker({
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    let disposed = false;
+    let createdMap: LeafletMap | null = null;
 
-    const map = L.map(containerRef.current, { zoomControl: false }).setView(
-      initial ? [initial.lat, initial.lng] : [NAIROBI_CENTER[0], NAIROBI_CENTER[1]],
-      initial ? 14 : 6
-    );
-    L.control.zoom({ position: "topright" }).addTo(map);
+    (async () => {
+      // @types/leaflet uses `export =`, so the namespace type has no
+      // `default`; at runtime the CJS module exposes one via bundler interop.
+      const L = (await import("leaflet")).default as typeof import("leaflet");
+      if (disposed || !containerRef.current) return;
+      leafletRef.current = L;
 
-    hybridRef.current = L.tileLayer(
-      "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-      { attribution: "© Google", maxZoom: 20 }
-    );
-    osmRef.current = L.tileLayer(
-      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      { attribution: "© OpenStreetMap", maxZoom: 19 }
-    );
-    hybridRef.current.addTo(map);
-    osmRef.current.addTo(map);
+      const map = L.map(containerRef.current, { zoomControl: false }).setView(
+        initial ? [initial.lat, initial.lng] : [NAIROBI_CENTER[0], NAIROBI_CENTER[1]],
+        initial ? 14 : 6
+      );
+      createdMap = map;
+      L.control.zoom({ position: "topright" }).addTo(map);
 
-    if (initial) {
-      const marker = L.marker([initial.lat, initial.lng], { icon: L.icon(MARKER_ICON()), draggable: true }).addTo(map);
-      markerRef.current = marker;
-      marker.on("dragend", () => {
-        const pos = marker.getLatLng();
-        placeMarker(map, pos.lat, pos.lng);
+      hybridRef.current = L.tileLayer(
+        "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+        { attribution: "© Google", maxZoom: 20 }
+      );
+      osmRef.current = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        { attribution: "© OpenStreetMap", maxZoom: 19 }
+      );
+      osmRef.current.addTo(map);
+      hybridRef.current.addTo(map);
+
+      if (initial) {
+        const marker = L.marker([initial.lat, initial.lng], { icon: L.icon(MARKER_ICON()), draggable: true }).addTo(map);
+        markerRef.current = marker;
+        marker.on("dragend", () => {
+          const pos = marker.getLatLng();
+          placeMarker(map, pos.lat, pos.lng);
+        });
+      }
+
+      map.on("click", (e: LeafletMouseEvent) => {
+        placeMarker(map, e.latlng.lat, e.latlng.lng);
+        map.flyTo(e.latlng, Math.max(map.getZoom(), 14));
       });
-    }
 
-    map.on("click", (e: L.LeafletMouseEvent) => {
-      placeMarker(map, e.latlng.lat, e.latlng.lng);
-      map.flyTo(e.latlng, Math.max(map.getZoom(), 14));
-    });
+      mapRef.current = map;
+    })();
 
-    mapRef.current = map;
     return () => {
-      map.remove();
+      disposed = true;
+      if (createdMap) createdMap.remove();
       mapRef.current = null;
       markerRef.current = null;
     };
@@ -95,7 +112,9 @@ export default function LocationPicker({
     }
   }, [basemap]);
 
-  function placeMarker(map: L.Map, lat: number, lng: number) {
+  function placeMarker(map: LeafletMap, lat: number, lng: number) {
+    const L = leafletRef.current;
+    if (!L) return;
     setPlace(null);
     if (!markerRef.current) {
       markerRef.current = L.marker([lat, lng], { icon: L.icon(MARKER_ICON()), draggable: true }).addTo(map);
