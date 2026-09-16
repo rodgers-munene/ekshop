@@ -47,7 +47,7 @@ export default function ChoosePlanPage() {
                 ))}
               </ul>
               <Link
-                href={`/register?role=seller&plan=${plan.code === "free_trial" ? "duka_starter" : plan.code}`}
+                href={`/register?role=seller&plan=${plan.code}`}
                 className="btn-accent text-center"
               >
                 {plan.code === "free_trial" ? "Start free trial" : "Get started"}
