@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "Ekshop <notifications@mail.ekshop.store>"
 
+    ORS_API_KEY: str | None = None
+    ORS_BASE_URL: str = "https://api.openrouteservice.org"
+
     # Product image storage (AWS S3): foundation only until AWS account access
     # is available; upload calls will fail until these are set.
     AWS_ACCESS_KEY_ID: str | None = None

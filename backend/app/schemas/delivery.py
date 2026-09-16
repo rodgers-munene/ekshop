@@ -29,7 +29,10 @@ class DeliveryAgentRead(BaseModel):
     email: str
     phone: str
     status: DeliveryAgentStatus
+    current_order_id: Optional[uuid.UUID]
     total_deliveries: int
+    weekly_earnings: str = "0.00"
+    monthly_earnings: str = "0.00"
     rating_avg: str
     created_at: datetime
 
@@ -112,3 +115,22 @@ class DeliverySimulationResponse(BaseModel):
     sample_cart_total: str
     live_model: str  # "geo" | "cart_total" — whichever is actually charged today
     rows: List[DeliverySimulationRow]
+
+
+class AgentStatusUpdate(BaseModel):
+    status: DeliveryAgentStatus
+
+
+class DeliveryIssueCreate(BaseModel):
+    reason: str
+    notes: Optional[str] = None
+
+
+class DeliveryIssueRead(BaseModel):
+    id: uuid.UUID
+    delivery_id: uuid.UUID
+    reason: str
+    notes: Optional[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

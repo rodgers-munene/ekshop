@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text
+from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -62,6 +62,8 @@ class Delivery(Base):
     picked_at = Column(DateTime(timezone=True))
     in_transit_at = Column(DateTime(timezone=True))
     delivered_at = Column(DateTime(timezone=True))
+    distance_km = Column(Float)
+    duration_min = Column(Float)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     order = relationship("Order", back_populates="delivery", foreign_keys=[order_id])
@@ -82,6 +84,18 @@ class DeliveryEvent(Base):
 
     delivery = relationship("Delivery", back_populates="events")
     actor = relationship("User")
+
+
+class DeliveryIssue(Base):
+    __tablename__ = "delivery_issues"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
+    reason = Column(String(100), nullable=False)
+    notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    delivery = relationship("Delivery")
 
 
 class DeliveryRateSettings(Base):

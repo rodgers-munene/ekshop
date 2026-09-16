@@ -7,23 +7,27 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import func
 
 from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.dependencies.auth import require_admin, get_current_active_user
 from app.dependencies.database import get_db
 from decimal import Decimal
 
-from app.models.delivery import DeliveryAgent, DeliveryAgentStatus, Delivery, DeliveryEvent, DeliveryStatus, ActorRole
+from app.models.delivery import DeliveryAgent, DeliveryAgentStatus, Delivery, DeliveryEvent, DeliveryIssue, DeliveryStatus, ActorRole
 from app.models.commerce import Order, OrderStatus
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User
 from app.schemas.delivery import (
     AgentLoginRequest, AgentTokenResponse,
+    AgentStatusUpdate,
     DeliveryAgentCreate, DeliveryAgentRead, DeliveryAgentListResponse,
+    DeliveryIssueCreate, DeliveryIssueRead,
     DeliveryRead, DeliveryStatusUpdate,
     DeliveryRateRead, DeliveryRateUpdate,
     DeliverySimulationRow, DeliverySimulationResponse,
 )
+from pydantic import BaseModel
 from app.services.notifications import create_notification
 from app.services.delivery_pricing import (
     get_or_create_rate_settings,
@@ -269,6 +273,103 @@ def my_deliveries(
         .order_by(Delivery.created_at.desc())
         .all()
     )
+
+
+@router.patch("/agents/me/status", response_model=DeliveryAgentRead)
+def update_my_status(
+    payload: AgentStatusUpdate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    agent.status = payload.status
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
+@router.get("/agents/me/earnings")
+def my_earnings(
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    now = datetime.now(timezone.utc)
+    week_start = now - timedelta(days=now.weekday())
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    weekly = (
+        db.query(func.count(Delivery.id))
+        .filter(
+            Delivery.agent_id == agent.id,
+            Delivery.status == DeliveryStatus.delivered,
+            Delivery.delivered_at >= week_start,
+        )
+        .scalar()
+        or 0
+    )
+    monthly = (
+        db.query(func.count(Delivery.id))
+        .filter(
+            Delivery.agent_id == agent.id,
+            Delivery.status == DeliveryStatus.delivered,
+            Delivery.delivered_at >= month_start,
+        )
+        .scalar()
+        or 0
+    )
+
+    weekly_earnings = weekly * 150
+    monthly_earnings = monthly * 150
+
+    return {
+        "total_deliveries": agent.total_deliveries,
+        "weekly_deliveries": weekly,
+        "monthly_deliveries": monthly,
+        "weekly_earnings": str(weekly_earnings),
+        "monthly_earnings": str(monthly_earnings),
+    }
+
+
+@router.get("/{delivery_id}", response_model=DeliveryRead)
+def get_delivery_detail(
+    delivery_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    delivery = (
+        db.query(Delivery)
+        .options(
+            selectinload(Delivery.order).selectinload(Order.buyer),
+            selectinload(Delivery.order).selectinload(Order.items),
+            selectinload(Delivery.order).selectinload(Order.shop),
+        )
+        .filter(Delivery.id == delivery_id, Delivery.agent_id == agent.id)
+        .first()
+    )
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    return delivery
+
+
+@router.post("/{delivery_id}/issue", response_model=DeliveryIssueRead, status_code=status.HTTP_201_CREATED)
+def report_delivery_issue(
+    delivery_id: uuid.UUID,
+    payload: DeliveryIssueCreate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    delivery = db.query(Delivery).filter(Delivery.id == delivery_id, Delivery.agent_id == agent.id).first()
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+
+    issue = DeliveryIssue(
+        delivery_id=delivery_id,
+        reason=payload.reason,
+        notes=payload.notes,
+    )
+    db.add(issue)
+    db.commit()
+    db.refresh(issue)
+    return issue
 
 
 # ── Admin: delivery fee rates ──────────────────────────────────────────────────
