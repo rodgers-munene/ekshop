@@ -14,7 +14,6 @@ import {
   OrderControlTowerRow,
   CustomerRecoveryRow,
   SupplyDemandRow,
-  PriorityAcquisitionRow,
 } from "@/types/interface";
 
 type Section = "merchants" | "sales" | "retention" | "operations" | "cart" | "merchant-master" | "order-control" | "customer-recovery" | "supply-demand";

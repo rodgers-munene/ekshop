@@ -15,25 +15,28 @@ export default function ChoosePlanPage() {
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-6">
+        <div className="grid sm:grid-cols-3 gap-6">
           {SELLER_PLANS.map((plan) => (
             <div
               key={plan.code}
-              className={`card p-8 flex flex-col ${plan.highlight ? "ring-2 ring-amber" : ""}`}
+              className={`card p-6 flex flex-col ${plan.highlight ? "ring-2 ring-amber" : ""}`}
             >
               {plan.highlight && (
                 <span className="self-start text-xs font-semibold uppercase tracking-wide text-amber mb-3">
                   Most popular
                 </span>
               )}
-              <span className="self-start text-xs font-semibold uppercase tracking-wide text-success mb-3">
-                7-day free trial
-              </span>
               <h2 className="text-xl font-bold mb-1">{plan.name}</h2>
               <p className="text-muted text-sm mb-4">{plan.tagline}</p>
               <p className="mb-6">
-                <span className="text-3xl font-bold">KES {plan.price.toLocaleString()}</span>
-                <span className="text-muted text-sm"> /month</span>
+                {plan.price === 0 ? (
+                  <span className="text-3xl font-bold">Free</span>
+                ) : (
+                  <>
+                    <span className="text-3xl font-bold">KES {plan.price.toLocaleString()}</span>
+                    <span className="text-muted text-sm"> /month</span>
+                  </>
+                )}
               </p>
               <ul className="space-y-2 mb-8 flex-1">
                 {plan.features.map((feature) => (
@@ -44,10 +47,10 @@ export default function ChoosePlanPage() {
                 ))}
               </ul>
               <Link
-                href={`/register?role=seller&plan=${plan.code}`}
+                href={`/register?role=seller&plan=${plan.code === "free_trial" ? "duka_starter" : plan.code}`}
                 className="btn-accent text-center"
               >
-                Get started
+                {plan.code === "free_trial" ? "Start free trial" : "Get started"}
               </Link>
             </div>
           ))}

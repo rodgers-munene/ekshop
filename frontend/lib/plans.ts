@@ -1,5 +1,18 @@
 export const SELLER_PLANS = [
   {
+    code: "free_trial",
+    name: "Free Trial",
+    price: 0,
+    tagline: "Try Ekshop free for 7 days.",
+    features: [
+      "Online storefront",
+      "Up to 20 products",
+      "Order management",
+      "Delivery coordination",
+    ],
+    highlight: false,
+  },
+  {
     code: "duka_starter",
     name: "Duka Starter",
     price: 500,
