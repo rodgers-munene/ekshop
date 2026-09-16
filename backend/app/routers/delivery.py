@@ -35,6 +35,7 @@ from app.services.delivery_pricing import (
     calculate_delivery_fee_from_cart_total,
     get_region,
 )
+from app.services.routing import get_route_eta_distance
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -168,6 +169,15 @@ def assign_delivery(
     if not delivery.estimated_at:
         sla_hours = get_or_create_rate_settings(db).standard_delivery_hours
         delivery.estimated_at = datetime.now(timezone.utc) + timedelta(hours=sla_hours)
+
+    if delivery.distance_km is None and order.shop and order.delivery_address:
+        shop = order.shop
+        address = order.delivery_address
+        if shop.lat and shop.lng and address.lat and address.lng:
+            route = await get_route_eta_distance(shop.lat, shop.lng, address.lat, address.lng)
+            if route["distance_km"] is not None:
+                delivery.distance_km = route["distance_km"]
+                delivery.duration_min = route["duration_min"]
 
     event = DeliveryEvent(
         delivery_id=delivery.id,

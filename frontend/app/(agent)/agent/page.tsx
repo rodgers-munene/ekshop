@@ -63,9 +63,7 @@ export default function AgentHomePage() {
     <div>
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">
-            {agent?.name ? `Mambo, ${agent.name.split(" ")[0]}` : "Mambo"}
-          </h1>
+          <h1 className="text-2xl font-bold">Mambo</h1>
           <p className="text-sm text-muted">
             {next ? "You have active deliveries" : "No active deliveries"}
           </p>
@@ -166,6 +164,11 @@ export default function AgentHomePage() {
                 }`}>
                   {STATUS_LABELS[delivery.status as keyof typeof STATUS_LABELS] ?? delivery.status}
                 </span>
+                {delivery.distance_km != null && delivery.duration_min != null && (
+                  <span className="text-xs text-muted ml-2">
+                    {delivery.distance_km} km · {Math.round(delivery.duration_min)} min
+                  </span>
+                )}
               </div>
             </Link>
           ))}

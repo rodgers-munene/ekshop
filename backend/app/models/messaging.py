@@ -1,27 +1,27 @@
 import uuid
+import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 
-def utcnow():
-    return datetime.now(timezone.utc)
+class ActorRole(str, enum.Enum):
+    customer = "customer"
+    seller = "seller"
+    agent = "agent"
+    admin = "admin"
 
 
 class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    buyer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    shop_id = Column(UUID(as_uuid=True), ForeignKey("shops.id", ondelete="CASCADE"), nullable=False)
-    last_message_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), unique=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
-    __table_args__ = (UniqueConstraint("buyer_id", "shop_id", name="uq_conversation_buyer_shop"),)
-
-    buyer = relationship("User", back_populates="conversations")
-    shop = relationship("Shop", back_populates="conversations")
+    order = relationship("Order")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
 
 
@@ -31,8 +31,8 @@ class Message(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
     sender_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    sender_type = Column(Enum(ActorRole, native_enum=False), nullable=False)
     body = Column(Text, nullable=False)
-    is_read = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")

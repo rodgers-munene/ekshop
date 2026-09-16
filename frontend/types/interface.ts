@@ -180,6 +180,8 @@ export interface Delivery {
   tracking_number?: string;
   estimated_at?: string;
   delivered_at?: string;
+  distance_km?: number;
+  duration_min?: number;
   events: DeliveryEvent[];
   order?: Order;
 }
@@ -192,6 +194,23 @@ export interface DeliveryAgent {
   status: string;
   total_deliveries: number;
   rating_avg: string;
+  created_at: string;
+}
+
+// Messaging
+export interface Conversation {
+  id: string;
+  order_id: string;
+  created_at: string;
+  messages: Message[];
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id?: string;
+  sender_type: string;
+  body: string;
   created_at: string;
 }
 

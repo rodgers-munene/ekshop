@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Delivery } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
+import MessageThread from "@/components/messaging/MessageThread";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
@@ -189,6 +190,14 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
         <p className="text-xs text-muted mb-1">Payment</p>
         <p className="text-lg font-bold text-success">Paid ✓</p>
       </div>
+
+      {/* Chat */}
+      {order && (
+        <div className="card p-5 mb-6">
+          <p className="text-xs text-muted mb-3">Messages</p>
+          <MessageThread deliveryId={delivery.id} orderId={order.id} />
+        </div>
+      )}
 
       {nextStatuses.length > 0 && (
         <div className="flex gap-3">

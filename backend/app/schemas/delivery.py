@@ -66,6 +66,8 @@ class DeliveryRead(BaseModel):
     picked_at: Optional[datetime]
     in_transit_at: Optional[datetime]
     delivered_at: Optional[datetime]
+    distance_km: Optional[float] = None
+    duration_min: Optional[float] = None
     created_at: datetime
     events: List[DeliveryEventRead] = []
     order: Optional[OrderRead] = None
