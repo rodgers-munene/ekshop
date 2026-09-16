@@ -298,6 +298,81 @@ export interface CartAbandonmentMetrics {
   top_products: TopPurchasedProduct[];
 }
 
+export interface MerchantMasterHealth {
+  merchant: string;
+  location: string;
+  category: string;
+  stage: string;
+  activity: number;
+  catalogue: number;
+  demand: number;
+  reliability: number;
+  growth: number;
+  health: number;
+  health_tier: string;
+  last_login: string | null;
+  orders_30d: number;
+  dispatch_hrs: number;
+  cancel_pct: number;
+  response_min: number;
+  next_action: string;
+  owner: string;
+}
+
+export interface OrderControlTowerRow {
+  order_id: string;
+  received: string;
+  merchant: string;
+  customer: string;
+  ack_time: string | null;
+  accepted: boolean;
+  ready_time: string | null;
+  rider_assigned: string | null;
+  pickup_time: string | null;
+  delivered_time: string | null;
+  dispatch_hrs: number;
+  delivery_hrs: number;
+  status: string;
+  exception_owner: string;
+}
+
+export interface CustomerRecoveryRow {
+  customer: string;
+  segment: string;
+  last_activity: string | null;
+  cart_value: string;
+  issue_trigger: string;
+  contact_date: string | null;
+  channel: string;
+  response: string;
+  recovered_order: boolean;
+  next_action: string;
+}
+
+export interface SupplyDemandRow {
+  category_area: string;
+  searches_views: number;
+  cart_adds: number;
+  orders: number;
+  active_shops: number;
+  products_live: number;
+  demand_score: number;
+  supply_score: number;
+  gap: number;
+  action: string;
+}
+
+export interface PriorityAcquisitionRow {
+  prospect: string;
+  category: string;
+  area: string;
+  demand_evidence: string;
+  reliability_potential: string;
+  strategic_value: string;
+  priority_score: number;
+  reason: string;
+}
+
 export interface AdminOverviewPeriodMetrics {
   revenue: string;
   orders: number;

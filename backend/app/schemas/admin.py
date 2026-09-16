@@ -201,6 +201,81 @@ class CartAbandonmentMetrics(BaseModel):
     top_products: List[TopPurchasedProduct] = []
 
 
+class MerchantMasterHealth(BaseModel):
+    merchant: str
+    location: str
+    category: str
+    stage: str
+    activity: int
+    catalogue: int
+    demand: int
+    reliability: int
+    growth: int
+    health: int
+    health_tier: str
+    last_login: Optional[datetime]
+    orders_30d: int
+    dispatch_hrs: float
+    cancel_pct: float
+    response_min: int
+    next_action: str
+    owner: str
+
+
+class OrderControlTowerRow(BaseModel):
+    order_id: str
+    received: datetime
+    merchant: str
+    customer: str
+    ack_time: Optional[datetime]
+    accepted: bool
+    ready_time: Optional[datetime]
+    rider_assigned: Optional[str]
+    pickup_time: Optional[datetime]
+    delivered_time: Optional[datetime]
+    dispatch_hrs: float
+    delivery_hrs: float
+    status: str
+    exception_owner: str
+
+
+class CustomerRecoveryRow(BaseModel):
+    customer: str
+    segment: str
+    last_activity: Optional[datetime]
+    cart_value: str
+    issue_trigger: str
+    contact_date: Optional[datetime]
+    channel: str
+    response: str
+    recovered_order: bool
+    next_action: str
+
+
+class SupplyDemandRow(BaseModel):
+    category_area: str
+    searches_views: int
+    cart_adds: int
+    orders: int
+    active_shops: int
+    products_live: int
+    demand_score: int
+    supply_score: int
+    gap: int
+    action: str
+
+
+class PriorityAcquisitionRow(BaseModel):
+    prospect: str
+    category: str
+    area: str
+    demand_evidence: str
+    reliability_potential: str
+    strategic_value: str
+    priority_score: int
+    reason: str
+
+
 class AdminOverviewPeriodMetrics(BaseModel):
     revenue: str
     orders: int

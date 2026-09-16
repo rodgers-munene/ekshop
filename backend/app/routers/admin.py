@@ -29,23 +29,24 @@ from app.schemas.admin import (
     AdminStatsRead,
     AdminTrendPoint,
     CartAbandonmentMetrics,
+    CustomerRecoveryRow,
     CustomerRetentionMetrics,
-    HeroSlideCreate,
-    HeroSlideRead,
-    HeroSlideUpdate,
-    MerchantActivityMetrics,
+    MerchantMasterHealth,
     OperationsDeliveryMetrics,
+    OrderControlTowerRow,
     OrderListResponse,
     OrderNotificationRecipientCreate,
     OrderNotificationRecipientRead,
     OrderNotificationRecipientUpdate,
     PeriodFigures,
     PeriodToDateMetrics,
+    PriorityAcquisitionRow,
     PromotionCreate,
     PromotionRead,
     PromotionUpdate,
     SalesDemandMetrics,
     ShopListResponse,
+    SupplyDemandRow,
     UserListResponse,
 )
 from app.schemas.commerce import OrderRead
@@ -349,6 +350,61 @@ def get_cart_metrics(
 ):
     since, until = _period_bounds(period, days)
     return dashboard_metrics.get_cart_abandonment_metrics(db, since, until)
+
+
+@router.get("/metrics/merchant-master-health", response_model=List[MerchantMasterHealth])
+def get_merchant_master_health(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_merchant_master_health(db, since, until)
+
+
+@router.get("/metrics/order-control-tower", response_model=List[OrderControlTowerRow])
+def get_order_control_tower(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_order_control_tower(db, since, until)
+
+
+@router.get("/metrics/customer-recovery", response_model=List[CustomerRecoveryRow])
+def get_customer_recovery(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_customer_recovery_engine(db, since, until)
+
+
+@router.get("/metrics/supply-demand", response_model=List[SupplyDemandRow])
+def get_supply_demand(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_supply_demand_matrix(db, since, until)
+
+
+@router.get("/metrics/priority-acquisition", response_model=List[PriorityAcquisitionRow])
+def get_priority_acquisition(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_priority_acquisition(db, since, until)
 
 
 # ── Deliveries ───────────────────────────────────────────────────────────────

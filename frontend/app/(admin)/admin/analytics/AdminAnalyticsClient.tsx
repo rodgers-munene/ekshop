@@ -10,12 +10,21 @@ import {
   CustomerRetentionMetrics,
   OperationsDeliveryMetrics,
   CartAbandonmentMetrics,
+  MerchantMasterHealth,
+  OrderControlTowerRow,
+  CustomerRecoveryRow,
+  SupplyDemandRow,
+  PriorityAcquisitionRow,
 } from "@/types/interface";
 
-type Section = "merchants" | "sales" | "retention" | "operations" | "cart";
+type Section = "merchants" | "sales" | "retention" | "operations" | "cart" | "merchant-master" | "order-control" | "customer-recovery" | "supply-demand";
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: "merchants", label: "Merchant Activity" },
+  { key: "merchant-master", label: "Merchant Master Health" },
+  { key: "order-control", label: "Order Control Tower" },
+  { key: "customer-recovery", label: "Customer Recovery" },
+  { key: "supply-demand", label: "Supply Demand Matrix" },
   { key: "sales", label: "Sales & Demand" },
   { key: "retention", label: "Customer Retention" },
   { key: "operations", label: "Operations & Delivery" },
@@ -38,12 +47,20 @@ export default function AdminAnalyticsClient({
   retention: initRetention,
   operations: initOperations,
   cart: initCart,
+  merchantMaster: initMerchantMaster,
+  orderControl: initOrderControl,
+  customerRecovery: initCustomerRecovery,
+  supplyDemand: initSupplyDemand,
 }: {
   merchants: MerchantActivityMetrics | null;
   sales: SalesDemandMetrics | null;
   retention: CustomerRetentionMetrics | null;
   operations: OperationsDeliveryMetrics | null;
   cart: CartAbandonmentMetrics | null;
+  merchantMaster: MerchantMasterHealth[] | null;
+  orderControl: OrderControlTowerRow[] | null;
+  customerRecovery: CustomerRecoveryRow[] | null;
+  supplyDemand: SupplyDemandRow[] | null;
 }) {
   const [period, setPeriod] = useState<PeriodKey>("month");
   const [section, setSection] = useState<Section>("merchants");
@@ -53,6 +70,10 @@ export default function AdminAnalyticsClient({
   const [retention, setRetention] = useState(initRetention);
   const [operations, setOperations] = useState(initOperations);
   const [cart, setCart] = useState(initCart);
+  const [merchantMaster, setMerchantMaster] = useState<MerchantMasterHealth[] | null>(initMerchantMaster);
+  const [orderControl, setOrderControl] = useState<OrderControlTowerRow[] | null>(initOrderControl);
+  const [customerRecovery, setCustomerRecovery] = useState<CustomerRecoveryRow[] | null>(initCustomerRecovery);
+  const [supplyDemand, setSupplyDemand] = useState<SupplyDemandRow[] | null>(initSupplyDemand);
 
   useEffect(() => {
     setLoading(true);
@@ -62,6 +83,10 @@ export default function AdminAnalyticsClient({
       fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.json()).then(setRetention),
       fetch(`/api/admin/metrics/operations?period=${period}`).then((r) => r.json()).then(setOperations),
       fetch(`/api/admin/metrics/cart?period=${period}`).then((r) => r.json()).then(setCart),
+      fetch(`/api/admin/metrics/merchant-master-health?period=${period}`).then((r) => r.json()).then(setMerchantMaster),
+      fetch(`/api/admin/metrics/order-control-tower?period=${period}`).then((r) => r.json()).then(setOrderControl),
+      fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.json()).then(setCustomerRecovery),
+      fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.json()).then(setSupplyDemand),
     ]).finally(() => setLoading(false));
   }, [period]);
 
@@ -104,6 +129,192 @@ export default function AdminAnalyticsClient({
             <StatCard label="Avg. transactions / merchant" value={merchants.avg_transactions_per_merchant} />
           </div>
         ) : <p className="text-muted text-sm">Could not load merchant metrics.</p>
+      )}
+
+      {!loading && section === "merchant-master" && (
+        merchantMaster ? (
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted border-b bg-surface">
+                  <tr>
+                    <th className="text-left py-2 px-3">Merchant</th>
+                    <th className="text-left py-2 px-3">Location</th>
+                    <th className="text-left py-2 px-3">Stage</th>
+                    <th className="text-right py-2 px-3">Activity</th>
+                    <th className="text-right py-2 px-3">Catalogue</th>
+                    <th className="text-right py-2 px-3">Demand</th>
+                    <th className="text-right py-2 px-3">Reliability</th>
+                    <th className="text-right py-2 px-3">Growth</th>
+                    <th className="text-right py-2 px-3">Health</th>
+                    <th className="text-left py-2 px-3">Tier</th>
+                    <th className="text-left py-2 px-3">Last Login</th>
+                    <th className="text-right py-2 px-3">Orders 30d</th>
+                    <th className="text-right py-2 px-3">Dispatch Hrs</th>
+                    <th className="text-right py-2 px-3">Cancel %</th>
+                    <th className="text-right py-2 px-3">Response Min</th>
+                    <th className="text-left py-2 px-3">Next Action</th>
+                    <th className="text-left py-2 px-3">Owner</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {merchantMaster.map((row, idx) => (
+                    <tr key={idx} className="border-b last:border-0">
+                      <td className="py-2 px-3 font-medium">{row.merchant}</td>
+                      <td className="py-2 px-3">{row.location}</td>
+                      <td className="py-2 px-3">{row.stage}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.activity}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.catalogue}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.demand}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.reliability}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.growth}</td>
+                      <td className="py-2 px-3 text-right tabular-nums font-bold">{row.health}</td>
+                      <td className="py-2 px-3">{row.health_tier}</td>
+                      <td className="py-2 px-3">{row.last_login ? new Date(row.last_login).toLocaleDateString() : "—"}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.orders_30d}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.dispatch_hrs}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.cancel_pct}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.response_min}</td>
+                      <td className="py-2 px-3">{row.next_action}</td>
+                      <td className="py-2 px-3">{row.owner}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : <p className="text-muted text-sm">Could not load merchant master health.</p>
+      )}
+
+      {!loading && section === "order-control" && (
+        orderControl ? (
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted border-b bg-surface">
+                  <tr>
+                    <th className="text-left py-2 px-3">Order ID</th>
+                    <th className="text-left py-2 px-3">Received</th>
+                    <th className="text-left py-2 px-3">Merchant</th>
+                    <th className="text-left py-2 px-3">Customer</th>
+                    <th className="text-left py-2 px-3">Ack Time</th>
+                    <th className="text-left py-2 px-3">Accepted</th>
+                    <th className="text-left py-2 px-3">Ready Time</th>
+                    <th className="text-left py-2 px-3">Rider Assigned</th>
+                    <th className="text-left py-2 px-3">Pickup Time</th>
+                    <th className="text-left py-2 px-3">Delivered Time</th>
+                    <th className="text-right py-2 px-3">Dispatch Hrs</th>
+                    <th className="text-right py-2 px-3">Delivery Hrs</th>
+                    <th className="text-left py-2 px-3">Status</th>
+                    <th className="text-left py-2 px-3">Exception / Owner</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orderControl.map((row) => (
+                    <tr key={row.order_id} className="border-b last:border-0">
+                      <td className="py-2 px-3 font-mono text-xs">{row.order_id.slice(0, 8)}...</td>
+                      <td className="py-2 px-3">{new Date(row.received).toLocaleString()}</td>
+                      <td className="py-2 px-3">{row.merchant}</td>
+                      <td className="py-2 px-3">{row.customer}</td>
+                      <td className="py-2 px-3">{row.ack_time ? new Date(row.ack_time).toLocaleString() : "—"}</td>
+                      <td className="py-2 px-3">{row.accepted ? "Yes" : "No"}</td>
+                      <td className="py-2 px-3">{row.ready_time ? new Date(row.ready_time).toLocaleString() : "—"}</td>
+                      <td className="py-2 px-3">{row.rider_assigned ? row.rider_assigned.slice(0, 8) : "—"}</td>
+                      <td className="py-2 px-3">{row.pickup_time ? new Date(row.pickup_time).toLocaleString() : "—"}</td>
+                      <td className="py-2 px-3">{row.delivered_time ? new Date(row.delivered_time).toLocaleString() : "—"}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.dispatch_hrs}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.delivery_hrs}</td>
+                      <td className="py-2 px-3">{row.status}</td>
+                      <td className="py-2 px-3">{row.exception_owner}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : <p className="text-muted text-sm">Could not load order control tower.</p>
+      )}
+
+      {!loading && section === "customer-recovery" && (
+        customerRecovery ? (
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted border-b bg-surface">
+                  <tr>
+                    <th className="text-left py-2 px-3">Customer</th>
+                    <th className="text-left py-2 px-3">Segment</th>
+                    <th className="text-left py-2 px-3">Last Activity</th>
+                    <th className="text-right py-2 px-3">Cart Value</th>
+                    <th className="text-left py-2 px-3">Issue / Trigger</th>
+                    <th className="text-left py-2 px-3">Contact Date</th>
+                    <th className="text-left py-2 px-3">Channel</th>
+                    <th className="text-left py-2 px-3">Response</th>
+                    <th className="text-left py-2 px-3">Recovered Order?</th>
+                    <th className="text-left py-2 px-3">Next Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerRecovery.map((row, idx) => (
+                    <tr key={idx} className="border-b last:border-0">
+                      <td className="py-2 px-3 font-medium">{row.customer}</td>
+                      <td className="py-2 px-3">{row.segment}</td>
+                      <td className="py-2 px-3">{row.last_activity ? new Date(row.last_activity).toLocaleString() : "—"}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{formatKES(row.cart_value)}</td>
+                      <td className="py-2 px-3">{row.issue_trigger}</td>
+                      <td className="py-2 px-3">{row.contact_date ? new Date(row.contact_date).toLocaleDateString() : "—"}</td>
+                      <td className="py-2 px-3">{row.channel}</td>
+                      <td className="py-2 px-3">{row.response}</td>
+                      <td className="py-2 px-3">{row.recovered_order ? "Yes" : "No"}</td>
+                      <td className="py-2 px-3">{row.next_action}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : <p className="text-muted text-sm">Could not load customer recovery data.</p>
+      )}
+
+      {!loading && section === "supply-demand" && (
+        supplyDemand ? (
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted border-b bg-surface">
+                  <tr>
+                    <th className="text-left py-2 px-3">Category / Area</th>
+                    <th className="text-right py-2 px-3">Searches / Views</th>
+                    <th className="text-right py-2 px-3">Cart Adds</th>
+                    <th className="text-right py-2 px-3">Orders</th>
+                    <th className="text-right py-2 px-3">Active Shops</th>
+                    <th className="text-right py-2 px-3">Products Live</th>
+                    <th className="text-right py-2 px-3">Demand Score</th>
+                    <th className="text-right py-2 px-3">Supply Score</th>
+                    <th className="text-right py-2 px-3">Gap</th>
+                    <th className="text-left py-2 px-3">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supplyDemand.map((row, idx) => (
+                    <tr key={idx} className="border-b last:border-0">
+                      <td className="py-2 px-3 font-medium">{row.category_area}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.searches_views}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.cart_adds}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.orders}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.active_shops}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.products_live}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.demand_score}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{row.supply_score}</td>
+                      <td className={`py-2 px-3 text-right tabular-nums font-bold ${row.gap > 0 ? "text-success" : row.gap < 0 ? "text-danger" : ""}`}>{row.gap}</td>
+                      <td className="py-2 px-3">{row.action}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : <p className="text-muted text-sm">Could not load supply demand matrix.</p>
       )}
 
       {!loading && section === "sales" && (

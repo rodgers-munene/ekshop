@@ -468,3 +468,207 @@ def get_cart_abandonment_metrics(db: Session, since: datetime, until: Optional[d
         "abandoned_products": abandoned_products,
         "top_products": top_products,
     }
+
+
+# ── Merchant Master Health ─────────────────────────────────────────────────────
+
+def get_merchant_master_health(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
+    end = _bound(since, until)
+    since_30d = datetime.now(timezone.utc) - timedelta(days=30)
+
+    shops = db.query(Shop).filter(Shop.status == ShopStatus.active).all()
+    rows = []
+    for shop in shops:
+        seller = shop.seller
+        orders_30d = (
+            db.query(func.count(Order.id))
+            .filter(Order.shop_id == shop.id, Order.created_at >= since_30d)
+            .scalar() or 0
+        )
+        last_login = seller.last_login_at if seller else None
+
+        activity = 20 if last_login and last_login >= since_30d else 0
+        catalogue = min(20, max(0, 20 - (20 - orders_30d)))
+        demand = min(20, orders_30d * 2)
+        reliability = 25
+        growth = 15
+        health = activity + catalogue + demand + reliability + growth
+        if health >= 75:
+            tier = "GREEN"
+        elif health >= 50:
+            tier = "AMBER"
+        else:
+            tier = "RED"
+
+        rows.append(
+            {
+                "merchant": shop.name,
+                "location": shop.county or "",
+                "category": "",
+                "stage": "A2" if health >= 75 else "A1" if health >= 50 else "A0",
+                "activity": activity,
+                "catalogue": catalogue,
+                "demand": demand,
+                "reliability": reliability,
+                "growth": growth,
+                "health": health,
+                "health_tier": tier,
+                "last_login": last_login,
+                "orders_30d": orders_30d,
+                "dispatch_hrs": 0.0,
+                "cancel_pct": 0.0,
+                "response_min": 0,
+                "next_action": "Keep growing" if tier == "GREEN" else "Improve catalogue" if tier == "AMBER" else "Re-engage",
+                "owner": seller.email if seller else "",
+            }
+        )
+    return rows
+
+
+# ── Order Control Tower ────────────────────────────────────────────────────────
+
+def get_order_control_tower(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
+    end = _bound(since, until)
+    orders = (
+        db.query(Order)
+        .filter(Order.created_at >= since, Order.created_at < end, Order.status != OrderStatus.pending)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+    rows = []
+    for order in orders:
+        delivery = order.delivery
+        shop = order.shop
+        buyer = order.buyer
+        dispatch_hrs = 0.0
+        delivery_hrs = 0.0
+        if delivery and delivery.picked_at and delivery.created_at:
+            dispatch_hrs = _hours_between(delivery.picked_at, delivery.created_at)
+        if delivery and delivery.delivered_at and delivery.picked_at:
+            delivery_hrs = _hours_between(delivery.delivered_at, delivery.picked_at)
+        rows.append(
+            {
+                "order_id": str(order.id),
+                "received": order.created_at,
+                "merchant": shop.name if shop else "",
+                "customer": f"{buyer.first_name} {buyer.last_name}" if buyer else "",
+                "ack_time": order.created_at,
+                "accepted": order.status != OrderStatus.pending,
+                "ready_time": None,
+                "rider_assigned": delivery.agent_id if delivery else None,
+                "pickup_time": delivery.picked_at if delivery else None,
+                "delivered_time": delivery.delivered_at if delivery else None,
+                "dispatch_hrs": round(dispatch_hrs, 2),
+                "delivery_hrs": round(delivery_hrs, 2),
+                "status": order.status.value,
+                "exception_owner": "",
+            }
+        )
+    return rows
+
+
+# ── Customer Recovery Engine ───────────────────────────────────────────────────
+
+def get_customer_recovery_engine(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
+    end = _bound(since, until)
+    buyers = (
+        db.query(User)
+        .filter(User.role == UserRole.buyer, User.created_at >= since, User.created_at < end)
+        .all()
+    )
+    rows = []
+    for buyer in buyers:
+        orders = (
+            db.query(OrderGroup)
+            .filter(OrderGroup.buyer_id == buyer.id, OrderGroup.created_at >= since, OrderGroup.created_at < end)
+            .all()
+        )
+        if not orders:
+            continue
+        last_order = max(orders, key=lambda o: o.created_at)
+        cart_value = last_order.total or "0.00"
+        rows.append(
+            {
+                "customer": f"{buyer.first_name} {buyer.last_name}",
+                "segment": "repeat" if len(orders) > 1 else "new",
+                "last_activity": last_order.created_at,
+                "cart_value": cart_value,
+                "issue_trigger": "",
+                "contact_date": None,
+                "channel": "",
+                "response": "",
+                "recovered_order": len(orders) > 1,
+                "next_action": "Upsell" if len(orders) > 1 else "Follow up",
+            }
+        )
+    return rows
+
+
+# ── Supply Demand Matrix ───────────────────────────────────────────────────────
+
+def get_supply_demand_matrix(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
+    end = _bound(since, until)
+    categories = (
+        db.query(Product.category_id, func.count(Product.id).label("products_live"))
+        .filter(Product.status == "active")
+        .group_by(Product.category_id)
+        .all()
+    )
+    rows = []
+    for cat_id, products_live in categories:
+        orders_in_period = (
+            db.query(func.count(OrderItem.id))
+            .join(Order, Order.id == OrderItem.order_id)
+            .join(OrderGroup, OrderGroup.id == Order.group_id)
+            .filter(
+                OrderGroup.status == OrderGroupStatus.paid,
+                OrderGroup.created_at >= since,
+                OrderGroup.created_at < end,
+                Product.category_id == cat_id,
+            )
+            .scalar() or 0
+        )
+        active_shops = (
+            db.query(func.count(func.distinct(Product.shop_id)))
+            .filter(Product.category_id == cat_id, Product.status == "active")
+            .scalar() or 0
+        )
+        demand_score = min(100, orders_in_period * 5)
+        supply_score = min(100, active_shops * 10)
+        gap = demand_score - supply_score
+    rows.append(
+        {
+            "category_area": str(cat_id),
+            "searches_views": 0,
+            "cart_adds": 0,
+            "orders": orders_in_period,
+            "active_shops": active_shops,
+            "products_live": products_live,
+            "demand_score": demand_score,
+            "supply_score": supply_score,
+            "gap": gap,
+            "action": "Acquire supply" if gap > 0 else "Stable",
+        }
+    )
+    return rows
+
+
+def get_priority_acquisition(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
+    end = _bound(since, until)
+    matrix = get_supply_demand_matrix(db, since, end)
+    rows = []
+    for row in matrix:
+        if row["gap"] > 0:
+            rows.append(
+                {
+                    "prospect": row["category_area"],
+                    "category": row["category_area"],
+                    "area": "",
+                    "demand_evidence": f"Demand score {row['demand_score']} vs supply {row['supply_score']}",
+                    "reliability_potential": "Medium",
+                    "strategic_value": "High" if row["gap"] > 50 else "Medium",
+                    "priority_score": row["gap"],
+                    "reason": f"Gap of {row['gap']} points between demand and supply",
+                }
+            )
+    return rows
