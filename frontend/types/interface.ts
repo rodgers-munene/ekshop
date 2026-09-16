@@ -37,6 +37,9 @@ export interface Shop {
   rating_avg: string;
   rating_count: number;
   total_sales: string;
+  lat?: number;
+  lng?: number;
+  distance_km?: number;
 }
 
 export type SubscriptionStatus = "pending_payment" | "active" | "cancelled" | "past_due" | "trialing";
@@ -145,6 +148,9 @@ export interface Order {
     town: string;
     exact_location?: string;
     apartment?: string;
+    lat?: number;
+    lng?: number;
+    sublocation?: string;
   };
 }
 

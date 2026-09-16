@@ -6,6 +6,7 @@ import { Package, MapPin, Phone, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Delivery } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
+import ReadOnlyMap from "@/components/geo/ReadOnlyMap";
 
 const DELIVERY_TRANSITIONS: Record<string, string[]> = {
   assigned: ["picked", "cancelled"],
@@ -146,6 +147,11 @@ function DeliveryCard({
             <MapPin size={13} />
             {[address.exact_location || address.town, address.county].filter(Boolean).join(", ")}
           </p>
+          {address.lat && address.lng && (
+            <div className="mt-2">
+              <ReadOnlyMap lat={address.lat} lng={address.lng} height="h-40" />
+            </div>
+          )}
         </div>
       )}
 
