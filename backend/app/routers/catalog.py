@@ -203,6 +203,33 @@ def delete_category(
 # PRODUCTS
 
 # seller creates a product
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug[:200] or "product"
+
+
+def _unique_product_slug(db: Session, shop_id: uuid.UUID, source: str) -> str:
+    """A slug that is free within this shop.
+
+    Slugs are unique per shop, so a seller listing a second "Smocha" used to hit
+    a raw integrity error. Suffixing keeps the first-come slug stable and lets
+    the duplicate through under -2, -3, and so on.
+    """
+    base = _slugify(source)
+    taken = {
+        row[0]
+        for row in db.query(Product.slug)
+        .filter(Product.shop_id == shop_id, Product.slug.like(f"{base}%"))
+        .all()
+    }
+    if base not in taken:
+        return base
+    suffix = 2
+    while f"{base}-{suffix}" in taken:
+        suffix += 1
+    return f"{base}-{suffix}"
+
+
 @products_router.post(
     "/",
     response_model=ProductRead,
@@ -232,6 +259,9 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), curren
             )
 
     product_data = payload.model_dump(exclude={"variants"})
+    product_data["slug"] = _unique_product_slug(
+        db, shop.id, product_data.get("slug") or payload.name
+    )
     product = Product(**product_data, shop_id=shop.id)
     
     db.add(product)

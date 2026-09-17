@@ -85,7 +85,10 @@ class ProductVariantRead(BaseModel):
 class ProductCreate(BaseModel):
     category_id: Optional[uuid.UUID] = None
     name: str
-    slug: str
+    # Derived from the name when the client doesn't send one, and de-duplicated
+    # within the shop on create — sellers shouldn't have to know what a slug is,
+    # or be blocked because they already list something with the same name.
+    slug: Optional[str] = None
     description: Optional[str] = None
     price: str
     compare_price: Optional[str] = None

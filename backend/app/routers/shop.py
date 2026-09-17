@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Query
 import uuid
 from typing import List, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import update, func
 
 from app.dependencies.auth import (
@@ -89,6 +89,50 @@ def get_my_shop(
         raise HTTPException(status_code=404, detail="You don't have a shop yet")
 
     return shop
+
+
+@router.get(
+    "/me/products",
+    response_model=ProductListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List my own products, including drafts",
+)
+def get_my_products(
+    status_filter: Optional[ProductStatus] = Query(None, alias="status"),
+    q: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_allow_unpaid_seller),
+):
+    """A seller's own catalogue, as the seller sees it.
+
+    Deliberately not the public `/{slug}/products`: that one hides everything
+    that isn't `active` on an `active` shop, which meant a seller who saved a
+    draft — or whose shop was still awaiting verification — watched their
+    product count go up on the dashboard while the Products page stayed empty,
+    with nowhere to open what they'd just saved.
+    """
+    shop = db.query(Shop).filter(Shop.seller_id == current_user.id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="You don't have a shop yet")
+
+    query = db.query(Product).filter(Product.shop_id == shop.id)
+    if status_filter:
+        query = query.filter(Product.status == status_filter)
+    if q:
+        query = query.filter(Product.name.ilike(f"%{q}%"))
+
+    total = query.count()
+    products = (
+        query.options(selectinload(Product.images))
+        .order_by(Product.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return ProductListResponse(total=total, page=page, limit=limit, results=products)
 
 
 @router.get(
