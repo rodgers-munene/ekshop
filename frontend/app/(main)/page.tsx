@@ -316,9 +316,6 @@ export default async function HomePage() {
       {/* ── Flash Deals (countdown) ─────────────────────────── */}
       {curatedDeals.length > 0 && <FlashDeals deals={curatedDeals} />}
 
-      {/* ── Today's Deals ────────────────────────────────────── */}
-      <ProductRail title="Today's Deals" products={dealProducts} viewAllHref="/products" />
-
       {/* ── Personalized picks, only once we have a buyer to personalize for ── */}
       {activityProducts.length > 0 && (
         <ProductRail title="Based on Your Activity" products={activityProducts} viewAllHref="/products" />

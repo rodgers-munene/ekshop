@@ -485,6 +485,20 @@ def delete_hero_slide(slide_id: uuid.UUID, db: Session = Depends(get_db), _: Use
 
 # ── Curated deals ────────────────────────────────────────────────────────────
 
+def _deal_day_window() -> tuple[datetime, datetime]:
+    """Today's deal window: midnight to midnight, Kenyan time.
+
+    Deals are a daily set — the admin's job is to pick the day's products, not to
+    schedule each one — so every deal added today shares one boundary and the
+    homepage countdown is the time left in the day. Computed here rather than in
+    the browser so the deadline is the same for every admin and every shopper,
+    whatever their device clock says.
+    """
+    now = datetime.now(EAT)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start.astimezone(timezone.utc), (start + timedelta(days=1)).astimezone(timezone.utc)
+
+
 def _promotion_query(db: Session):
     return db.query(Promotion).options(
         selectinload(Promotion.product).selectinload(Product.images),
@@ -503,7 +517,15 @@ def create_deal(payload: PromotionCreate, db: Session = Depends(get_db), _: User
     product = db.query(Product).filter(Product.id == payload.product_id).first()
     if not product:
         raise HTTPException(404, "Product not found")
-    deal = Promotion(**payload.model_dump())
+    data = payload.model_dump()
+    # An admin who just picks a product gets today's window. Explicit dates are
+    # still honoured so a deal can be scheduled ahead if that's ever needed.
+    day_start, day_end = _deal_day_window()
+    if data.get("starts_at") is None:
+        data["starts_at"] = day_start
+    if data.get("ends_at") is None:
+        data["ends_at"] = day_end
+    deal = Promotion(**data)
     db.add(deal)
     db.commit()
     return _promotion_query(db).filter(Promotion.id == deal.id).first()
@@ -521,6 +543,23 @@ def update_deal(
         raise HTTPException(404, "Deal not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(deal, field, value)
+    db.commit()
+    return _promotion_query(db).filter(Promotion.id == deal_id).first()
+
+
+@router.post("/deals/{deal_id}/run-today", response_model=PromotionRead)
+def run_deal_today(deal_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Put yesterday's deal back on today's list.
+
+    Curating a fresh set every morning is the point, but a lot of days the same
+    products run again — this turns that into one click instead of deleting and
+    re-adding the deal.
+    """
+    deal = db.query(Promotion).filter(Promotion.id == deal_id).first()
+    if not deal:
+        raise HTTPException(404, "Deal not found")
+    deal.starts_at, deal.ends_at = _deal_day_window()
+    deal.is_active = True
     db.commit()
     return _promotion_query(db).filter(Promotion.id == deal_id).first()
 

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Zap } from "lucide-react";
 import { Promotion } from "@/types/interface";
-import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
+import ProductCard from "@/components/ProductCard";
+import CardRail from "@/components/CardRail";
 
 function discountPct(p: Promotion): number | null {
   const product = p.product;
@@ -15,131 +15,107 @@ function discountPct(p: Promotion): number | null {
   return Math.round(((comp - price) / comp) * 100);
 }
 
-function timeLeft(target: number) {
-  const diff = Math.max(0, target - Date.now());
-  const totalSeconds = Math.floor(diff / 1000);
-  return {
-    days: Math.floor(totalSeconds / 86400),
-    hours: Math.floor((totalSeconds % 86400) / 3600),
-    minutes: Math.floor((totalSeconds % 3600) / 60),
-    seconds: totalSeconds % 60,
-  };
-}
+// "loading" covers the server render and the first client paint, where there is
+// no safe value to show: the server's clock is not the viewer's, so rendering a
+// real countdown on both sides guarantees a hydration mismatch.
+type Tick =
+  | { status: "loading" }
+  | { status: "none" }
+  | { status: "live"; ms: number };
 
-export default function FlashDeals({ deals }: { deals: Promotion[] }) {
-  const [now, setNow] = useState(Date.now());
-
-  const target = useMemo(() => {
-    const upcoming = deals
-      .map((d) => (d.ends_at ? new Date(d.ends_at).getTime() : null))
-      .filter((t): t is number => t !== null && t > Date.now());
-    return upcoming.length ? Math.min(...upcoming) : Date.now() + 24 * 60 * 60 * 1000;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deals]);
+function Countdown({ endTimes }: { endTimes: number[] }) {
+  const [tick, setTick] = useState<Tick>({ status: "loading" });
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    function read(): Tick {
+      const now = Date.now();
+      // The soonest deadline still ahead of us — so when one deal expires the
+      // clock rolls onto the next one instead of sticking at 00:00:00.
+      const next = endTimes.find((t) => t > now);
+      return next === undefined ? { status: "none" } : { status: "live", ms: next - now };
+    }
+
+    setTick(read());
+    const id = setInterval(() => setTick(read()), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [endTimes]);
 
-  if (deals.length === 0) return null;
+  // Nothing in this batch ever expires, so there is no honest deadline to show.
+  if (tick.status === "none") return null;
 
-  const { days, hours, minutes, seconds } = timeLeft(target);
+  const totalSeconds = tick.status === "live" ? Math.floor(tick.ms / 1000) : 0;
+  const days = Math.floor(totalSeconds / 86400);
   const unit = (v: number) => String(v).padStart(2, "0");
 
   const pills = [
-    { label: "Days", value: unit(days) },
-    { label: "Hrs", value: unit(hours) },
-    { label: "Min", value: unit(minutes) },
-    { label: "Sec", value: unit(seconds) },
+    ...(days > 0 ? [{ label: "Days", value: unit(days) }] : []),
+    { label: "Hrs", value: unit(Math.floor((totalSeconds % 86400) / 3600)) },
+    { label: "Min", value: unit(Math.floor((totalSeconds % 3600) / 60)) },
+    { label: "Sec", value: unit(totalSeconds % 60) },
   ];
 
   return (
-    <section className="px-4 md:px-6 py-4">
-      <div className="card p-5 border-t-4 border-t-amber overflow-hidden">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <h2 className="flex items-center gap-2 text-lg font-extrabold">
-            <Zap size={20} className="text-amber fill-current" />
-            Flash Deals
-          </h2>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-widest text-muted">
-              Ends in
-            </span>
-            <div className="flex items-center gap-1.5">
-              {pills.map((p) => (
-                <div
-                  key={p.label}
-                  className="flex flex-col items-center min-w-12 px-1.5 py-1 rounded-md bg-navy text-white"
-                >
-                  <span className="text-sm font-bold tabular-nums leading-none">{p.value}</span>
-                  <span className="text-[9px] uppercase tracking-wider text-white/60 mt-0.5">
-                    {p.label}
-                  </span>
-                </div>
-              ))}
-            </div>
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+        Ends in
+      </span>
+      <div className="flex items-center gap-1">
+        {pills.map((p) => (
+          <div
+            key={p.label}
+            className="flex items-baseline gap-0.5 px-1.5 py-0.5 rounded bg-navy text-white"
+            // Until the client clock has been read the digits would be a guess,
+            // so they are held invisible rather than rendered wrong.
+            style={{ visibility: tick.status === "loading" ? "hidden" : undefined }}
+          >
+            <span className="text-xs font-bold tabular-nums leading-none">{p.value}</span>
+            <span className="text-[9px] uppercase text-white/60">{p.label}</span>
           </div>
-        </div>
-
-        {/* Deal grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {deals.slice(0, 4).map((deal) => {
-            const product = deal.product;
-            if (!product) return null;
-            const pct = discountPct(deal);
-            const image =
-              product.images?.find((img) => img.is_primary) ?? product.images?.[0];
-            return (
-              <Link
-                key={deal.id}
-                href={`/products/${product.slug}`}
-                className="group flex flex-col overflow-hidden rounded-lg border border-border hover:border-amber hover:shadow-sm transition-all"
-              >
-                <div className="relative aspect-square bg-white overflow-hidden">
-                  {image && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={resolveImageUrl(image.url)}
-                      alt=""
-                      className="w-full h-full object-contain p-3 group-hover:scale-105 transition-transform duration-300"
-                    />
-                  )}
-                  {pct && (
-                    <span className="absolute top-2 left-2 bg-danger text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide">
-                      -{pct}%
-                    </span>
-                  )}
-                </div>
-                <div className="p-3 flex flex-col gap-1 flex-1">
-                  <h3 className="text-sm font-medium leading-tight line-clamp-2">
-                    {decodeHtml(product.name)}
-                  </h3>
-                  <div className="flex items-baseline gap-x-2 mt-auto pt-1">
-                    <span className="font-bold">{formatKES(product.price)}</span>
-                    {product.compare_price &&
-                      parseFloat(product.compare_price) > parseFloat(product.price) && (
-                        <span className="text-xs text-muted line-through">
-                          {formatKES(product.compare_price)}
-                        </span>
-                      )}
-                  </div>
-                  <span className="text-xs text-danger font-semibold">
-                    {deal.label || "Limited time"}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-
-        <div className="mt-4 text-right">
-          <Link href="/products" className="text-xs text-amber hover:underline">
-            Shop all flash deals →
-          </Link>
-        </div>
+        ))}
       </div>
-    </section>
+    </div>
+  );
+}
+
+export default function FlashDeals({ deals }: { deals: Promotion[] }) {
+  // Pure derivation — no Date.now() during render, so the server and the client
+  // agree on the markup and only the effect above reads a clock.
+  const endTimes = useMemo(
+    () =>
+      deals
+        .map((d) => (d.ends_at ? new Date(d.ends_at).getTime() : NaN))
+        .filter((t) => Number.isFinite(t))
+        .sort((a, b) => a - b),
+    [deals],
+  );
+
+  const products = deals
+    .map((deal) => ({ deal, product: deal.product }))
+    .filter((d): d is { deal: Promotion; product: NonNullable<Promotion["product"]> } =>
+      Boolean(d.product),
+    );
+
+  if (products.length === 0) return null;
+
+  return (
+    <CardRail
+      title={
+        <span className="flex items-center gap-2">
+          <Zap size={18} className="text-amber fill-current" />
+          Flash Deals
+        </span>
+      }
+      accessory={<Countdown endTimes={endTimes} />}
+      viewAllHref="/products"
+    >
+      {products.map(({ deal, product }) => {
+        const pct = discountPct(deal);
+        return (
+          <div key={deal.id} className="w-36 sm:w-44 shrink-0">
+            <ProductCard product={product} badge={pct ? `-${pct}%` : deal.label || undefined} />
+          </div>
+        );
+      })}
+    </CardRail>
   );
 }

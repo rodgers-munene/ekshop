@@ -33,7 +33,14 @@ function ProductImage({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({
+  product,
+  badge,
+}: {
+  product: Product;
+  /** Overrides the default "Deal" corner label, e.g. "-30%" on a flash deal. */
+  badge?: string;
+}) {
   const primaryImage = product.images?.find((i) => i.is_primary) ?? product.images?.[0];
   const hasDiscount =
     product.compare_price &&
@@ -69,9 +76,9 @@ export default function ProductCard({ product }: { product: Product }) {
           alt={product.name}
         />
 
-        {hasDiscount && (
+        {(badge || hasDiscount) && (
           <span className="absolute top-2 left-2 bg-danger text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide">
-            Deal
+            {badge ?? "Deal"}
           </span>
         )}
 
