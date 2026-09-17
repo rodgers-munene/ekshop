@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Package, MapPin, Phone, Loader2 } from "lucide-react";
+import { Package, MapPin, Phone, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
-import { Delivery } from "@/types/interface";
+import { Delivery, OrderItem } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 
 const DELIVERY_TRANSITIONS: Record<string, string[]> = {
@@ -31,9 +31,13 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-danger/10 text-danger",
 };
 
+/** Which delivery is being updated, and to what — so only the button that was
+    actually tapped shows a spinner. */
+type Pending = { id: string; status: string } | null;
+
 export default function AgentDeliveriesPage() {
   const queryClient = useQueryClient();
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [pending, setPending] = useState<Pending>(null);
 
   const { data: deliveries = [], isLoading } = useQuery({
     queryKey: ["agent-deliveries"],
@@ -42,7 +46,7 @@ export default function AgentDeliveriesPage() {
   });
 
   async function advance(deliveryId: string, status: string) {
-    setUpdatingId(deliveryId);
+    setPending({ id: deliveryId, status });
     try {
       const res = await fetch(`/api/agent/deliveries/${deliveryId}/status`, {
         method: "PATCH",
@@ -59,7 +63,7 @@ export default function AgentDeliveriesPage() {
     } catch {
       toast.error("Something went wrong. Try again.");
     } finally {
-      setUpdatingId(null);
+      setPending(null);
     }
   }
 
@@ -90,7 +94,8 @@ export default function AgentDeliveriesPage() {
             <DeliveryCard
               key={delivery.id}
               delivery={delivery}
-              updating={updatingId === delivery.id}
+              pendingStatus={pending?.id === delivery.id ? pending.status : null}
+              busy={pending?.id === delivery.id}
               onAdvance={(status) => advance(delivery.id, status)}
             />
           ))}
@@ -99,7 +104,7 @@ export default function AgentDeliveriesPage() {
             <>
               <h2 className="text-sm font-bold text-muted mt-8 mb-2">Completed</h2>
               {past.map((delivery) => (
-                <DeliveryCard key={delivery.id} delivery={delivery} updating={false} onAdvance={() => {}} />
+                <DeliveryCard key={delivery.id} delivery={delivery} pendingStatus={null} busy={false} onAdvance={() => {}} />
               ))}
             </>
           )}
@@ -109,18 +114,58 @@ export default function AgentDeliveriesPage() {
   );
 }
 
+/**
+ * One line of an order, written so the quantity cannot be read as part of the
+ * product name.
+ *
+ * The old "2× Smocha + Chips + Club Soda Combo" put the multiplier flush
+ * against a name that itself lists several things, and an agent read it as two
+ * smochas instead of two whole combos. The count now sits in its own box away
+ * from the text, the name wraps in full instead of being truncated, and
+ * anything above one is spelled out underneath.
+ */
+function ItemLine({ item }: { item: OrderItem }) {
+  const multiple = item.quantity > 1;
+
+  return (
+    <li className="flex items-start gap-3 py-2.5">
+      <span
+        className={`shrink-0 flex flex-col items-center justify-center w-11 h-11 rounded-lg font-bold leading-none ${
+          multiple ? "bg-navy text-white" : "bg-surface text-muted"
+        }`}
+      >
+        <span className="text-base tabular-nums">{item.quantity}</span>
+        <span className="text-[9px] font-semibold uppercase tracking-wide opacity-70">qty</span>
+      </span>
+
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-ink break-words">{item.product_snapshot.name}</p>
+        {multiple && (
+          <p className="text-xs text-amber font-medium mt-0.5">
+            Take {item.quantity} of this whole item — everything the name lists, {item.quantity} times.
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}
+
 function DeliveryCard({
   delivery,
-  updating,
+  pendingStatus,
+  busy,
   onAdvance,
 }: {
   delivery: Delivery;
-  updating: boolean;
+  pendingStatus: string | null;
+  busy: boolean;
   onAdvance: (status: string) => void;
 }) {
   const order = delivery.order;
   const address = order?.delivery_address;
   const nextStatuses = DELIVERY_TRANSITIONS[delivery.status] ?? [];
+  const items = order?.items ?? [];
+  const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <div className="card p-4">
@@ -149,14 +194,21 @@ function DeliveryCard({
         </div>
       )}
 
-      {order?.items && order.items.length > 0 && (
-        <ul className="text-sm text-muted mb-3 space-y-0.5">
-          {order.items.map((item) => (
-            <li key={item.id}>
-              {item.quantity}× {item.product_snapshot.name}
-            </li>
-          ))}
-        </ul>
+      {items.length > 0 && (
+        <div className="mb-3 rounded-lg border border-border bg-surface/40 px-3 py-1">
+          <div className="flex items-center justify-between py-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">To deliver</p>
+            <p className="text-[11px] font-semibold text-muted tabular-nums">
+              {totalUnits} {totalUnits === 1 ? "unit" : "units"}
+              {items.length !== totalUnits && ` · ${items.length} ${items.length === 1 ? "line" : "lines"}`}
+            </p>
+          </div>
+          <ul className="divide-y divide-border">
+            {items.map((item) => (
+              <ItemLine key={item.id} item={item} />
+            ))}
+          </ul>
+        </div>
       )}
 
       {order && (
@@ -165,20 +217,34 @@ function DeliveryCard({
 
       {nextStatuses.length > 0 && (
         <div className="flex gap-2 pt-2 border-t border-border">
-          {nextStatuses.map((status) => (
-            <button
-              key={status}
-              onClick={() => onAdvance(status)}
-              disabled={updating}
-              className={`text-sm font-medium px-3 py-1.5 rounded-md disabled:opacity-50 ${
-                status === "cancelled"
-                  ? "text-danger hover:bg-danger/10"
-                  : "btn-accent"
-              }`}
-            >
-              {updating ? "..." : `Mark ${STATUS_LABELS[status]}`}
-            </button>
-          ))}
+          {nextStatuses.map((status) => {
+            const isPending = pendingStatus === status;
+            return (
+              <button
+                key={status}
+                onClick={() => onAdvance(status)}
+                disabled={busy}
+                aria-busy={isPending}
+                className={`inline-flex items-center justify-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md transition-all active:scale-95 disabled:opacity-60 disabled:cursor-wait ${
+                  status === "cancelled"
+                    ? "text-danger hover:bg-danger/10"
+                    : "btn-accent"
+                }`}
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Marking…
+                  </>
+                ) : (
+                  <>
+                    {status !== "cancelled" && <Check size={14} />}
+                    Mark {STATUS_LABELS[status]}
+                  </>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
