@@ -32,11 +32,49 @@ export interface Shop {
   logo_url?: string;
   banner_url?: string;
   county?: string;
+  town?: string;
+  status?: "pending" | "active" | "suspended";
   is_verified: boolean;
   is_featured: boolean;
   rating_avg: string;
   rating_count: number;
   total_sales: string;
+  created_at?: string;
+}
+
+/** Response of GET /api/admin/shops/[shopId] — the admin seller profile. */
+export interface AdminShopDetail {
+  shop: Shop;
+  owner: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string | null;
+    county: string | null;
+    status: string;
+    created_at: string;
+    last_login_at: string | null;
+  } | null;
+  subscription: {
+    plan_name: string | null;
+    plan_code: string | null;
+    status: string;
+    billing_interval: string;
+    max_products: number | null;
+    current_period_end: string | null;
+    awaiting_first_payment: boolean;
+  } | null;
+  description: string | null;
+  phone: string | null;
+  exact_location: string | null;
+  total_products: number;
+  active_products: number;
+  draft_products: number;
+  total_orders: number;
+  revenue: string;
+  payment_methods: string[];
+  recent_products: Product[];
 }
 
 export type SubscriptionStatus = "pending_payment" | "active" | "cancelled" | "past_due" | "trialing";

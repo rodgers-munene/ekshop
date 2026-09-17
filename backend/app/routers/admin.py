@@ -10,13 +10,16 @@ from sqlalchemy.orm import Session, selectinload
 from app.dependencies.auth import require_admin
 from app.dependencies.database import get_db
 from app.models.commerce import OrderGroup, OrderGroupStatus, Order, OrderStatus
-from app.models.catalog import Product
+from app.models.catalog import Product, ProductStatus
 from app.models.delivery import Delivery
 from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
 from app.schemas.admin import (
+    AdminShopDetailRead,
+    AdminShopOwnerRead,
+    AdminShopSubscriptionRead,
     AdminStatsRead,
     AdminTrendPoint,
     CustomerRetentionMetrics,
@@ -264,6 +267,86 @@ def list_shops(
     skip = (page - 1) * limit
     results = q.order_by(Shop.created_at.desc()).offset(skip).limit(limit).all()
     return ShopListResponse(total=total, page=page, limit=limit, results=results)
+
+
+@router.get("/shops/{shop_id}", response_model=AdminShopDetailRead)
+def get_shop_detail(
+    shop_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Everything an admin needs to judge one seller before verifying or
+    suspending them: who owns the shop, what they're paying for, and what
+    they've actually listed and sold."""
+    shop = (
+        db.query(Shop)
+        .options(
+            selectinload(Shop.seller),
+            selectinload(Shop.payment_methods),
+            selectinload(Shop.subscription),
+        )
+        .filter(Shop.id == shop_id)
+        .first()
+    )
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+
+    counts = dict(
+        db.query(Product.status, func.count(Product.id))
+        .filter(Product.shop_id == shop.id)
+        .group_by(Product.status)
+        .all()
+    )
+
+    total_orders, revenue = (
+        db.query(
+            func.count(Order.id),
+            func.coalesce(func.sum(cast(Order.total, Numeric)), 0),
+        )
+        .filter(
+            Order.shop_id == shop.id,
+            Order.status.notin_([OrderStatus.cancelled, OrderStatus.refunded]),
+        )
+        .one()
+    )
+
+    recent_products = (
+        db.query(Product)
+        .options(selectinload(Product.images))
+        .filter(Product.shop_id == shop.id)
+        .order_by(Product.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    subscription = None
+    if shop.subscription:
+        sub = shop.subscription
+        subscription = AdminShopSubscriptionRead(
+            plan_name=sub.plan.name if sub.plan else None,
+            plan_code=sub.plan.code if sub.plan else None,
+            status=sub.status.value,
+            billing_interval=sub.billing_interval.value,
+            max_products=sub.plan.max_products if sub.plan else None,
+            current_period_end=sub.current_period_end,
+            awaiting_first_payment=sub.awaiting_first_payment,
+        )
+
+    return AdminShopDetailRead(
+        shop=shop,
+        owner=AdminShopOwnerRead.model_validate(shop.seller) if shop.seller else None,
+        subscription=subscription,
+        description=shop.description,
+        phone=shop.phone,
+        exact_location=shop.exact_location,
+        total_products=sum(counts.values()),
+        active_products=counts.get(ProductStatus.active, 0),
+        draft_products=counts.get(ProductStatus.draft, 0),
+        total_orders=total_orders,
+        revenue=str(Decimal(revenue).quantize(Decimal("0.01"))),
+        payment_methods=[m.method for m in shop.payment_methods],
+        recent_products=recent_products,
+    )
 
 
 @router.patch("/shops/{shop_id}/verify", response_model=ShopRead)

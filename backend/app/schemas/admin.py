@@ -118,6 +118,49 @@ class ShopListResponse(BaseModel):
     results: List[ShopRead]
 
 
+class AdminShopOwnerRead(BaseModel):
+    """The seller behind a shop, as admins need to see them — enough to make a
+    verification call and to reach the person if something is off."""
+
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+    email: str
+    phone: Optional[str]
+    county: Optional[str]
+    status: str
+    created_at: datetime
+    last_login_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
+class AdminShopSubscriptionRead(BaseModel):
+    plan_name: Optional[str]
+    plan_code: Optional[str]
+    status: str
+    billing_interval: str
+    max_products: Optional[int]
+    current_period_end: Optional[datetime]
+    awaiting_first_payment: bool
+
+
+class AdminShopDetailRead(BaseModel):
+    shop: ShopRead
+    owner: Optional[AdminShopOwnerRead]
+    subscription: Optional[AdminShopSubscriptionRead]
+    description: Optional[str]
+    phone: Optional[str]
+    exact_location: Optional[str]
+    total_products: int
+    active_products: int
+    draft_products: int
+    total_orders: int
+    revenue: str
+    payment_methods: List[str]
+    recent_products: List[ProductRead]
+
+
 class OrderListResponse(BaseModel):
     total: int
     page: int
