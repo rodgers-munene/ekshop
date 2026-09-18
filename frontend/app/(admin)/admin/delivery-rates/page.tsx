@@ -106,9 +106,25 @@ export default function AdminDeliveryRatesPage() {
   const [saving, setSaving] = useState(false);
   const [togglingLive, setTogglingLive] = useState(false);
 
-  const { data: rates, isPending: loading } = useQuery({
+  const { data: rates, isPending: loading, error } = useQuery({
     queryKey: ["admin", "delivery-rates"],
-    queryFn: () => fetch("/api/admin/delivery/rates").then((r) => r.json()) as Promise<DeliveryRates>,
+    // Checked rather than cast. An expired admin session answers 401 with
+    // {detail}, and casting that to DeliveryRates leaves pricing_model
+    // undefined — which this page would render as "no model is live", when in
+    // fact checkout is charging normally and only the page failed to load.
+    queryFn: async (): Promise<DeliveryRates> => {
+      const res = await fetch("/api/admin/delivery/rates");
+      const body = await res.json().catch(() => null);
+      if (!res.ok || typeof body?.pricing_model !== "string") {
+        throw new Error(
+          body?.detail ??
+            (res.status === 401
+              ? "Your admin session has expired. Sign in again to load the rates."
+              : "The delivery rates endpoint returned an unexpected response."),
+        );
+      }
+      return body as DeliveryRates;
+    },
   });
 
   const draft: Record<string, string> = draftOverride ?? (rates
@@ -175,6 +191,16 @@ export default function AdminDeliveryRatesPage() {
         <div>
           {loading ? (
             <p className="text-muted text-sm">Loading…</p>
+          ) : error || !rates ? (
+            <div className="card p-6 border-red-500/40">
+              <h2 className="font-semibold text-sm mb-1 text-red-500">Could not load the delivery rates</h2>
+              <p className="text-xs text-muted">
+                {error instanceof Error ? error.message : "The delivery rates endpoint did not respond."}
+              </p>
+              <p className="text-xs text-muted mt-2">
+                Checkout is unaffected — it reads the live setting directly, not this page.
+              </p>
+            </div>
           ) : (
             <>
               <div className="card p-6 mb-6">
@@ -214,6 +240,16 @@ export default function AdminDeliveryRatesPage() {
                     );
                   })}
                 </div>
+
+                {/* Every stored value should match a button above. If one does
+                    not, say so rather than leaving all three unselected, which
+                    reads as "nothing is live" when something certainly is. */}
+                {!MODELS.some((m) => m.value === rates.pricing_model) && (
+                  <p className="text-xs text-red-500 mt-3">
+                    Checkout is set to &quot;{rates.pricing_model}&quot;, which is not one of the models
+                    above. Pick one to move it onto a supported model.
+                  </p>
+                )}
               </div>
 
               <form onSubmit={save} className="card p-6 space-y-5">
