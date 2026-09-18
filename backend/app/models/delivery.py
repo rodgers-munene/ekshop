@@ -84,18 +84,56 @@ class DeliveryEvent(Base):
     actor = relationship("User")
 
 
+class PricingModel(str, enum.Enum):
+    # Legacy. Fee derived from cart value alone — not monotonic (a cart crossing
+    # 800 got CHEAPER delivery) and blind to distance. Kept only as a rollback.
+    cart_total = "cart_total"
+    # County/region flat fees, charged once per seller. Never enabled; superseded
+    # by cost_based, whose band ladder subsumes its county/region comparison.
+    geo_region = "geo_region"
+    # Distance bands + weight, one journey per cart. See delivery_pricing.py.
+    cost_based = "cost_based"
+
+
 class DeliveryRateSettings(Base):
     __tablename__ = "delivery_rate_settings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    same_county_fee = Column(String(20), nullable=False, default="200.00")
-    same_region_fee = Column(String(20), nullable=False, default="350.00")
-    different_region_fee = Column(String(20), nullable=False, default="600.00")
-    unknown_origin_fee = Column(String(20), nullable=False, default="400.00")
-    # Feature flag: while False, checkout keeps using the cart-total-tiered fee
-    # (calculate_delivery_fee_from_cart_total). Flip to True once the county/region
-    # model has been validated against real seller locations in the admin simulator.
-    use_geo_pricing = Column(Boolean, nullable=False, default=False)
+
+    # Which model checkout actually charges. Switch it from the admin Delivery
+    # Rates page, after checking the change in the simulator.
+    pricing_model = Column(String(20), nullable=False, default=PricingModel.cart_total.value)
+
+    # Distance bands, cheapest to dearest. Shared by cost_based and the older
+    # geo_region model, which reads only the county/region three.
+    #
+    # Anchored in a3f81c26d945 to what buyers already pay: the median paid cart
+    # carries Ksh 127 of delivery under the legacy model, so same_county (the
+    # band every local order lands on until sellers have wards on file) sits at
+    # 130 to keep the switch roughly price-neutral. Each band must stay >= the
+    # one above it — a farther parcel may never cost less.
+    same_ward_fee = Column(String(20), nullable=False, default="90.00")
+    same_subcounty_fee = Column(String(20), nullable=False, default="110.00")
+    same_county_fee = Column(String(20), nullable=False, default="130.00")
+    same_region_fee = Column(String(20), nullable=False, default="190.00")
+    adjacent_region_fee = Column(String(20), nullable=False, default="280.00")
+    different_region_fee = Column(String(20), nullable=False, default="400.00")
+    # Origin unplaceable, so priced as a regional trip rather than as a penalty
+    # the buyer can't avoid.
+    unknown_origin_fee = Column(String(20), nullable=False, default="190.00")
+
+    # Weight surcharge, applied to cart weight above the free allowance. Only
+    # products with a weight_kg actually set contribute (see parse_weight_kg).
+    weight_allowance_kg = Column(String(20), nullable=False, default="10")
+    per_kg_fee = Column(String(20), nullable=False, default="12.00")
+    max_weight_surcharge = Column(String(20), nullable=False, default="600.00")
+
+    # Bounds on the final cost_based quote. The floor keeps a tiny cart from
+    # being delivered at a loss; the cap stops a heavy long-haul order from
+    # quoting a fee no buyer would ever accept.
+    min_delivery_fee = Column(String(20), nullable=False, default="60.00")
+    max_delivery_fee = Column(String(20), nullable=False, default="800.00")
+
     # SLA window used to stamp Delivery.estimated_at when a delivery is assigned,
     # so the operations dashboard can compute an on-time-delivery rate.
     standard_delivery_hours = Column(Integer, nullable=False, default=48)

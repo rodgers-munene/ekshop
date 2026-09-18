@@ -36,6 +36,15 @@ class DeliveryFeeBreakdownItem(BaseModel):
 class DeliveryFeePreviewResponse(BaseModel):
     total_delivery_fee: str
     breakdown: List[DeliveryFeeBreakdownItem]
+    # Everything below is populated only by the cost_based model, which can say
+    # why it charged what it charged. Checkout shows this under the fee so the
+    # number stops looking arbitrary. The older models leave them unset.
+    pricing_model: Optional[str] = None
+    band: Optional[str] = None
+    band_label: Optional[str] = None
+    band_fee: Optional[str] = None
+    weight_surcharge: Optional[str] = None
+    billable_weight_kg: Optional[str] = None
 
 
 class UserAddressCreate(BaseModel):
@@ -50,6 +59,13 @@ class UserAddressCreate(BaseModel):
     apartment: Optional[str] = None
     floor: Optional[str] = None
     is_default: bool = False
+
+    # County is matched against the geography tables by name, so a stray space
+    # ("Nairobi ") silently breaks the sub-county lookup for that address.
+    @field_validator("county", "town", mode="before")
+    @classmethod
+    def strip_text(cls, v):
+        return v.strip() if isinstance(v, str) else v
 
 
 class UserAddressRead(BaseModel):
@@ -81,6 +97,11 @@ class UserAddressUpdate(BaseModel):
     apartment: Optional[str] = None
     floor: Optional[str] = None
     is_default: Optional[bool] = None
+
+    @field_validator("county", "town", mode="before")
+    @classmethod
+    def strip_text(cls, v):
+        return v.strip() if isinstance(v, str) else v
 
 
 

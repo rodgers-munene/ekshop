@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, Dict
 from pydantic import BaseModel
-from app.models.delivery import DeliveryStatus, DeliveryAgentStatus, ActorRole
+from app.models.delivery import DeliveryStatus, DeliveryAgentStatus, ActorRole, PricingModel
 from app.schemas.commerce import OrderRead
 
 
@@ -77,11 +77,19 @@ class DeliveryStatusUpdate(BaseModel):
 
 class DeliveryRateRead(BaseModel):
     id: uuid.UUID
+    pricing_model: str
+    same_ward_fee: str
+    same_subcounty_fee: str
     same_county_fee: str
     same_region_fee: str
+    adjacent_region_fee: str
     different_region_fee: str
     unknown_origin_fee: str
-    use_geo_pricing: bool
+    weight_allowance_kg: str
+    per_kg_fee: str
+    max_weight_surcharge: str
+    min_delivery_fee: str
+    max_delivery_fee: str
     standard_delivery_hours: int
     updated_at: datetime
 
@@ -89,11 +97,19 @@ class DeliveryRateRead(BaseModel):
 
 
 class DeliveryRateUpdate(BaseModel):
+    pricing_model: Optional[PricingModel] = None
+    same_ward_fee: Optional[str] = None
+    same_subcounty_fee: Optional[str] = None
     same_county_fee: Optional[str] = None
     same_region_fee: Optional[str] = None
+    adjacent_region_fee: Optional[str] = None
     different_region_fee: Optional[str] = None
     unknown_origin_fee: Optional[str] = None
-    use_geo_pricing: Optional[bool] = None
+    weight_allowance_kg: Optional[str] = None
+    per_kg_fee: Optional[str] = None
+    max_weight_surcharge: Optional[str] = None
+    min_delivery_fee: Optional[str] = None
+    max_delivery_fee: Optional[str] = None
     standard_delivery_hours: Optional[int] = None
 
 
@@ -102,7 +118,9 @@ class DeliverySimulationRow(BaseModel):
     shop_name: str
     shop_county: Optional[str]
     region: Optional[str]
-    geo_fees: Dict[str, str]  # buyer county -> geo fee from this shop
+    geo_fees: Dict[str, str]          # buyer county -> geo_region fee from this shop
+    cost_based_fees: Dict[str, str]   # buyer county -> cost_based fee from this shop
+    cost_based_bands: Dict[str, str]  # buyer county -> which band that fee came from
     cart_total_fee: str
 
 
@@ -110,5 +128,10 @@ class DeliverySimulationResponse(BaseModel):
     buyer_counties: List[str]
     buyer_regions: Dict[str, Optional[str]]
     sample_cart_total: str
-    live_model: str  # "geo" | "cart_total" — whichever is actually charged today
+    sample_weight_kg: str
+    live_model: str  # whichever PricingModel is actually charged today
+    # The simulator only knows a buyer's county, so cost_based legs resolve no
+    # finer than same_county — real checkouts with a ward set can land on the
+    # cheaper same_ward/same_subcounty bands. Treat these as an upper bound.
+    cost_based_resolution_note: str
     rows: List[DeliverySimulationRow]

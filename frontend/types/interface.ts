@@ -366,13 +366,33 @@ export interface InvestorDailyRevenueResponse {
   results: InvestorDailyRevenuePoint[];
 }
 
+export type PricingModel = "cart_total" | "geo_region" | "cost_based";
+
+export type DistanceBand =
+  | "same_ward"
+  | "same_subcounty"
+  | "same_county"
+  | "same_region"
+  | "adjacent_region"
+  | "different_region"
+  | "unknown_origin";
+
 export interface DeliveryRates {
   id: string;
+  pricing_model: PricingModel;
+  same_ward_fee: string;
+  same_subcounty_fee: string;
   same_county_fee: string;
   same_region_fee: string;
+  adjacent_region_fee: string;
   different_region_fee: string;
   unknown_origin_fee: string;
-  use_geo_pricing: boolean;
+  weight_allowance_kg: string;
+  per_kg_fee: string;
+  max_weight_surcharge: string;
+  min_delivery_fee: string;
+  max_delivery_fee: string;
+  standard_delivery_hours: number;
   updated_at: string;
 }
 
@@ -382,6 +402,8 @@ export interface DeliverySimulationRow {
   shop_county: string | null;
   region: string | null;
   geo_fees: Record<string, string>;
+  cost_based_fees: Record<string, string>;
+  cost_based_bands: Record<string, DistanceBand>;
   cart_total_fee: string;
 }
 
@@ -389,8 +411,22 @@ export interface DeliverySimulationResponse {
   buyer_counties: string[];
   buyer_regions: Record<string, string | null>;
   sample_cart_total: string;
-  live_model: "geo" | "cart_total";
+  sample_weight_kg: string;
+  live_model: PricingModel;
+  cost_based_resolution_note: string;
   rows: DeliverySimulationRow[];
+}
+
+/** Extra fields the cost_based model returns so checkout can explain the fee. */
+export interface DeliveryFeePreview {
+  total_delivery_fee: string;
+  breakdown: { shop_id: string; fee: string }[];
+  pricing_model?: PricingModel;
+  band?: DistanceBand;
+  band_label?: string;
+  band_fee?: string;
+  weight_surcharge?: string;
+  billable_weight_kg?: string;
 }
 
 export interface HeroSlide {

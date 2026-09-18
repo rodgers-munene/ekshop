@@ -30,6 +30,9 @@ from app.services.delivery_pricing import (
     calculate_delivery_fee,
     calculate_delivery_fee_from_cart_total,
     get_region,
+    DeliveryPoint,
+    point_from_location,
+    quote_delivery_fee,
 )
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
@@ -307,6 +310,7 @@ def update_delivery_rates(
 def simulate_delivery_fees(
     buyer_county: List[str] = Query(..., description="One or more counties to simulate a buyer ordering from"),
     sample_cart_total: Decimal = Query(Decimal("500"), ge=0, description="Cart total to compare against the legacy tiered model"),
+    sample_weight_kg: Decimal = Query(Decimal("0"), ge=0, description="Cart weight to price the cost-based model at"),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
@@ -315,6 +319,7 @@ def simulate_delivery_fees(
 
     shops = (
         db.query(Shop)
+        .options(selectinload(Shop.ward))
         .filter(Shop.status == ShopStatus.active)
         .order_by(Shop.name)
         .all()
@@ -322,26 +327,44 @@ def simulate_delivery_fees(
 
     cart_total_fee = calculate_delivery_fee_from_cart_total(sample_cart_total)
 
-    rows = [
-        DeliverySimulationRow(
-            shop_id=shop.id,
-            shop_name=shop.name,
-            shop_county=shop.county,
-            region=get_region(shop.county),
-            geo_fees={
-                county: str(calculate_delivery_fee(county, shop.county, settings))
-                for county in buyer_county
-            },
-            cart_total_fee=str(cart_total_fee),
+    def cost_based_quote(county: str, shop: Shop):
+        return quote_delivery_fee(
+            DeliveryPoint(county=county),
+            {shop.id: point_from_location(shop)},
+            sample_weight_kg,
+            settings,
         )
-        for shop in shops
-    ]
+
+    rows = []
+    for shop in shops:
+        quotes = {county: cost_based_quote(county, shop) for county in buyer_county}
+        rows.append(
+            DeliverySimulationRow(
+                shop_id=shop.id,
+                shop_name=shop.name,
+                shop_county=shop.county,
+                region=get_region(shop.county),
+                geo_fees={
+                    county: str(calculate_delivery_fee(county, shop.county, settings))
+                    for county in buyer_county
+                },
+                cost_based_fees={county: str(q.total) for county, q in quotes.items()},
+                cost_based_bands={county: q.charged_band.value for county, q in quotes.items()},
+                cart_total_fee=str(cart_total_fee),
+            )
+        )
 
     return DeliverySimulationResponse(
         buyer_counties=buyer_county,
         buyer_regions={county: get_region(county) for county in buyer_county},
         sample_cart_total=str(sample_cart_total),
-        live_model="geo" if settings.use_geo_pricing else "cart_total",
+        sample_weight_kg=str(sample_weight_kg),
+        live_model=settings.pricing_model,
+        cost_based_resolution_note=(
+            "Simulated from county only, so legs resolve no finer than 'same county'. "
+            "Real checkouts where the buyer and seller both have a ward set can land on "
+            "the cheaper same-ward or same-sub-county bands, so these are upper bounds."
+        ),
         rows=rows,
     )
 

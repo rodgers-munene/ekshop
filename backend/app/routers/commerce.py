@@ -2,7 +2,7 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, Depends, status
 import uuid
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import update, delete
 
 from app.dependencies.auth import get_current_active_user
@@ -10,6 +10,7 @@ from app.dependencies.database import get_db
 from app.models.user import User
 from app.models.commerce import Cart, CartItem, UserAddress, OrderGroup, Order, OrderItem
 from app.models.catalog import Product
+from app.models.delivery import PricingModel
 from app.models.shop import Shop
 from app.schemas.commerce import (
     CartRead,
@@ -28,11 +29,32 @@ from app.services.delivery_pricing import (
     calculate_delivery_fee_from_cart_total,
     calculate_delivery_fee,
     get_or_create_rate_settings,
+    parse_weight_kg,
+    point_from_location,
+    quote_delivery_fee,
 )
 
 cart_router = APIRouter(prefix="/cart", tags=["cart"])
 checkout_router = APIRouter(prefix="/checkout", tags=["checkout"])
 orders_router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+def _shops_by_id(db: Session, shop_ids) -> dict[uuid.UUID, Shop]:
+    """Shops keyed by id, with wards eager-loaded.
+
+    The ward is what lets cost-based pricing resolve a leg below county level,
+    and loading it here keeps that from firing a query per seller in the cart.
+    """
+    ids = list(shop_ids)
+    if not ids:
+        return {}
+    shops = (
+        db.query(Shop)
+        .options(selectinload(Shop.ward))
+        .filter(Shop.id.in_(ids))
+        .all()
+    )
+    return {s.id: s for s in shops}
 
 # cart
 @cart_router.get(
@@ -202,6 +224,7 @@ def preview_delivery_fee(
         raise HTTPException(status_code=404, detail="Address not found")
 
     cart_total = Decimal("0.00")
+    cart_weight_kg = Decimal("0")
     products_by_shop: dict[uuid.UUID, list] = {}
     if payload.items:
         product_ids = [item.product_id for item in payload.items]
@@ -210,13 +233,35 @@ def preview_delivery_fee(
             product = products.get(item.product_id)
             if product:
                 cart_total += Decimal(product.price) * item.quantity
+                cart_weight_kg += parse_weight_kg(product.weight_kg) * item.quantity
                 products_by_shop.setdefault(product.shop_id, []).append(product)
 
     settings = get_or_create_rate_settings(db)
     db.commit()
 
-    if settings.use_geo_pricing and products_by_shop:
-        shops = {s.id: s for s in db.query(Shop).filter(Shop.id.in_(products_by_shop.keys())).all()}
+    if settings.pricing_model == PricingModel.cost_based.value:
+        shops = _shops_by_id(db, products_by_shop.keys())
+        quote = quote_delivery_fee(
+            point_from_location(address),
+            {shop_id: point_from_location(shops.get(shop_id)) for shop_id in products_by_shop},
+            cart_weight_kg,
+            settings,
+        )
+        return DeliveryFeePreviewResponse(
+            total_delivery_fee=str(quote.total),
+            # One journey is charged for the whole cart, so there is no
+            # per-seller split to report — the legs are in the fields below.
+            breakdown=[],
+            pricing_model=settings.pricing_model,
+            band=quote.charged_band.value,
+            band_label=quote.band_label,
+            band_fee=str(quote.band_fee),
+            weight_surcharge=str(quote.weight_surcharge),
+            billable_weight_kg=str(quote.billable_weight_kg),
+        )
+
+    if settings.pricing_model == PricingModel.geo_region.value and products_by_shop:
+        shops = _shops_by_id(db, products_by_shop.keys())
         breakdown = []
         total = Decimal("0.00")
         for shop_id in products_by_shop:
@@ -224,10 +269,18 @@ def preview_delivery_fee(
             shop_fee = calculate_delivery_fee(address.county, shop.county if shop else None, settings)
             total += shop_fee
             breakdown.append(DeliveryFeeBreakdownItem(shop_id=shop_id, fee=str(shop_fee)))
-        return DeliveryFeePreviewResponse(total_delivery_fee=str(total), breakdown=breakdown)
+        return DeliveryFeePreviewResponse(
+            total_delivery_fee=str(total),
+            breakdown=breakdown,
+            pricing_model=settings.pricing_model,
+        )
 
     fee = calculate_delivery_fee_from_cart_total(cart_total)
-    return DeliveryFeePreviewResponse(total_delivery_fee=str(fee), breakdown=[])
+    return DeliveryFeePreviewResponse(
+        total_delivery_fee=str(fee),
+        breakdown=[],
+        pricing_model=settings.pricing_model,
+    )
 
 
 @checkout_router.post(
@@ -253,6 +306,17 @@ def checkout(
     ).first()
     if not address:
         raise HTTPException(status_code=404, detail="Address not found")
+
+    # Addresses saved before the ward-level geography tables existed (migration
+    # f4a29b7c1e05 added ward_id as nullable and never backfilled it) have no
+    # ward. Without one the delivery fee can only ever resolve at county
+    # granularity and the rider has no final-leg detail, so make the buyer
+    # complete it here rather than quietly charging the coarser rate.
+    if not address.ward_id:
+        raise HTTPException(
+            status_code=400,
+            detail="This delivery address is missing its ward. Update the address and try again.",
+        )
 
     # lock products and check stock
     product_ids = [item.product_id for item in cart.items]
@@ -302,17 +366,31 @@ def checkout(
         items_by_shop.setdefault(shop_id, []).append(item)
 
     delivery_settings = get_or_create_rate_settings(db)
+    geo_pricing = delivery_settings.pricing_model == PricingModel.geo_region.value
 
     group_fee_flat = Decimal("0.00")
-    if not delivery_settings.use_geo_pricing:
+    if delivery_settings.pricing_model == PricingModel.cost_based.value:
+        # One journey for the whole cart, priced on distance and weight only.
+        shops = _shops_by_id(db, items_by_shop.keys())
+        cart_weight_kg = sum(
+            (parse_weight_kg(products[item.product_id].weight_kg) * item.quantity for item in cart.items),
+            Decimal("0"),
+        )
+        group_fee_flat = quote_delivery_fee(
+            point_from_location(address),
+            {shop_id: point_from_location(shops.get(shop_id)) for shop_id in items_by_shop},
+            cart_weight_kg,
+            delivery_settings,
+        ).total
+    elif geo_pricing:
+        shops = _shops_by_id(db, items_by_shop.keys())
+    else:
         # cart-total-tiered fee, charged once for the whole order group
         cart_total = sum(
             (Decimal(products[item.product_id].price) * item.quantity for item in cart.items),
             Decimal("0.00"),
         )
         group_fee_flat = calculate_delivery_fee_from_cart_total(cart_total)
-    else:
-        shops = {s.id: s for s in db.query(Shop).filter(Shop.id.in_(items_by_shop.keys())).all()}
 
     # create Orders, OrderItems, decrement stock
     group_subtotal = Decimal("0.00")
@@ -321,7 +399,7 @@ def checkout(
     for shop_id, shop_items in items_by_shop.items():
         order_subtotal = Decimal("0.00")
 
-        if delivery_settings.use_geo_pricing:
+        if geo_pricing:
             shop = shops.get(shop_id)
             order_delivery_fee = calculate_delivery_fee(
                 address.county, shop.county if shop else None, delivery_settings
@@ -373,10 +451,11 @@ def checkout(
         group_subtotal += order_subtotal
         group_delivery_fee += order_delivery_fee
 
-    if not delivery_settings.use_geo_pricing:
+    if not geo_pricing:
         group_delivery_fee = group_fee_flat
-        # legacy behavior: the one flat fee is charged on the group total, not
-        # split onto individual orders (their delivery_fee stays "0.00" above)
+        # cart_total and cost_based both price one journey for the whole cart, so
+        # the fee lives on the group and each order's delivery_fee stays "0.00".
+        # Only geo_region, which quotes each seller separately, splits it.
 
     # update group totals now that we know the real sum
     order_group.subtotal = str(group_subtotal)
