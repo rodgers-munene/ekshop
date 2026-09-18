@@ -1,5 +1,23 @@
-const CACHE = "ekshop-v1";
+// Bumped from v1, which cached API responses and RSC payloads by mistake (see
+// isStaticAsset below). Changing the name makes activate delete v1, so every
+// installed client drops those frozen responses as soon as this worker lands.
+const CACHE = "ekshop-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest"];
+
+// Only files whose content never changes at a given URL may be served
+// cache-first. v1 had no such check: every same-origin GET that wasn't a page
+// navigation fell through to cache-first, so the first answer from any /api
+// route — the M-Pesa payment status poll, the cart, admin settings — was kept
+// forever and the network was never asked again.
+const STATIC_EXTENSIONS = /\.(?:png|jpe?g|webp|avif|gif|svg|ico|woff2?|ttf|otf)$/i;
+
+function isStaticAsset(url) {
+  if (url.search) return false; // ?_rsc=… and any query-driven response
+  if (url.pathname.startsWith("/_next/static/")) return true; // content-hashed
+  if (url.pathname.startsWith("/icons/")) return true;
+  if (url.pathname === "/manifest.webmanifest") return true;
+  return STATIC_EXTENSIONS.test(url.pathname);
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -41,6 +59,10 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
+
+  // Anything else — /api, RSC payloads, data of any kind — goes to the network
+  // untouched, exactly as if there were no service worker.
+  if (!isStaticAsset(url)) return;
 
   // Cache-first for static assets (images, icons, fonts, hashed JS/CSS).
   event.respondWith(
