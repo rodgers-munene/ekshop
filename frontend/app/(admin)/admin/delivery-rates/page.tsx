@@ -116,11 +116,14 @@ export default function AdminDeliveryRatesPage() {
       const res = await fetch("/api/admin/delivery/rates");
       const body = await res.json().catch(() => null);
       if (!res.ok || typeof body?.pricing_model !== "string") {
+        console.error("[delivery-rates] unexpected response", res.status, body);
+        const detail = typeof body?.detail === "string" ? body.detail : null;
         throw new Error(
-          body?.detail ??
+          detail ??
             (res.status === 401
               ? "Your admin session has expired. Sign in again to load the rates."
-              : "The delivery rates endpoint returned an unexpected response."),
+              : `The delivery rates endpoint returned an unexpected response (HTTP ${res.status}` +
+                `${body ? `, fields: ${Object.keys(body).join(", ") || "none"}` : ", no JSON body"}).`),
         );
       }
       return body as DeliveryRates;
