@@ -33,7 +33,6 @@ const BAND_LABELS: Record<DistanceBand, string> = {
 const MODEL_LABELS: Record<PricingModel, string> = {
   cost_based: "Cost-based (distance + weight)",
   cart_total: "Cart total (legacy)",
-  geo_region: "County / region flat",
 };
 
 export default function DeliverySimulatorPage() {

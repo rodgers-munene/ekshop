@@ -45,11 +45,6 @@ const MODELS: { value: PricingModel; label: string; hint: string }[] = [
     label: "Cart total (legacy)",
     hint: "Charges a percentage or tier of cart value. Blind to distance, and drops from 150 to 66 as a cart crosses 800.",
   },
-  {
-    value: "geo_region",
-    label: "County/region flat (superseded)",
-    hint: "Flat county/region fees charged once per seller. Kept for reference; the cost-based ladder covers the same cases.",
-  },
 ];
 
 // Mirrors backend/app/services/delivery_pricing.py COUNTY_REGIONS — these are

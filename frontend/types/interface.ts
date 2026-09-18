@@ -366,7 +366,7 @@ export interface InvestorDailyRevenueResponse {
   results: InvestorDailyRevenuePoint[];
 }
 
-export type PricingModel = "cart_total" | "geo_region" | "cost_based";
+export type PricingModel = "cart_total" | "cost_based";
 
 export type DistanceBand =
   | "same_ward"
@@ -401,7 +401,6 @@ export interface DeliverySimulationRow {
   shop_name: string;
   shop_county: string | null;
   region: string | null;
-  geo_fees: Record<string, string>;
   cost_based_fees: Record<string, string>;
   cost_based_bands: Record<string, DistanceBand>;
   cart_total_fee: string;
@@ -420,7 +419,6 @@ export interface DeliverySimulationResponse {
 /** Extra fields the cost_based model returns so checkout can explain the fee. */
 export interface DeliveryFeePreview {
   total_delivery_fee: string;
-  breakdown: { shop_id: string; fee: string }[];
   pricing_model?: PricingModel;
   band?: DistanceBand;
   band_label?: string;

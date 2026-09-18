@@ -130,23 +130,6 @@ def get_or_create_rate_settings(db: Session) -> DeliveryRateSettings:
     return settings
 
 
-def calculate_delivery_fee(
-    buyer_county: Optional[str],
-    shop_county: Optional[str],
-    settings: DeliveryRateSettings,
-) -> Decimal:
-    if not shop_county:
-        return Decimal(settings.unknown_origin_fee)
-
-    if buyer_county and buyer_county.strip() == shop_county.strip():
-        return Decimal(settings.same_county_fee)
-
-    if get_region(buyer_county) is not None and get_region(buyer_county) == get_region(shop_county):
-        return Decimal(settings.same_region_fee)
-
-    return Decimal(settings.different_region_fee)
-
-
 # Legacy pricing model, kept only as a rollback path for PricingModel.cart_total.
 #
 # Known-broken, deliberately unfixed: the fee is derived from cart value alone,

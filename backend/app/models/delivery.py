@@ -88,9 +88,6 @@ class PricingModel(str, enum.Enum):
     # Legacy. Fee derived from cart value alone — not monotonic (a cart crossing
     # 800 got CHEAPER delivery) and blind to distance. Kept only as a rollback.
     cart_total = "cart_total"
-    # County/region flat fees, charged once per seller. Never enabled; superseded
-    # by cost_based, whose band ladder subsumes its county/region comparison.
-    geo_region = "geo_region"
     # Distance bands + weight, one journey per cart. See delivery_pricing.py.
     cost_based = "cost_based"
 
@@ -104,14 +101,14 @@ class DeliveryRateSettings(Base):
     # Rates page, after checking the change in the simulator.
     pricing_model = Column(String(20), nullable=False, default=PricingModel.cart_total.value)
 
-    # Distance bands, cheapest to dearest. Shared by cost_based and the older
-    # geo_region model, which reads only the county/region three.
+    # Distance bands, cheapest to dearest. Read only by cost_based.
     #
-    # Anchored in a3f81c26d945 to what buyers already pay: the median paid cart
-    # carries Ksh 127 of delivery under the legacy model, so same_county (the
-    # band every local order lands on until sellers have wards on file) sits at
-    # 130 to keep the switch roughly price-neutral. Each band must stay >= the
-    # one above it — a farther parcel may never cost less.
+    # Anchored in a3f81c26d945 to what buyers already pay. Across the 23 orders
+    # that genuinely went through checkout, the legacy model charged an average
+    # of Ksh 154, so same_county — the band every local order lands on until
+    # sellers have wards on file — sits just under that at 130, keeping the
+    # switch roughly price-neutral. Each band must stay >= the one above it: a
+    # farther parcel may never cost less.
     same_ward_fee = Column(String(20), nullable=False, default="90.00")
     same_subcounty_fee = Column(String(20), nullable=False, default="110.00")
     same_county_fee = Column(String(20), nullable=False, default="130.00")

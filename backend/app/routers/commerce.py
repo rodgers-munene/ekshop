@@ -22,12 +22,10 @@ from app.schemas.commerce import (
     OrderStatusUpdate,
     DeliveryFeePreviewRequest,
     DeliveryFeePreviewResponse,
-    DeliveryFeeBreakdownItem,
 )
 from app.services.notifications import create_notification
 from app.services.delivery_pricing import (
     calculate_delivery_fee_from_cart_total,
-    calculate_delivery_fee,
     get_or_create_rate_settings,
     parse_weight_kg,
     point_from_location,
@@ -249,9 +247,6 @@ def preview_delivery_fee(
         )
         return DeliveryFeePreviewResponse(
             total_delivery_fee=str(quote.total),
-            # One journey is charged for the whole cart, so there is no
-            # per-seller split to report — the legs are in the fields below.
-            breakdown=[],
             pricing_model=settings.pricing_model,
             band=quote.charged_band.value,
             band_label=quote.band_label,
@@ -260,25 +255,9 @@ def preview_delivery_fee(
             billable_weight_kg=str(quote.billable_weight_kg),
         )
 
-    if settings.pricing_model == PricingModel.geo_region.value and products_by_shop:
-        shops = _shops_by_id(db, products_by_shop.keys())
-        breakdown = []
-        total = Decimal("0.00")
-        for shop_id in products_by_shop:
-            shop = shops.get(shop_id)
-            shop_fee = calculate_delivery_fee(address.county, shop.county if shop else None, settings)
-            total += shop_fee
-            breakdown.append(DeliveryFeeBreakdownItem(shop_id=shop_id, fee=str(shop_fee)))
-        return DeliveryFeePreviewResponse(
-            total_delivery_fee=str(total),
-            breakdown=breakdown,
-            pricing_model=settings.pricing_model,
-        )
-
     fee = calculate_delivery_fee_from_cart_total(cart_total)
     return DeliveryFeePreviewResponse(
         total_delivery_fee=str(fee),
-        breakdown=[],
         pricing_model=settings.pricing_model,
     )
 
@@ -366,7 +345,6 @@ def checkout(
         items_by_shop.setdefault(shop_id, []).append(item)
 
     delivery_settings = get_or_create_rate_settings(db)
-    geo_pricing = delivery_settings.pricing_model == PricingModel.geo_region.value
 
     group_fee_flat = Decimal("0.00")
     if delivery_settings.pricing_model == PricingModel.cost_based.value:
@@ -382,8 +360,6 @@ def checkout(
             cart_weight_kg,
             delivery_settings,
         ).total
-    elif geo_pricing:
-        shops = _shops_by_id(db, items_by_shop.keys())
     else:
         # cart-total-tiered fee, charged once for the whole order group
         cart_total = sum(
@@ -394,18 +370,9 @@ def checkout(
 
     # create Orders, OrderItems, decrement stock
     group_subtotal = Decimal("0.00")
-    group_delivery_fee = Decimal("0.00")
 
     for shop_id, shop_items in items_by_shop.items():
         order_subtotal = Decimal("0.00")
-
-        if geo_pricing:
-            shop = shops.get(shop_id)
-            order_delivery_fee = calculate_delivery_fee(
-                address.county, shop.county if shop else None, delivery_settings
-            )
-        else:
-            order_delivery_fee = Decimal("0.00")  # charged once at the group level below
 
         order = Order(
             group_id=order_group.id,
@@ -413,7 +380,9 @@ def checkout(
             buyer_id=current_user.id,
             notes=payload.notes,
             subtotal="0.00",
-            delivery_fee=str(order_delivery_fee),
+            # Both pricing models charge one journey for the whole cart, so the
+            # fee belongs to the group and no single order carries a share of it.
+            delivery_fee="0.00",
             total="0.00",
         )
         db.add(order)
@@ -447,15 +416,10 @@ def checkout(
             product.stock_qty -= item.quantity
 
         order.subtotal = str(order_subtotal)
-        order.total = str(order_subtotal + order_delivery_fee)
+        order.total = str(order_subtotal)
         group_subtotal += order_subtotal
-        group_delivery_fee += order_delivery_fee
 
-    if not geo_pricing:
-        group_delivery_fee = group_fee_flat
-        # cart_total and cost_based both price one journey for the whole cart, so
-        # the fee lives on the group and each order's delivery_fee stays "0.00".
-        # Only geo_region, which quotes each seller separately, splits it.
+    group_delivery_fee = group_fee_flat
 
     # update group totals now that we know the real sum
     order_group.subtotal = str(group_subtotal)

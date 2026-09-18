@@ -118,7 +118,6 @@ class DeliverySimulationRow(BaseModel):
     shop_name: str
     shop_county: Optional[str]
     region: Optional[str]
-    geo_fees: Dict[str, str]          # buyer county -> geo_region fee from this shop
     cost_based_fees: Dict[str, str]   # buyer county -> cost_based fee from this shop
     cost_based_bands: Dict[str, str]  # buyer county -> which band that fee came from
     cart_total_fee: str

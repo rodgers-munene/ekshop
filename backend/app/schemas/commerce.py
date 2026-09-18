@@ -28,17 +28,11 @@ class DeliveryFeePreviewRequest(BaseModel):
     items: List[DeliveryFeePreviewItem] = []
 
 
-class DeliveryFeeBreakdownItem(BaseModel):
-    shop_id: uuid.UUID
-    fee: str
-
-
 class DeliveryFeePreviewResponse(BaseModel):
     total_delivery_fee: str
-    breakdown: List[DeliveryFeeBreakdownItem]
     # Everything below is populated only by the cost_based model, which can say
     # why it charged what it charged. Checkout shows this under the fee so the
-    # number stops looking arbitrary. The older models leave them unset.
+    # number stops looking arbitrary. The legacy model leaves them unset.
     pricing_model: Optional[str] = None
     band: Optional[str] = None
     band_label: Optional[str] = None

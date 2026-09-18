@@ -27,7 +27,6 @@ from app.schemas.delivery import (
 from app.services.notifications import create_notification
 from app.services.delivery_pricing import (
     get_or_create_rate_settings,
-    calculate_delivery_fee,
     calculate_delivery_fee_from_cart_total,
     get_region,
     DeliveryPoint,
@@ -344,10 +343,6 @@ def simulate_delivery_fees(
                 shop_name=shop.name,
                 shop_county=shop.county,
                 region=get_region(shop.county),
-                geo_fees={
-                    county: str(calculate_delivery_fee(county, shop.county, settings))
-                    for county in buyer_county
-                },
                 cost_based_fees={county: str(q.total) for county, q in quotes.items()},
                 cost_based_bands={county: q.charged_band.value for county, q in quotes.items()},
                 cart_total_fee=str(cart_total_fee),
