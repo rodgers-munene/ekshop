@@ -45,6 +45,11 @@ plain_env = {
 
 # Sensitive — stored in AWS Secrets Manager.
 secret_env = {
+  # OpenRouteService API key. Staged ahead of the routing/geocoding
+  # feature — nothing reads it yet. Whoever builds that feature adds the
+  # matching field to backend/app/core/config.py, since Settings uses
+  # extra="ignore" and will otherwise drop it silently.
+  ORS_API_KEY           = "your_openrouteservice_api_key"
   DATABASE_URL          = "postgresql+psycopg://user:password@host:5432/dbname"
   SECRET_KEY            = "generate-with-python -c 'import secrets; print(secrets.token_hex(32))'"
   PAYSTACK_SECRET_KEY   = "sk_live_xxx"
