@@ -1,7 +1,7 @@
 """seed free trial seller subscription plan
 
 Revision ID: f5a6b7c8d9e0
-Revises: f4a29b7c1e05
+Revises: d1e4b7c9f2a5
 Create Date: 2026-09-16 00:00:00.000000
 
 """
@@ -10,9 +10,10 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 import uuid
 
-# revision identifiers, used by Alembic.
+# revision identifiers, used by Alembic. Depends on d1e4b7c9f2a5 (annual
+# billing) because the inserted plan carries a yearly price column.
 revision = "f5a6b7c8d9e0"
-down_revision = "f4a29b7c1e05"
+down_revision = "d1e4b7c9f2a5"
 branch_labels = None
 depends_on = None
 
