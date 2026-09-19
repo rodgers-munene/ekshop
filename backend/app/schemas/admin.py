@@ -326,3 +326,58 @@ class OrderNotificationRecipientRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AdminEmailTestRequest(BaseModel):
+    to: str
+
+
+class AdminEmailTestResult(BaseModel):
+    success: bool
+    detail: str
+
+
+class AdminEmailStatus(BaseModel):
+    """Why order/subs emails do or don't go out: whether Resend is configured,
+    whether the configured From domain is verified (Resend rejects mail on
+    unverified domains), and how many active recipients exist."""
+    resend_configured: bool
+    from_address: str
+    from_domain: str
+    verified_domains: List[str]
+    from_domain_verified: bool
+    domains_error: Optional[str] = None
+    active_recipient_count: int
+
+
+class RecentOrderRow(BaseModel):
+    id: str
+    short_id: str
+    created_at: datetime
+    buyer_name: str
+    total: str
+    item_count: int
+    shop_count: int
+
+
+class RecentOrderListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[RecentOrderRow]
+
+
+class AdminProductRow(BaseModel):
+    id: uuid.UUID
+    name: str
+    price: str
+    status: str
+    shop_name: Optional[str] = None
+    created_at: datetime
+
+
+class AdminProductListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[AdminProductRow]

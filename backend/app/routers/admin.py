@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy import Numeric, cast, func
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.dependencies.auth import require_admin
 from app.dependencies.database import get_db
 from app.models.commerce import (
@@ -25,7 +26,12 @@ from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
 from app.schemas.admin import (
+    AdminEmailStatus,
+    AdminEmailTestRequest,
+    AdminEmailTestResult,
     AdminOverviewRead,
+    AdminProductListResponse,
+    AdminProductRow,
     AdminStatsRead,
     AdminTrendPoint,
     CartAbandonmentMetrics,
@@ -44,6 +50,8 @@ from app.schemas.admin import (
     PromotionCreate,
     PromotionRead,
     PromotionUpdate,
+    RecentOrderListResponse,
+    RecentOrderRow,
     SalesDemandMetrics,
     ShopListResponse,
     SupplyDemandRow,
@@ -53,6 +61,7 @@ from app.schemas.commerce import OrderRead
 from app.schemas.shop import ShopRead
 from app.schemas.user import UserRead
 from app.services import storage
+from app.services import email as email_service
 from app.services import dashboard_metrics
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -405,6 +414,132 @@ def get_priority_acquisition(
 ):
     since, until = _period_bounds(period, days)
     return dashboard_metrics.get_priority_acquisition(db, since, until)
+
+
+# ── Drill-down lists (click a stat card, see the rows behind it) ─────────────
+
+@router.get("/orders", response_model=RecentOrderListResponse)
+def list_recent_orders(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, 30)
+    query = (
+        db.query(OrderGroup)
+        .options(
+            selectinload(OrderGroup.buyer),
+            selectinload(OrderGroup.orders).selectinload(Order.items),
+        )
+        .filter(OrderGroup.status == OrderGroupStatus.paid)
+    )
+    if period is not None:
+        query = query.filter(OrderGroup.created_at >= since, OrderGroup.created_at < until)
+    total = query.count()
+    skip = (page - 1) * limit
+    rows = query.order_by(OrderGroup.created_at.desc()).offset(skip).limit(limit).all()
+    results = [
+        RecentOrderRow(
+            id=str(g.id),
+            short_id=str(g.id)[:8],
+            created_at=g.created_at,
+            buyer_name=f"{g.buyer.first_name} {g.buyer.last_name}",
+            total=g.total,
+            item_count=sum(len(o.items) for o in g.orders),
+            shop_count=len({o.shop_id for o in g.orders}),
+        )
+        for g in rows
+    ]
+    return RecentOrderListResponse(total=total, page=page, limit=limit, results=results)
+
+
+@router.get("/products", response_model=AdminProductListResponse)
+def list_admin_products(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    q = db.query(Product).options(selectinload(Product.shop))
+    total = q.count()
+    skip = (page - 1) * limit
+    rows = q.order_by(Product.created_at.desc()).offset(skip).limit(limit).all()
+    return AdminProductListResponse(
+        total=total,
+        page=page,
+        limit=limit,
+        results=[
+            AdminProductRow(
+                id=p.id,
+                name=p.name,
+                price=p.price,
+                status=p.status.value if hasattr(p.status, "value") else str(p.status),
+                shop_name=p.shop.name if p.shop else None,
+                created_at=p.created_at,
+            )
+            for p in rows
+        ],
+    )
+
+
+# ── Email delivery health ────────────────────────────────────────────────────
+
+def _from_domain(address: str) -> str:
+    at = address.rfind("@")
+    if at == -1:
+        return ""
+    return address[at + 1:].strip().rstrip(">").strip()
+
+
+@router.get("/email/status", response_model=AdminEmailStatus)
+def get_email_status(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    from_domain = _from_domain(settings.EMAIL_FROM)
+    verified: list = []
+    domains_error: Optional[str] = None
+    try:
+        verified = sorted(
+            d["name"]
+            for d in email_service.resend_sending_domains()
+            if d.get("status") == "verified"
+        )
+    except Exception as e:
+        domains_error = str(e)
+
+    active_recipients = (
+        db.query(func.count(OrderNotificationRecipient.id))
+        .filter(OrderNotificationRecipient.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+
+    return AdminEmailStatus(
+        resend_configured=bool(settings.RESEND_API_KEY),
+        from_address=settings.EMAIL_FROM,
+        from_domain=from_domain,
+        verified_domains=verified,
+        from_domain_verified=bool(from_domain) and from_domain in verified,
+        domains_error=domains_error,
+        active_recipient_count=active_recipients,
+    )
+
+
+@router.post("/email/test", response_model=AdminEmailTestResult)
+def send_admin_test_email(
+    payload: AdminEmailTestRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    try:
+        email_service.send_test_email(payload.to)
+    except Exception as e:
+        logger.warning("Admin email test to %s failed: %s", payload.to, e)
+        return AdminEmailTestResult(success=False, detail=str(e))
+    return AdminEmailTestResult(
+        success=True,
+        detail=f"Test email sent to {payload.to}. If it doesn't arrive, check spam and Resend's delivery log.",
+    )
 
 
 # ── Deliveries ───────────────────────────────────────────────────────────────

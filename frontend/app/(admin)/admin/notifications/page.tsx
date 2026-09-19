@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { OrderNotificationRecipient } from "@/types/interface";
+import EmailHealthCard from "@/components/admin/EmailHealthCard";
 
 export default function AdminOrderNotificationsPage() {
   const queryClient = useQueryClient();
@@ -66,7 +67,9 @@ export default function AdminOrderNotificationsPage() {
         can start planning the delivery right away.
       </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,26rem)_1fr] gap-6 items-start">
+      <EmailHealthCard />
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,26rem)_1fr] gap-6 items-start mt-6">
         <form onSubmit={addRecipient} className="card p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Email address</label>

@@ -5,6 +5,8 @@ import { formatKES } from "@/lib/utils";
 import StatCard from "@/components/dashboard/StatCard";
 import SalesChart from "@/components/dashboard/SalesChart";
 import PeriodFilter, { PeriodKey } from "@/components/dashboard/PeriodFilter";
+import StatDrillDown from "@/components/admin/StatDrillDown";
+import { DrillSpec, ordersSpec, productsSpec, shopsSpec, usersSpec } from "@/components/admin/drillColumns";
 import { AdminOverview } from "@/types/interface";
 
 const formatDay = (d: string) =>
@@ -29,6 +31,7 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
   const [period, setPeriod] = useState<PeriodKey>("month");
   const [data, setData] = useState(initial);
   const [loading, setLoading] = useState(false);
+  const [drill, setDrill] = useState<DrillSpec | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -45,15 +48,37 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
       label: "Revenue",
       value: formatKES(m.revenue),
       prev: parseFloat(p.revenue),
+      spec: ordersSpec(period),
+      hint: "Recent paid orders",
     },
-    { label: "Paid orders", value: m.orders, prev: p.orders },
+    {
+      label: "Paid orders",
+      value: m.orders,
+      prev: p.orders,
+      spec: ordersSpec(period),
+      hint: "Recent paid order groups",
+    },
     {
       label: "Avg. order value",
       value: formatKES(m.average_order_value),
       prev: parseFloat(p.average_order_value),
+      spec: ordersSpec(period),
+      hint: "Recent paid orders",
     },
-    { label: "New users", value: m.new_users, prev: p.new_users },
-    { label: "New shops", value: m.new_shops, prev: p.new_shops },
+    {
+      label: "New users",
+      value: m.new_users,
+      prev: p.new_users,
+      spec: usersSpec(),
+      hint: "Latest signups",
+    },
+    {
+      label: "New shops",
+      value: m.new_shops,
+      prev: p.new_shops,
+      spec: shopsSpec(),
+      hint: "Latest shops",
+    },
   ];
 
   return (
@@ -82,6 +107,8 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
                 previous: s.prev,
                 label: "prev period",
               }}
+              hint={s.hint}
+              onClick={() => setDrill(s.spec)}
             />
           ))}
         </div>
@@ -89,14 +116,24 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
 
       <h2 className="text-lg font-bold mb-3">Platform totals</h2>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total users" value={data.totals.total_users} />
-        <StatCard label="Buyers" value={data.totals.total_buyers} />
-        <StatCard label="Sellers" value={data.totals.total_sellers} />
-        <StatCard label="Total shops" value={data.totals.total_shops} />
-        <StatCard label="Pending verification" value={data.totals.shops_pending_verification} />
-        <StatCard label="Total products" value={data.totals.total_products} />
-        <StatCard label="Paid orders" value={data.totals.total_orders} />
-        <StatCard label="Revenue (all-time)" value={formatKES(parseFloat(data.totals.revenue_total))} />
+        <StatCard label="Total users" value={data.totals.total_users} onClick={() => setDrill(usersSpec())} hint="Latest signups" />
+        <StatCard label="Buyers" value={data.totals.total_buyers} onClick={() => setDrill(usersSpec("buyer"))} hint="Latest buyer signups" />
+        <StatCard label="Sellers" value={data.totals.total_sellers} onClick={() => setDrill(usersSpec("seller"))} hint="Latest seller signups" />
+        <StatCard label="Total shops" value={data.totals.total_shops} onClick={() => setDrill(shopsSpec())} hint="Latest shops" />
+        <StatCard
+          label="Pending verification"
+          value={data.totals.shops_pending_verification}
+          onClick={() => setDrill(shopsSpec("pending", "Shops pending verification"))}
+          hint="Shops awaiting approval"
+        />
+        <StatCard label="Total products" value={data.totals.total_products} onClick={() => setDrill(productsSpec())} hint="Latest products" />
+        <StatCard label="Paid orders" value={data.totals.total_orders} onClick={() => setDrill(ordersSpec())} hint="Paid orders, all time" />
+        <StatCard
+          label="Revenue (all-time)"
+          value={formatKES(parseFloat(data.totals.revenue_total))}
+          onClick={() => setDrill(ordersSpec())}
+          hint="All paid orders"
+        />
       </div>
 
       {data.trend.length > 0 && (
@@ -112,6 +149,20 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
           />
         </div>
       )}
+
+      <StatDrillDown
+        open={!!drill}
+        onClose={() => setDrill(null)}
+        title={drill?.title}
+        subtitle={drill?.subtitle}
+        queryUrl={drill?.queryUrl}
+        rows={drill?.rows}
+        columns={drill?.columns ?? []}
+        rowKey={drill?.rowKey ?? ((_r, i) => i)}
+        emptyText={drill?.emptyText}
+        href={drill?.href}
+        hrefLabel={drill?.hrefLabel}
+      />
     </div>
   );
 }

@@ -13,15 +13,48 @@ RESEND_API_URL = "https://api.resend.com/emails"
 
 def _send(to: str, subject: str, html: str) -> None:
     if not settings.RESEND_API_KEY:
-        logger.info("[DEV] Email to %s: %s\n%s", to, subject, html)
+        logger.warning(
+            "[EMAIL NOT CONFIGURED] RESEND_API_KEY is not set — email to %s skipped (subject: %r). "
+            "Set it and verify the sending domain in Resend for emails to actually go out.",
+            to, subject,
+        )
         return
 
     response = httpx.post(
         RESEND_API_URL,
         json={"from": settings.EMAIL_FROM, "to": [to], "subject": subject, "html": html},
         headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+        timeout=30,
+    )
+    if response.status_code >= 400:
+        # Surface Resend's reason (domain not verified, invalid recipient,
+        # rate limit, etc.) instead of a bare status so the admin can act on it.
+        detail = response.text[:500]
+        logger.error("Resend rejected email to %s (%s): %s", to, response.status_code, detail)
+        raise RuntimeError(f"Resend rejected email to {to} ({response.status_code}): {detail}")
+
+
+def resend_sending_domains() -> list[dict]:
+    """Verification status of the domains registered on the Resend account.
+    Resend only sends From addresses on verified domains — a domain with
+    pending DNS records silently rejects every send."""
+    if not settings.RESEND_API_KEY:
+        return []
+    response = httpx.get(
+        "https://api.resend.com/domains",
+        headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+        timeout=20,
     )
     response.raise_for_status()
+    return response.json().get("data", [])
+
+
+def send_test_email(to: str) -> None:
+    _send(
+        to=to,
+        subject="Ekshop test email",
+        html="<p>This is a test email from the Ekshop admin dashboard.</p><p>If you're reading this, the Resend integration is configured and the sending domain is verified.</p>",
+    )
 
 
 def send_verification_email(to: str, token: str, is_seller: bool = False) -> None:

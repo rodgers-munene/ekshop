@@ -3,17 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export async function GET(req: NextRequest) {
   const cookieStore = await cookies();
   const token = cookieStore.get("ekshop_token")?.value;
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
-  const body = await req.json();
-  const res = await fetch(`${BASE_URL}/conversations/${id}/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
+  const qs = req.nextUrl.search;
+  const res = await fetch(`${BASE_URL}/admin/orders${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
   });
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });

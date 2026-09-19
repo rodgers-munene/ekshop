@@ -578,6 +578,54 @@ export interface OrderNotificationRecipient {
   created_at: string;
 }
 
+export interface AdminEmailStatus {
+  resend_configured: boolean;
+  from_address: string;
+  from_domain: string;
+  verified_domains: string[];
+  from_domain_verified: boolean;
+  domains_error?: string | null;
+  active_recipient_count: number;
+}
+
+export interface AdminEmailTestResult {
+  success: boolean;
+  detail: string;
+}
+
+export interface RecentOrderRow {
+  id: string;
+  short_id: string;
+  created_at: string;
+  buyer_name: string;
+  total: string;
+  item_count: number;
+  shop_count: number;
+}
+
+export interface RecentOrderListResponse {
+  total: number;
+  page: number;
+  limit: number;
+  results: RecentOrderRow[];
+}
+
+export interface AdminProductRow {
+  id: string;
+  name: string;
+  price: string;
+  status: string;
+  shop_name?: string | null;
+  created_at: string;
+}
+
+export interface AdminProductListResponse {
+  total: number;
+  page: number;
+  limit: number;
+  results: AdminProductRow[];
+}
+
 // Geography (Kenya county → subcounty → ward)
 export interface County {
   id: string;
