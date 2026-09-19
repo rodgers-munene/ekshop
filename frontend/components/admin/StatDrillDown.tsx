@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { useEffect, useState, type ReactNode, type Key } from "react";
 import Link from "next/link";
 import { X, ArrowUpRight, Inbox } from "lucide-react";
@@ -43,23 +45,25 @@ export default function StatDrillDown({
   hrefLabel?: string;
 }) {
   const [data, setData] = useState<{ results: any[]; total: number } | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    if (!queryUrl) return;
-
-    setLoading(true);
-    setError(null);
+    if (!open || !queryUrl) return;
+    let cancelled = false;
     fetch(queryUrl)
       .then((r) => r.json().catch(() => ({})))
       .then((json) => {
+        if (cancelled) return;
         if (!json || !Array.isArray(json.results)) throw new Error("Invalid response");
         setData({ results: json.results, total: json.total ?? json.results.length });
+        setError(null);
       })
-      .catch(() => setError("Could not load the detail list."))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setError("Could not load the detail list.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [queryUrl, open]);
 
   useEffect(() => {
@@ -73,6 +77,7 @@ export default function StatDrillDown({
 
   if (!open) return null;
 
+  const loading = open && Boolean(queryUrl) && data === null && error === null;
   const list: any[] | null = queryUrl ? data?.results ?? null : rows ?? null;
   const total: number | null = queryUrl ? data?.total ?? null : (rows?.length ?? null);
 

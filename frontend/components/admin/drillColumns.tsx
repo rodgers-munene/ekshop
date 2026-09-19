@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import type { Key } from "react";
 import { formatKES } from "@/lib/utils";
 import type { DrillColumn } from "@/components/admin/StatDrillDown";
