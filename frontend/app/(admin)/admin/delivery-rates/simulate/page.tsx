@@ -144,7 +144,7 @@ export default function DeliverySimulatorPage() {
       {isPending && <p className="text-muted text-sm">Loading…</p>}
       {isError && <p className="text-danger text-sm">Could not run the simulation.</p>}
 
-      {data && (
+      {(data && Array.isArray(data.rows) && Array.isArray(data.buyer_counties) && data.buyer_regions) && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <p className="text-sm text-muted">

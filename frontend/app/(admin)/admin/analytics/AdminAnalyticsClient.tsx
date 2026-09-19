@@ -12,7 +12,6 @@ import {
   orderTowerSpec,
   customerRecoverySpec,
   abandonedSpec,
-  topProductsSpec,
 } from "@/components/admin/drillColumns";
 import {
   MerchantActivityMetrics,
@@ -87,16 +86,19 @@ export default function AdminAnalyticsClient({
 
   useEffect(() => {
     setLoading(true);
+    const asObj = (v: unknown) =>
+      v && typeof v === "object" && !Array.isArray(v) ? (v as object) : null;
+    const asArr = (v: unknown) => (Array.isArray(v) ? v : null);
     Promise.allSettled([
-      fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.json()).then(setMerchants),
-      fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.json()).then(setSales),
-      fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.json()).then(setRetention),
-      fetch(`/api/admin/metrics/operations?period=${period}`).then((r) => r.json()).then(setOperations),
-      fetch(`/api/admin/metrics/cart?period=${period}`).then((r) => r.json()).then(setCart),
-      fetch(`/api/admin/metrics/merchant-master-health?period=${period}`).then((r) => r.json()).then(setMerchantMaster),
-      fetch(`/api/admin/metrics/order-control-tower?period=${period}`).then((r) => r.json()).then(setOrderControl),
-      fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.json()).then(setCustomerRecovery),
-      fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.json()).then(setSupplyDemand),
+      fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.json()).then((j) => setMerchants(asObj(j) as MerchantActivityMetrics | null)),
+      fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.json()).then((j) => setSales(asObj(j) as SalesDemandMetrics | null)),
+      fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.json()).then((j) => setRetention(asObj(j) as CustomerRetentionMetrics | null)),
+      fetch(`/api/admin/metrics/operations?period=${period}`).then((r) => r.json()).then((j) => setOperations(asObj(j) as OperationsDeliveryMetrics | null)),
+      fetch(`/api/admin/metrics/cart?period=${period}`).then((r) => r.json()).then((j) => setCart(asObj(j) as CartAbandonmentMetrics | null)),
+      fetch(`/api/admin/metrics/merchant-master-health?period=${period}`).then((r) => r.json()).then((j) => setMerchantMaster(asArr(j) as MerchantMasterHealth[] | null)),
+      fetch(`/api/admin/metrics/order-control-tower?period=${period}`).then((r) => r.json()).then((j) => setOrderControl(asArr(j) as OrderControlTowerRow[] | null)),
+      fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.json()).then((j) => setCustomerRecovery(asArr(j) as CustomerRecoveryRow[] | null)),
+      fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.json()).then((j) => setSupplyDemand(asArr(j) as SupplyDemandRow[] | null)),
     ]).finally(() => setLoading(false));
   }, [period]);
 
