@@ -7,6 +7,10 @@ from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 
+def utcnow():
+    return datetime.now(timezone.utc)
+
+
 class ActorRole(str, enum.Enum):
     customer = "customer"
     seller = "seller"
