@@ -16,6 +16,7 @@ class MessageRead(BaseModel):
     sender_id: Optional[uuid.UUID]
     sender_type: ActorRole
     body: str
+    is_read: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -23,7 +24,10 @@ class MessageRead(BaseModel):
 
 class ConversationRead(BaseModel):
     id: uuid.UUID
+    buyer_id: Optional[uuid.UUID] = None
+    shop_id: Optional[uuid.UUID] = None
     order_id: Optional[uuid.UUID] = None
+    last_message_at: Optional[datetime] = None
     created_at: datetime
     messages: List[MessageRead] = []
 

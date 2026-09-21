@@ -1,6 +1,6 @@
 """add current_lat/current_lng to delivery_agents
 
-Revision ID: h7i8j9k0l1m2
+Revision ID: h7i8j9k0l1m4
 Revises: 594eefc41e58
 Create Date: 2026-09-21 16:45:00.000000
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "h7i8j9k0l1m2"
+revision: str = "h7i8j9k0l1m4"
 down_revision: Union[str, None] = "594eefc41e58"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

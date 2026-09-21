@@ -66,18 +66,28 @@ def list_conversations(
     if not identity:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    conversations = (
+    base_query = (
         db.query(Conversation)
         .options(selectinload(Conversation.messages).selectinload(Message.sender))
-        .join(Order, Order.id == Conversation.order_id, isouter=True)
-        .filter(
-            (Conversation.order_id.is_(None) & Conversation.participants.any(id=identity.id))
-            | (Order.buyer_id == identity.id if isinstance(identity, User) else False)
-            | (Order.shop.has(seller_id=identity.id) if isinstance(identity, User) else False)
-        )
-        .order_by(Conversation.created_at.desc())
-        .all()
     )
+
+    if isinstance(identity, User):
+        conversations = (
+            base_query.join(Order, Order.id == Conversation.order_id, isouter=True)
+            .filter(
+                (Conversation.order_id.is_(None) & Conversation.participants.any(id=identity.id))
+                | (Order.buyer_id == identity.id)
+                | (Order.shop.has(seller_id=identity.id))
+            )
+            .order_by(Conversation.created_at.desc())
+            .all()
+        )
+    else:
+        conversations = (
+            base_query.filter(Conversation.order_id.is_(None) & Conversation.participants.any(id=identity.id))
+            .order_by(Conversation.created_at.desc())
+            .all()
+        )
     return conversations
 
 

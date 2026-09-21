@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import Numeric, cast, func
 from sqlalchemy.orm import Session, selectinload
 
@@ -416,6 +417,26 @@ def get_margin_leakage(
 ):
     since, until = _period_bounds(period, days)
     return dashboard_metrics.get_margin_leakage_metrics(db, since, until)
+
+
+@router.get("/reports/margin-leakage.csv")
+def export_margin_leakage_csv(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    metrics = dashboard_metrics.get_margin_leakage_metrics(db, since, until)
+    lines = [
+        "label,gmv,platform_commission,mpesa_fees,net_profit,gross_margin_pct,aov",
+    ]
+    for point in metrics.get("trend", []):
+        lines.append(
+            f"{point['label']},{point['gmv']:.2f},{point['platform_commission']:.2f},{point['mpesa_fees']:.2f},{point['net_profit']:.2f},{point['gross_margin_pct']:.2f},{point['aov']:.2f}"
+        )
+    csv_content = "\n".join(lines) + "\n"
+    return Response(content=csv_content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=margin-leakage.csv"})
 
 
 @router.get("/metrics/priority-acquisition", response_model=List[PriorityAcquisitionRow])

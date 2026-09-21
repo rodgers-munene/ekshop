@@ -25,3 +25,5 @@ logs/
 # ─── Docs (generated PDFs, not tracked) ──────────────────────────────────────
 backend/docs/
 kenya-latest.osm.pbf
+*.xlsx
+*.docx

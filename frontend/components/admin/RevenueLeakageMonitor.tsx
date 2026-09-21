@@ -67,6 +67,16 @@ export default function RevenueLeakageMonitor({ data }: { data: MarginLeakageMet
   const server = useMemo(() => Number(data.server_cost), [data.server_cost]);
   const net = useMemo(() => Number(data.net_profit), [data.net_profit]);
 
+  function downloadCsv() {
+    const params = new URLSearchParams();
+    if (data.period && data.period !== "custom") params.set("period", data.period);
+    const start = (data.start as string | undefined)?.split("T")[0];
+    const end = (data.end as string | undefined)?.split("T")[0];
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    window.open(`/api/admin/reports/margin-leakage.csv?${params.toString()}`, "_blank");
+  }
+
   return (
     <div className="card p-5 space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -76,9 +86,12 @@ export default function RevenueLeakageMonitor({ data }: { data: MarginLeakageMet
             {data.period === "custom" ? `${data.start} → ${data.end}` : data.period} · {data.orders} orders · AOV KES {Number(data.average_order_value).toLocaleString()}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold">{data.gross_margin_pct.toFixed(1)}%</p>
-          <p className="text-xs text-muted">Gross margin</p>
+        <div className="flex items-center gap-3">
+          <button onClick={downloadCsv} className="text-xs border border-border rounded-md px-3 py-1.5 hover:border-amber transition-colors">Download CSV</button>
+          <div className="text-right">
+            <p className="text-2xl font-bold">{data.gross_margin_pct.toFixed(1)}%</p>
+            <p className="text-xs text-muted">Gross margin</p>
+          </div>
         </div>
       </div>
 
