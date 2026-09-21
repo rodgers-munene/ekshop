@@ -570,6 +570,33 @@ export interface OperationsDeliveryMetrics {
   delivery_revenue: string;
 }
 
+export interface MarginLeakageTrendPoint {
+  label: string;
+  gmv: number;
+  platform_commission: number;
+  mpesa_fees: number;
+  net_profit: number;
+  gross_margin_pct: number;
+  aov: number;
+}
+
+export interface MarginLeakageMetrics {
+  period: string;
+  start: string;
+  end: string;
+  gmv: string;
+  orders: number;
+  average_order_value: string;
+  platform_commission: string;
+  mpesa_fees: string;
+  server_cost: string;
+  net_profit: string;
+  gross_margin_pct: number;
+  commission_rate_pct: number;
+  mpesa_rate_pct: number;
+  trend: MarginLeakageTrendPoint[];
+}
+
 export interface OrderNotificationRecipient {
   id: string;
   email: string;

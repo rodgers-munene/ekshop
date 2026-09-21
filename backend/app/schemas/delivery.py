@@ -34,6 +34,9 @@ class DeliveryAgentRead(BaseModel):
     weekly_earnings: str = "0.00"
     monthly_earnings: str = "0.00"
     rating_avg: str
+    current_lat: Optional[float] = None
+    current_lng: Optional[float] = None
+    last_location_update: Optional[datetime] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -121,6 +124,11 @@ class DeliverySimulationResponse(BaseModel):
 
 class AgentStatusUpdate(BaseModel):
     status: DeliveryAgentStatus
+
+
+class AgentLocationUpdate(BaseModel):
+    lat: float
+    lng: float
 
 
 class DeliveryIssueCreate(BaseModel):

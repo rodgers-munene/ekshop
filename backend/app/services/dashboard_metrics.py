@@ -672,3 +672,84 @@ def get_priority_acquisition(db: Session, since: datetime, until: Optional[datet
                 }
             )
     return rows
+
+
+# ── Revenue leakage & margin monitor ────────────────────────────────────────
+
+COMMISSION_RATE = Decimal("0.10")
+MPESA_RATE = Decimal("0.0055")
+SERVER_COST_PER_ORDER = Decimal("6.25")
+
+
+def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[datetime] = None) -> dict:
+    end = _bound(since, until)
+    paid_groups = db.query(OrderGroup).filter(
+        OrderGroup.status == OrderGroupStatus.paid,
+        OrderGroup.created_at >= since,
+        OrderGroup.created_at < end,
+    )
+    order_count = paid_groups.count()
+    gmv = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
+
+    platform_commission = (gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
+    mpesa_fees = (gmv * MPESA_RATE).quantize(Decimal("0.01"))
+    server_cost = (Decimal(order_count) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
+    net_profit = (gmv - platform_commission - mpesa_fees - server_cost).quantize(Decimal("0.01"))
+    gross_margin_pct = float((net_profit / gmv * 100).quantize(Decimal("0.01"))) if gmv else 0.0
+    average_order_value = (gmv / Decimal(order_count)).quantize(Decimal("0.01")) if order_count else Decimal("0")
+
+    day_col = func.date_trunc("day", OrderGroup.created_at)
+    rows = (
+        db.query(
+            day_col.label("day"),
+            func.sum(cast(OrderGroup.total, Numeric)).label("gmv"),
+            func.count(OrderGroup.id).label("orders"),
+        )
+        .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at >= since)
+        .group_by(day_col)
+        .all()
+    )
+    by_day = {row.day.date(): row for row in rows}
+
+    trend = []
+    days_span = max((end - since).days, 1)
+    today = datetime.now(timezone.utc).date()
+    for i in range(days_span - 1, -1, -1):
+        day = today - timedelta(days=i)
+        row = by_day.get(day)
+        day_gmv = Decimal(row.gmv) if row and row.gmv else Decimal("0")
+        day_orders = int(row.orders) if row else 0
+        day_commission = (day_gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
+        day_mpesa = (day_gmv * MPESA_RATE).quantize(Decimal("0.01"))
+        day_server = (Decimal(day_orders) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
+        day_profit = (day_gmv - day_commission - day_mpesa - day_server).quantize(Decimal("0.01"))
+        day_margin = float((day_profit / day_gmv * 100).quantize(Decimal("0.01"))) if day_gmv else 0.0
+        day_aov = float((day_gmv / Decimal(day_orders)).quantize(Decimal("0.01"))) if day_orders else 0.0
+        trend.append(
+            {
+                "label": day.strftime("%d %b"),
+                "gmv": float(day_gmv),
+                "platform_commission": float(day_commission),
+                "mpesa_fees": float(day_mpesa),
+                "net_profit": float(day_profit),
+                "gross_margin_pct": day_margin,
+                "aov": day_aov,
+            }
+        )
+
+    return {
+        "period": "custom",
+        "start": since,
+        "end": end,
+        "gmv": str(gmv),
+        "orders": order_count,
+        "average_order_value": str(average_order_value),
+        "platform_commission": str(platform_commission),
+        "mpesa_fees": str(mpesa_fees),
+        "server_cost": str(server_cost),
+        "net_profit": str(net_profit),
+        "gross_margin_pct": gross_margin_pct,
+        "commission_rate_pct": float(COMMISSION_RATE * 100),
+        "mpesa_rate_pct": float(MPESA_RATE * 100),
+        "trend": trend,
+    }

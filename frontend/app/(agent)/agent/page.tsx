@@ -17,12 +17,32 @@ const STATUS_LABELS: Record<AgentStatus, string> = {
 export default function AgentHomePage() {
   const [status, setStatus] = useState<AgentStatus>("available");
   const [loading, setLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const { data: deliveries = [] } = useQuery({
     queryKey: ["agent-deliveries"],
     queryFn: () => fetch("/api/agent/deliveries").then((r) => r.json()) as Promise<Delivery[]>,
     refetchInterval: 20000,
   });
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation not supported");
+      return;
+    }
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        fetch("/api/agent/location", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        }).catch(() => {});
+      },
+      () => setLocationError("Location permission denied"),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
 
   useEffect(() => {
     fetch("/api/agent/deliveries")
@@ -67,6 +87,7 @@ export default function AgentHomePage() {
           <p className="text-sm text-muted">
             {next ? "You have active deliveries" : "No active deliveries"}
           </p>
+          {locationError && <p className="text-xs text-danger mt-1">{locationError}</p>}
         </div>
         <button
           onClick={toggleStatus}

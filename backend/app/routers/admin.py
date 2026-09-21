@@ -37,6 +37,8 @@ from app.schemas.admin import (
     CartAbandonmentMetrics,
     CustomerRecoveryRow,
     CustomerRetentionMetrics,
+    MarginLeakageMetrics,
+    MarginLeakageTrendPoint,
     MerchantMasterHealth,
     OperationsDeliveryMetrics,
     OrderControlTowerRow,
@@ -403,6 +405,17 @@ def get_supply_demand(
 ):
     since, until = _period_bounds(period, days)
     return dashboard_metrics.get_supply_demand_matrix(db, since, until)
+
+
+@router.get("/metrics/margin-leakage", response_model=MarginLeakageMetrics)
+def get_margin_leakage(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_margin_leakage_metrics(db, since, until)
 
 
 @router.get("/metrics/priority-acquisition", response_model=List[PriorityAcquisitionRow])

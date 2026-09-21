@@ -5,6 +5,7 @@ import { formatKES } from "@/lib/utils";
 import StatCard from "@/components/dashboard/StatCard";
 import PeriodFilter, { PeriodKey } from "@/components/dashboard/PeriodFilter";
 import StatDrillDown from "@/components/admin/StatDrillDown";
+import RevenueLeakageMonitor from "@/components/admin/RevenueLeakageMonitor";
 import {
   DrillSpec,
   ordersSpec,
@@ -14,6 +15,7 @@ import {
   abandonedSpec,
 } from "@/components/admin/drillColumns";
 import {
+  MarginLeakageMetrics,
   MerchantActivityMetrics,
   SalesDemandMetrics,
   CustomerRetentionMetrics,
@@ -26,10 +28,11 @@ import {
   AdminOverview,
 } from "@/types/interface";
 
-type Section = "overview" | "merchants" | "sales" | "retention" | "operations" | "cart" | "merchant-master" | "order-control" | "customer-recovery" | "supply-demand";
+type Section = "overview" | "merchants" | "sales" | "retention" | "operations" | "cart" | "merchant-master" | "order-control" | "customer-recovery" | "supply-demand" | "margin";
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: "overview", label: "Overview" },
+  { key: "margin", label: "Revenue Leakage & Margin" },
   { key: "merchants", label: "Merchant Activity" },
   { key: "merchant-master", label: "Merchant Master Health" },
   { key: "order-control", label: "Order Control Tower" },
@@ -61,6 +64,7 @@ export default function AdminAnalyticsClient({
   orderControl: initOrderControl,
   customerRecovery: initCustomerRecovery,
   supplyDemand: initSupplyDemand,
+  marginLeakage: initMarginLeakage,
   overview: initOverview,
 }: {
   merchants: MerchantActivityMetrics | null;
@@ -72,6 +76,7 @@ export default function AdminAnalyticsClient({
   orderControl: OrderControlTowerRow[] | null;
   customerRecovery: CustomerRecoveryRow[] | null;
   supplyDemand: SupplyDemandRow[] | null;
+  marginLeakage: MarginLeakageMetrics | null;
   overview: AdminOverview | null;
 }) {
   const [period, setPeriod] = useState<PeriodKey>("month");
@@ -87,6 +92,7 @@ export default function AdminAnalyticsClient({
   const [orderControl, setOrderControl] = useState<OrderControlTowerRow[] | null>(initOrderControl);
   const [customerRecovery, setCustomerRecovery] = useState<CustomerRecoveryRow[] | null>(initCustomerRecovery);
   const [supplyDemand, setSupplyDemand] = useState<SupplyDemandRow[] | null>(initSupplyDemand);
+  const [marginLeakage, setMarginLeakage] = useState<MarginLeakageMetrics | null>(initMarginLeakage);
   const [overview, setOverview] = useState<AdminOverview | null>(initOverview);
 
   useEffect(() => {
@@ -98,7 +104,7 @@ export default function AdminAnalyticsClient({
     async function load() {
       setRefreshing(true);
       try {
-        const [m, s, r, o, c, mm, oc, cr, sd, ov] = await Promise.all([
+        const [m, s, r, o, c, mm, oc, cr, sd, ov, ml] = await Promise.all([
           fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.json()),
           fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.json()),
           fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.json()),
@@ -109,6 +115,7 @@ export default function AdminAnalyticsClient({
           fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.json()),
           fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.json()),
           fetch(`/api/admin/stats/overview?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/margin-leakage?period=${period}`).then((r) => r.json()),
         ]);
         if (!cancelled) {
           setMerchants(asObj(m) as MerchantActivityMetrics | null);
@@ -120,10 +127,11 @@ export default function AdminAnalyticsClient({
           setOrderControl(asArr(oc) as OrderControlTowerRow[] | null);
           setCustomerRecovery(asArr(cr) as CustomerRecoveryRow[] | null);
           setSupplyDemand(asArr(sd) as SupplyDemandRow[] | null);
+          setMarginLeakage(asObj(ml) as MarginLeakageMetrics | null);
           setOverview(asObj(ov) as AdminOverview | null);
         }
       } finally {
-        if (!cancelled) setRefreshing(false);
+        setRefreshing(false);
       }
     }
 
@@ -183,6 +191,8 @@ export default function AdminAnalyticsClient({
             <StatCard label="New products" value={overview.metrics.new_products} />
             <StatCard label="Cart abandonment rate" value={`${overview.metrics.cart_abandonment_rate}%`} />
           </div>
+
+          {marginLeakage && <RevenueLeakageMonitor data={marginLeakage} />}
         </div>
       )}
 

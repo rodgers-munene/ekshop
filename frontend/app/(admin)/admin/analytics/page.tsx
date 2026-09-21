@@ -1,5 +1,6 @@
 import { serverFetch } from "@/lib/server-api";
 import {
+  MarginLeakageMetrics,
   MerchantActivityMetrics,
   SalesDemandMetrics,
   CustomerRetentionMetrics,
@@ -14,7 +15,7 @@ import {
 import AdminAnalyticsClient from "./AdminAnalyticsClient";
 
 export default async function AdminAnalyticsPage() {
-  const [overview, merchants, sales, retention, operations, cart, merchantMaster, orderControl, customerRecovery, supplyDemand] = await Promise.all([
+  const [overview, merchants, sales, retention, operations, cart, merchantMaster, orderControl, customerRecovery, supplyDemand, marginLeakage] = await Promise.all([
     serverFetch<AdminOverview>("/admin/stats/overview?period=month").catch(() => null),
     serverFetch<MerchantActivityMetrics>("/admin/metrics/merchants?period=month").catch(() => null),
     serverFetch<SalesDemandMetrics>("/admin/metrics/sales?period=month").catch(() => null),
@@ -25,6 +26,7 @@ export default async function AdminAnalyticsPage() {
     serverFetch<OrderControlTowerRow[]>("/admin/metrics/order-control-tower?period=month").catch(() => null),
     serverFetch<CustomerRecoveryRow[]>("/admin/metrics/customer-recovery?period=month").catch(() => null),
     serverFetch<SupplyDemandRow[]>("/admin/metrics/supply-demand?period=month").catch(() => null),
+    serverFetch<MarginLeakageMetrics>("/admin/metrics/margin-leakage?period=month").catch(() => null),
   ]);
 
   return (
@@ -39,6 +41,7 @@ export default async function AdminAnalyticsPage() {
       orderControl={orderControl}
       customerRecovery={customerRecovery}
       supplyDemand={supplyDemand}
+      marginLeakage={marginLeakage}
     />
   );
 }

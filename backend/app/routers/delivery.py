@@ -1,5 +1,6 @@
 import uuid
 import secrets
+import math
 from datetime import datetime, timezone, timedelta
 from typing import List
 
@@ -20,7 +21,7 @@ from app.models.shop import Shop, ShopStatus
 from app.models.user import User
 from app.schemas.delivery import (
     AgentLoginRequest, AgentTokenResponse,
-    AgentStatusUpdate,
+    AgentStatusUpdate, AgentLocationUpdate,
     DeliveryAgentCreate, DeliveryAgentRead, DeliveryAgentListResponse,
     DeliveryIssueCreate, DeliveryIssueRead,
     DeliveryRead, DeliveryStatusUpdate,
@@ -52,6 +53,15 @@ DELIVERY_TRANSITIONS = {
     "picked":     ["in_transit"],
     "in_transit": ["delivered", "cancelled"],
 }
+
+
+def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 def get_current_agent(
@@ -233,6 +243,16 @@ def update_delivery_status(
     elif payload.status == DeliveryStatus.in_transit:
         delivery.in_transit_at = now
     elif payload.status == DeliveryStatus.delivered:
+        address = delivery.order.delivery_address or {}
+        buyer_lat = address.get("lat")
+        buyer_lng = address.get("lng")
+        if buyer_lat and buyer_lng and agent.current_lat and agent.current_lng:
+            distance = _haversine(agent.current_lat, agent.current_lng, float(buyer_lat), float(buyer_lng))
+            if distance > 0.5:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"You must be within 500m of the delivery address to mark as delivered. Current distance: {distance:.2f} km",
+                )
         delivery.delivered_at = now
         agent.total_deliveries += 1
         agent.status = DeliveryAgentStatus.active
@@ -295,6 +315,44 @@ def update_my_status(
     db.commit()
     db.refresh(agent)
     return agent
+
+
+@router.patch("/agents/me/location", response_model=DeliveryAgentRead)
+def update_my_location(
+    payload: AgentLocationUpdate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    agent.current_lat = payload.lat
+    agent.current_lng = payload.lng
+    agent.last_location_update = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
+@router.get("/agents/locations")
+def get_agent_locations(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    agents = (
+        db.query(DeliveryAgent)
+        .filter(DeliveryAgent.current_lat.is_not(None), DeliveryAgent.current_lng.is_not(None))
+        .all()
+    )
+    return [
+        {
+            "id": str(a.id),
+            "name": a.name,
+            "status": a.status.value,
+            "lat": a.current_lat,
+            "lng": a.current_lng,
+            "last_update": a.last_location_update.isoformat() if a.last_location_update else None,
+            "current_order_id": str(a.current_order_id) if a.current_order_id else None,
+        }
+        for a in agents
+    ]
 
 
 @router.get("/agents/me/earnings")

@@ -44,6 +44,9 @@ class DeliveryAgent(Base):
     current_order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="SET NULL"))
     total_deliveries = Column(Integer, default=0)
     rating_avg = Column(String(5), default="5.00")
+    current_lat = Column(Float)
+    current_lng = Column(Float)
+    last_location_update = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     current_order = relationship("Order", foreign_keys=[current_order_id])

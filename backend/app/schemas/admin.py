@@ -381,3 +381,30 @@ class AdminProductListResponse(BaseModel):
     page: int
     limit: int
     results: List[AdminProductRow]
+
+
+class MarginLeakageTrendPoint(BaseModel):
+    label: str
+    gmv: float
+    platform_commission: float
+    mpesa_fees: float
+    net_profit: float
+    gross_margin_pct: float
+    aov: float
+
+
+class MarginLeakageMetrics(BaseModel):
+    period: str
+    start: datetime
+    end: datetime
+    gmv: str
+    orders: int
+    average_order_value: str
+    platform_commission: str
+    mpesa_fees: str
+    server_cost: str
+    net_profit: str
+    gross_margin_pct: float
+    commission_rate_pct: float
+    mpesa_rate_pct: float
+    trend: List[MarginLeakageTrendPoint]
