@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { serverFetch } from "@/lib/server-api";
-import { Product, Shop } from "@/types/interface";
+import { Product } from "@/types/interface";
 import ProductForm from "@/components/dashboard/ProductForm";
 
 interface Props {
@@ -10,12 +10,16 @@ interface Props {
 export default async function EditProductPage({ params }: Props) {
   const { slug } = await params;
 
-  const [product, shop] = await Promise.all([
-    serverFetch<Product>(`/products/${slug}`).catch(() => null),
-    serverFetch<Shop>("/shops/me").catch(() => null),
-  ]);
+  // `/shops/me/products/{slug}` rather than the public `/products/{slug}`: the
+  // public one serves only active products on an active shop, so following the
+  // edit link from the Products page 404'd on the seller's own draft or paused
+  // product. The endpoint is already scoped to the caller's shop, which is what
+  // makes the ownership check here unnecessary.
+  const product = await serverFetch<Product>(`/shops/me/products/${slug}`).catch(
+    () => null
+  );
 
-  if (!product || !shop || product.shop_id !== shop.id) notFound();
+  if (!product) notFound();
 
   return (
     <div>

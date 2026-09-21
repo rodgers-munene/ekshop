@@ -24,7 +24,7 @@ from app.models.user import User
 from app.models.commerce import Order, OrderGroup
 from app.models.catalog import Product
 from app.schemas.commerce import OrderRead
-from app.schemas.catalog import ProductListResponse, ProductStatus, ShopSummary, ShopListResponse
+from app.schemas.catalog import ProductListResponse, ProductRead, ProductStatus, ShopSummary, ShopListResponse
 
 router = APIRouter(prefix="/shops", tags=["shops"])
 
@@ -133,6 +133,45 @@ def get_my_products(
     )
 
     return ProductListResponse(total=total, page=page, limit=limit, results=products)
+
+
+@router.get(
+    "/me/products/{slug}",
+    response_model=ProductRead,
+    status_code=status.HTTP_200_OK,
+    summary="Get one of my own products, including drafts",
+)
+def get_my_product(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_allow_unpaid_seller),
+):
+    """One product from the seller's own catalogue, by slug.
+
+    Same reason as `/me/products` above: the public `/products/{slug}` serves
+    only `active` products on an `active` shop, so the edit link the seller
+    followed from their own Products page 404'd on their own draft or paused
+    product — and on every product they owned while the shop was still
+    awaiting verification.
+
+    Scoping the query to the caller's shop is also what authorises the edit:
+    a slug belonging to someone else is simply not found here.
+    """
+    shop = db.query(Shop).filter(Shop.seller_id == current_user.id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="You don't have a shop yet")
+
+    product = (
+        db.query(Product)
+        .options(selectinload(Product.images), selectinload(Product.variants))
+        .filter(Product.shop_id == shop.id, Product.slug == slug)
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    return product
 
 
 @router.get(
