@@ -143,7 +143,7 @@ def list_agents(
 # ── Admin: assign delivery ────────────────────────────────────────────────────
 
 @router.post("/{order_id}/assign", response_model=DeliveryRead, status_code=201)
-def assign_delivery(
+async def assign_delivery(
     order_id: uuid.UUID,
     agent_id: uuid.UUID,
     db: Session = Depends(get_db),
