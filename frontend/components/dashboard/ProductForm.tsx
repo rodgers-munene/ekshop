@@ -526,34 +526,43 @@ export default function ProductForm({
       </MoreOptions>
 
       {/* Pinned to the bottom so the save button is always a thumb away, rather
-          than behind a scroll past every optional field. */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur border-t border-border px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={busy}
-            className="btn-accent flex-1 disabled:opacity-60 disabled:cursor-wait"
-          >
-            {busy && <Loader2 size={15} className="animate-spin" />}
-            {uploadProgress
-              ? `Uploading photo ${uploadProgress.done + 1} of ${uploadProgress.total}…`
-              : saving
-                ? "Saving…"
-                : mode === "create"
-                  ? "Publish product"
-                  : "Save changes"}
-          </button>
+          than behind a scroll past every optional field.
 
-          {mode === "create" && (
+          `md:left-56` clears the dashboard sidebar, which `left-0` alone ran
+          underneath; below md the sidebar is a horizontal nav at the top, so
+          the bar spans the full width there. The two wrappers mirror the
+          dashboard `main` (max-w-6xl, px-4/md:px-8) and this form (max-w-2xl,
+          left-aligned) so the button lands directly under the form instead of
+          being centred on the viewport. */}
+      <div className="fixed bottom-0 left-0 md:left-56 right-0 z-20 bg-white/95 backdrop-blur border-t border-border">
+        <div className="max-w-6xl mx-auto w-full px-4 md:px-8 py-3">
+          <div className="max-w-2xl flex items-center gap-3">
             <button
-              type="button"
+              type="submit"
               disabled={busy}
-              onClick={() => submit("draft")}
-              className="btn-outline shrink-0 text-sm px-4! disabled:opacity-60"
+              className="btn-accent flex-1 disabled:opacity-60 disabled:cursor-wait"
             >
-              Save draft
+              {busy && <Loader2 size={15} className="animate-spin" />}
+              {uploadProgress
+                ? `Uploading photo ${uploadProgress.done + 1} of ${uploadProgress.total}…`
+                : saving
+                  ? "Saving…"
+                  : mode === "create"
+                    ? "Publish product"
+                    : "Save changes"}
             </button>
-          )}
+
+            {mode === "create" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => submit("draft")}
+                className="btn-outline shrink-0 text-sm px-4! disabled:opacity-60"
+              >
+                Save draft
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </form>
