@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const qs = url.search;
 
-  const res = await fetch(`${BASE_URL}/admin/stats/overview${qs}`, {
+  const res = await fetch(`${BASE_URL}/admin/metrics/merchant-master-health${qs}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
