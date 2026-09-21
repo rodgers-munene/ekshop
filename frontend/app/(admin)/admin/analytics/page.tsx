@@ -9,11 +9,13 @@ import {
   OrderControlTowerRow,
   CustomerRecoveryRow,
   SupplyDemandRow,
+  AdminOverview,
 } from "@/types/interface";
 import AdminAnalyticsClient from "./AdminAnalyticsClient";
 
 export default async function AdminAnalyticsPage() {
-  const [merchants, sales, retention, operations, cart, merchantMaster, orderControl, customerRecovery, supplyDemand] = await Promise.all([
+  const [overview, merchants, sales, retention, operations, cart, merchantMaster, orderControl, customerRecovery, supplyDemand] = await Promise.all([
+    serverFetch<AdminOverview>("/admin/stats/overview?period=month").catch(() => null),
     serverFetch<MerchantActivityMetrics>("/admin/metrics/merchants?period=month").catch(() => null),
     serverFetch<SalesDemandMetrics>("/admin/metrics/sales?period=month").catch(() => null),
     serverFetch<CustomerRetentionMetrics>("/admin/metrics/retention?period=month").catch(() => null),
@@ -27,6 +29,7 @@ export default async function AdminAnalyticsPage() {
 
   return (
     <AdminAnalyticsClient
+      overview={overview}
       merchants={merchants}
       sales={sales}
       retention={retention}

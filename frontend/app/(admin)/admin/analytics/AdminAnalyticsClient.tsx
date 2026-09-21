@@ -23,11 +23,13 @@ import {
   OrderControlTowerRow,
   CustomerRecoveryRow,
   SupplyDemandRow,
+  AdminOverview,
 } from "@/types/interface";
 
-type Section = "merchants" | "sales" | "retention" | "operations" | "cart" | "merchant-master" | "order-control" | "customer-recovery" | "supply-demand";
+type Section = "overview" | "merchants" | "sales" | "retention" | "operations" | "cart" | "merchant-master" | "order-control" | "customer-recovery" | "supply-demand";
 
 const SECTIONS: { key: Section; label: string }[] = [
+  { key: "overview", label: "Overview" },
   { key: "merchants", label: "Merchant Activity" },
   { key: "merchant-master", label: "Merchant Master Health" },
   { key: "order-control", label: "Order Control Tower" },
@@ -59,6 +61,7 @@ export default function AdminAnalyticsClient({
   orderControl: initOrderControl,
   customerRecovery: initCustomerRecovery,
   supplyDemand: initSupplyDemand,
+  overview: initOverview,
 }: {
   merchants: MerchantActivityMetrics | null;
   sales: SalesDemandMetrics | null;
@@ -69,10 +72,11 @@ export default function AdminAnalyticsClient({
   orderControl: OrderControlTowerRow[] | null;
   customerRecovery: CustomerRecoveryRow[] | null;
   supplyDemand: SupplyDemandRow[] | null;
+  overview: AdminOverview | null;
 }) {
   const [period, setPeriod] = useState<PeriodKey>("month");
-  const [section, setSection] = useState<Section>("merchants");
-  const [loading, setLoading] = useState(false);
+  const [section, setSection] = useState<Section>("overview");
+  const [refreshing, setRefreshing] = useState(false);
   const [drill, setDrill] = useState<DrillSpec | null>(null);
   const [merchants, setMerchants] = useState(initMerchants);
   const [sales, setSales] = useState(initSales);
@@ -83,24 +87,51 @@ export default function AdminAnalyticsClient({
   const [orderControl, setOrderControl] = useState<OrderControlTowerRow[] | null>(initOrderControl);
   const [customerRecovery, setCustomerRecovery] = useState<CustomerRecoveryRow[] | null>(initCustomerRecovery);
   const [supplyDemand, setSupplyDemand] = useState<SupplyDemandRow[] | null>(initSupplyDemand);
+  const [overview, setOverview] = useState<AdminOverview | null>(initOverview);
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
     const asObj = (v: unknown) =>
       v && typeof v === "object" && !Array.isArray(v) ? (v as object) : null;
     const asArr = (v: unknown) => (Array.isArray(v) ? v : null);
-    Promise.allSettled([
-      fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.json()).then((j) => setMerchants(asObj(j) as MerchantActivityMetrics | null)),
-      fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.json()).then((j) => setSales(asObj(j) as SalesDemandMetrics | null)),
-      fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.json()).then((j) => setRetention(asObj(j) as CustomerRetentionMetrics | null)),
-      fetch(`/api/admin/metrics/operations?period=${period}`).then((r) => r.json()).then((j) => setOperations(asObj(j) as OperationsDeliveryMetrics | null)),
-      fetch(`/api/admin/metrics/cart?period=${period}`).then((r) => r.json()).then((j) => setCart(asObj(j) as CartAbandonmentMetrics | null)),
-      fetch(`/api/admin/metrics/merchant-master-health?period=${period}`).then((r) => r.json()).then((j) => setMerchantMaster(asArr(j) as MerchantMasterHealth[] | null)),
-      fetch(`/api/admin/metrics/order-control-tower?period=${period}`).then((r) => r.json()).then((j) => setOrderControl(asArr(j) as OrderControlTowerRow[] | null)),
-      fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.json()).then((j) => setCustomerRecovery(asArr(j) as CustomerRecoveryRow[] | null)),
-      fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.json()).then((j) => setSupplyDemand(asArr(j) as SupplyDemandRow[] | null)),
-    ]).finally(() => setLoading(false));
-  }, [period]);
+
+    async function load() {
+      setRefreshing(true);
+      try {
+        const [m, s, r, o, c, mm, oc, cr, sd, ov] = await Promise.all([
+          fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/operations?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/cart?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/merchant-master-health?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/order-control-tower?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/stats/overview?period=${period}`).then((r) => r.json()),
+        ]);
+        if (!cancelled) {
+          setMerchants(asObj(m) as MerchantActivityMetrics | null);
+          setSales(asObj(s) as SalesDemandMetrics | null);
+          setRetention(asObj(r) as CustomerRetentionMetrics | null);
+          setOperations(asObj(o) as OperationsDeliveryMetrics | null);
+          setCart(asObj(c) as CartAbandonmentMetrics | null);
+          setMerchantMaster(asArr(mm) as MerchantMasterHealth[] | null);
+          setOrderControl(asArr(oc) as OrderControlTowerRow[] | null);
+          setCustomerRecovery(asArr(cr) as CustomerRecoveryRow[] | null);
+          setSupplyDemand(asArr(sd) as SupplyDemandRow[] | null);
+          setOverview(asObj(ov) as AdminOverview | null);
+        }
+      } finally {
+        if (!cancelled) setRefreshing(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [period, setRefreshing]);
 
   return (
     <div>
@@ -126,9 +157,36 @@ export default function AdminAnalyticsClient({
         ))}
       </div>
 
-      {loading && <Skeleton />}
+      {refreshing && <Skeleton />}
 
-      {!loading && section === "merchants" && (
+      {!refreshing && section === "overview" && overview && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard label="Total users" value={overview.totals.total_users} />
+            <StatCard label="Total buyers" value={overview.totals.total_buyers} />
+            <StatCard label="Total sellers" value={overview.totals.total_sellers} />
+            <StatCard label="Total shops" value={overview.totals.total_shops} />
+            <StatCard label="Pending verification" value={overview.totals.shops_pending_verification} />
+            <StatCard label="Total products" value={overview.totals.total_products} />
+            <StatCard label="Total orders" value={overview.totals.total_orders} />
+            <StatCard label="Revenue" value={formatKES(overview.totals.revenue_total)} />
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard label="Period revenue" value={formatKES(overview.metrics.revenue)} />
+            <StatCard label="Period orders" value={overview.metrics.orders} />
+            <StatCard label="Avg. order value" value={formatKES(overview.metrics.average_order_value)} />
+            <StatCard label="New users" value={overview.metrics.new_users} />
+            <StatCard label="New buyers" value={overview.metrics.new_buyers} />
+            <StatCard label="New sellers" value={overview.metrics.new_sellers} />
+            <StatCard label="New shops" value={overview.metrics.new_shops} />
+            <StatCard label="New products" value={overview.metrics.new_products} />
+            <StatCard label="Cart abandonment rate" value={`${overview.metrics.cart_abandonment_rate}%`} />
+          </div>
+        </div>
+      )}
+
+      {!refreshing && section === "merchants" && (
         merchants ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Active merchants (7d)" value={merchants.active_merchants_7d} onClick={() => setDrill(merchantMasterSpec(merchantMaster ?? []))} hint="Open Merchant Master" />
@@ -143,7 +201,7 @@ export default function AdminAnalyticsClient({
         ) : <p className="text-muted text-sm">Could not load merchant metrics.</p>
       )}
 
-      {!loading && section === "merchant-master" && (
+      {!refreshing && section === "merchant-master" && (
         merchantMaster ? (
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
@@ -198,7 +256,7 @@ export default function AdminAnalyticsClient({
         ) : <p className="text-muted text-sm">Could not load merchant master health.</p>
       )}
 
-      {!loading && section === "order-control" && (
+      {!refreshing && section === "order-control" && (
         orderControl ? (
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
@@ -247,7 +305,7 @@ export default function AdminAnalyticsClient({
         ) : <p className="text-muted text-sm">Could not load order control tower.</p>
       )}
 
-      {!loading && section === "customer-recovery" && (
+      {!refreshing && section === "customer-recovery" && (
         customerRecovery ? (
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
@@ -288,7 +346,7 @@ export default function AdminAnalyticsClient({
         ) : <p className="text-muted text-sm">Could not load customer recovery data.</p>
       )}
 
-      {!loading && section === "supply-demand" && (
+      {!refreshing && section === "supply-demand" && (
         supplyDemand ? (
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
@@ -329,7 +387,7 @@ export default function AdminAnalyticsClient({
         ) : <p className="text-muted text-sm">Could not load supply demand matrix.</p>
       )}
 
-      {!loading && section === "sales" && (
+      {!refreshing && section === "sales" && (
         sales ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total orders" value={sales.total_orders} onClick={() => setDrill(ordersSpec(period))} hint="Paid order groups" />
@@ -344,7 +402,7 @@ export default function AdminAnalyticsClient({
         ) : <p className="text-muted text-sm">Could not load sales metrics.</p>
       )}
 
-      {!loading && section === "retention" && (
+      {!refreshing && section === "retention" && (
         retention ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="New customers" value={retention.new_customers} onClick={() => setDrill(customerRecoverySpec(customerRecovery ?? []))} hint="Customer recovery rows" />
@@ -359,7 +417,7 @@ export default function AdminAnalyticsClient({
         ) : <p className="text-muted text-sm">Could not load retention metrics.</p>
       )}
 
-      {!loading && section === "operations" && (
+      {!refreshing && section === "operations" && (
         operations ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Orders received" value={operations.orders_received} onClick={() => setDrill(orderTowerSpec(orderControl ?? []))} hint="Order control tower" />
@@ -381,7 +439,7 @@ export default function AdminAnalyticsClient({
         ) : <p className="text-muted text-sm">Could not load operations metrics.</p>
       )}
 
-      {!loading && section === "cart" && (
+      {!refreshing && section === "cart" && (
         cart ? (
           <div className="space-y-8">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
