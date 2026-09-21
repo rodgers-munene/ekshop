@@ -61,7 +61,7 @@ class User(Base):
     events = relationship("UserEvent", back_populates="user")
     preferences = relationship("UserPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
-    conversations = relationship("Conversation", back_populates="buyer")
+    conversations = relationship("Conversation", secondary="conversation_participants", back_populates="participants")
     issue_reports = relationship("IssueReport", back_populates="user")
     product_requests = relationship("ProductRequest", back_populates="user")
 

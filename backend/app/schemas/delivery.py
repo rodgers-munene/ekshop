@@ -144,3 +144,26 @@ class DeliveryIssueRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class RouteOptimizationRequest(BaseModel):
+    delivery_ids: List[uuid.UUID]
+
+
+class RouteOptimizationStop(BaseModel):
+    delivery_id: uuid.UUID
+    tracking_number: str
+    buyer_name: str
+    address: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    distance_from_previous_km: Optional[float] = None
+    duration_from_previous_min: Optional[float] = None
+
+
+class RouteOptimizationResponse(BaseModel):
+    origin_lat: Optional[float] = None
+    origin_lng: Optional[float] = None
+    total_distance_km: Optional[float] = None
+    total_duration_min: Optional[float] = None
+    stops: List[RouteOptimizationStop]

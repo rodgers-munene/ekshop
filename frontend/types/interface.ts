@@ -194,7 +194,29 @@ export interface DeliveryAgent {
   status: string;
   total_deliveries: number;
   rating_avg: string;
+  current_lat?: number;
+  current_lng?: number;
+  last_location_update?: string;
   created_at: string;
+}
+
+export interface RouteStop {
+  delivery_id: string;
+  tracking_number: string;
+  buyer_name: string;
+  address: string;
+  lat?: number;
+  lng?: number;
+  distance_from_previous_km?: number;
+  duration_from_previous_min?: number;
+}
+
+export interface RouteOptimizationResponse {
+  origin_lat?: number;
+  origin_lng?: number;
+  total_distance_km?: number;
+  total_duration_min?: number;
+  stops: RouteStop[];
 }
 
 // Messaging

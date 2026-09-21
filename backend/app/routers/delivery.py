@@ -27,6 +27,7 @@ from app.schemas.delivery import (
     DeliveryRead, DeliveryStatusUpdate,
     DeliveryRateRead, DeliveryRateUpdate,
     DeliverySimulationRow, DeliverySimulationResponse,
+    RouteOptimizationRequest, RouteOptimizationResponse, RouteOptimizationStop,
 )
 from pydantic import BaseModel
 from app.services.notifications import create_notification
@@ -438,6 +439,77 @@ def report_delivery_issue(
     db.commit()
     db.refresh(issue)
     return issue
+
+
+@router.post("/optimize-route", response_model=RouteOptimizationResponse)
+def optimize_route(
+    payload: RouteOptimizationRequest,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    deliveries = (
+        db.query(Delivery)
+        .options(selectinload(Delivery.order).selectinload(Order.shop))
+        .filter(Delivery.id.in_(payload.delivery_ids), Delivery.agent_id == agent.id)
+        .all()
+    )
+    if not deliveries:
+        raise HTTPException(404, "No deliveries found")
+
+    stops: List[RouteOptimizationStop] = []
+    coords: List[tuple[float, float]] = []
+    for d in deliveries:
+        addr = d.order.delivery_address or {}
+        lat = addr.get("lat")
+        lng = addr.get("lng")
+        stop = RouteOptimizationStop(
+            delivery_id=d.id,
+            tracking_number=d.tracking_number or "",
+            buyer_name=d.order.buyer.name if d.order and d.order.buyer else "Customer",
+            address=f"{addr.get('exact_location') or addr.get('town') or ''}, {addr.get('county') or ''}".strip(", "),
+            lat=float(lat) if lat else None,
+            lng=float(lng) if lng else None,
+        )
+        stops.append(stop)
+        if lat and lng:
+            coords.append((float(lat), float(lng)))
+
+    if len(coords) < 2:
+        return RouteOptimizationResponse(stops=stops)
+
+    try:
+        matrix = get_route_matrix(coords)
+    except Exception:
+        matrix = [[0.0 if i == j else _haversine(*coords[i], *coords[j]) for j in range(len(coords))] for i in range(len(coords))]
+
+    unvisited = set(range(len(coords)))
+    path = [0]
+    unvisited.discard(0)
+    total_dist = 0.0
+    total_dur = 0.0
+
+    while unvisited:
+        last = path[-1]
+        next_idx = min(unvisited, key=lambda i: matrix[last][i]["distance_km"] if isinstance(matrix[last][i], dict) else matrix[last][i])
+        leg = matrix[last][next_idx]
+        dist = float(leg["distance_km"]) if isinstance(leg, dict) else float(leg)
+        dur = float(leg["duration_min"]) if isinstance(leg, dict) else None
+        total_dist += dist
+        if dur is not None:
+            total_dur += dur
+        stops[next_idx].distance_from_previous_km = round(dist, 2)
+        stops[next_idx].duration_from_previous_min = round(dur, 2) if dur is not None else None
+        path.append(next_idx)
+        unvisited.discard(next_idx)
+
+    ordered = [stops[i] for i in path]
+    return RouteOptimizationResponse(
+        origin_lat=coords[0][0] if coords else None,
+        origin_lng=coords[0][1] if coords else None,
+        total_distance_km=round(total_dist, 2),
+        total_duration_min=round(total_dur, 2) if total_dur else None,
+        stops=ordered,
+    )
 
 
 # ── Admin: delivery fee rates ──────────────────────────────────────────────────
