@@ -5,6 +5,8 @@ from app.core.config import settings
 from app.dependencies.database import get_db
 from app.routers.payments import reconcile_stale_mpesa_intents
 from app.services.subscriptions import run_billing_cycle
+from app.services.email import _send
+from app.services.dashboard_metrics import get_margin_leakage_metrics
 
 router = APIRouter(prefix="/internal/cron", tags=["internal"])
 
@@ -47,3 +49,28 @@ def run_mpesa_reconcile_endpoint(
     _: None = Depends(verify_cron_secret),
 ):
     return reconcile_stale_mpesa_intents(db)
+
+
+@router.post("/admin/daily-report")
+def send_daily_admin_report(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_cron_secret),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    metrics = get_margin_leakage_metrics(db, since)
+    recipient = getattr(settings, "ADMIN_REPORT_EMAIL", None)
+    if not recipient:
+        return {"status": "skipped", "reason": "ADMIN_REPORT_EMAIL not configured"}
+
+    subject = f"Ekshop daily ops report — gross margin {metrics.get('gross_margin_pct', 0):.2f}%"
+    html = f"""
+        <h2>Daily Margin Leakage Report</h2>
+        <p>Period: {metrics.get('period')} | Orders: {metrics.get('orders')} | AOV: KES {metrics.get('average_order_value')}</p>
+        <p>GMV: KES {metrics.get('gmv')} | Platform commission: KES {metrics.get('platform_commission')} | M-Pesa fees: KES {metrics.get('mpesa_fees')} | Net profit: KES {metrics.get('net_profit')} | Gross margin: {metrics.get('gross_margin_pct')}%</p>
+        <p><a href="{settings.FRONTEND_URL}/admin/analytics">Open admin analytics</a></p>
+    """
+    try:
+        _send(to=recipient, subject=subject, html=html)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to send admin report: {exc}") from exc
+    return {"status": "sent", "to": recipient}

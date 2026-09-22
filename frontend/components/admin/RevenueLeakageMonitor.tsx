@@ -77,6 +77,12 @@ export default function RevenueLeakageMonitor({ data }: { data: MarginLeakageMet
     window.open(`/api/admin/reports/margin-leakage.csv?${params.toString()}`, "_blank");
   }
 
+  function downloadPdf() {
+    const params = new URLSearchParams();
+    if (data.period && data.period !== "custom") params.set("period", data.period);
+    window.open(`/api/admin/reports/margin-leakage?${params.toString()}`, "_blank");
+  }
+
   return (
     <div className="card p-5 space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -87,6 +93,7 @@ export default function RevenueLeakageMonitor({ data }: { data: MarginLeakageMet
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={downloadPdf} className="text-xs border border-border rounded-md px-3 py-1.5 hover:border-amber transition-colors">Download PDF</button>
           <button onClick={downloadCsv} className="text-xs border border-border rounded-md px-3 py-1.5 hover:border-amber transition-colors">Download CSV</button>
           <div className="text-right">
             <p className="text-2xl font-bold">{data.gross_margin_pct.toFixed(1)}%</p>

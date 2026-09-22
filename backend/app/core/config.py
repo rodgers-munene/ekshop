@@ -51,6 +51,11 @@ class Settings(BaseSettings):
 
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "Ekshop <notifications@mail.ekshop.store>"
+    ADMIN_REPORT_EMAIL: str | None = None
+
+    ALERT_MIN_GROSS_MARGIN_PCT: float = 90.0
+    ALERT_MAX_MPESA_LATENCY_SECONDS: float = 2.0
+    ALERT_MAX_HOSTING_COST_PER_ORDER: float = 20.0
 
     ORS_API_KEY: str | None = None
     ORS_BASE_URL: str = "https://api.openrouteservice.org"

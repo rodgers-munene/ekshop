@@ -439,6 +439,79 @@ def export_margin_leakage_csv(
     return Response(content=csv_content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=margin-leakage.csv"})
 
 
+@router.get("/reports/margin-leakage.pdf")
+def export_margin_leakage_pdf(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    metrics = dashboard_metrics.get_margin_leakage_metrics(db, since, until)
+    try:
+        from fpdf import FPDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 8, "Ekshop Kenya - Margin Leakage Report", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(0, 6, f"Period: {metrics.get('period')} | Orders: {metrics.get('orders')} | AOV: KES {metrics.get('average_order_value')}", ln=True)
+        pdf.ln(2)
+        pdf.cell(0, 6, f"GMV: KES {metrics.get('gmv')} | Platform commission: KES {metrics.get('platform_commission')} | M-Pesa fees: KES {metrics.get('mpesa_fees')} | Net profit: KES {metrics.get('net_profit')} | Gross margin: {metrics.get('gross_margin_pct')}%", ln=True)
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(40, 8, "Day", border=1)
+        pdf.cell(35, 8, "GMV", border=1, align="R")
+        pdf.cell(35, 8, "Commission", border=1, align="R")
+        pdf.cell(35, 8, "M-Pesa", border=1, align="R")
+        pdf.cell(35, 8, "Net profit", border=1, align="R")
+        pdf.cell(0, 8, "Margin %", border=1, align="R", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        for point in metrics.get("trend", []):
+            pdf.cell(40, 8, str(point.get("label", "")), border=1)
+            pdf.cell(35, 8, f"KES {point.get('gmv', 0):.2f}", border=1, align="R")
+            pdf.cell(35, 8, f"KES {point.get('platform_commission', 0):.2f}", border=1, align="R")
+            pdf.cell(35, 8, f"KES {point.get('mpesa_fees', 0):.2f}", border=1, align="R")
+            pdf.cell(35, 8, f"KES {point.get('net_profit', 0):.2f}", border=1, align="R")
+            pdf.cell(0, 8, f"{point.get('gross_margin_pct', 0):.2f}%", border=1, align="R", ln=True)
+        pdf_bytes = bytes(pdf.output())
+        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=margin-leakage.pdf"})
+    except Exception:
+        html = f"""
+        <html>
+          <head><title>Ekshop Margin Leakage Report</title></head>
+          <body>
+            <h1>Ekshop Kenya - Margin Leakage Report</h1>
+            <p>Period: {metrics.get('period')} | Orders: {metrics.get('orders')} | AOV: KES {metrics.get('average_order_value')}</p>
+            <p>GMV: KES {metrics.get('gmv')} | Platform commission: KES {metrics.get('platform_commission')} | M-Pesa fees: KES {metrics.get('mpesa_fees')} | Net profit: KES {metrics.get('net_profit')} | Gross margin: {metrics.get('gross_margin_pct')}%</p>
+            <table border="1" cellpadding="4" cellspacing="0">
+              <tr><th>Day</th><th>GMV</th><th>Commission</th><th>M-Pesa</th><th>Net profit</th><th>Margin %</th></tr>
+              {"".join(f"<tr><td>{p.get('label','')}</td><td>KES {p.get('gmv',0):.2f}</td><td>KES {p.get('platform_commission',0):.2f}</td><td>KES {p.get('mpesa_fees',0):.2f}</td><td>KES {p.get('net_profit',0):.2f}</td><td>{p.get('gross_margin_pct',0):.2f}%</td></tr>" for p in metrics.get('trend', []))}
+            </table>
+          </body>
+        </html>
+        """
+        return Response(content=html, media_type="text/html", headers={"Content-Disposition": "attachment; filename=margin-leakage.html"})
+
+
+@router.post("/alerts/check-thresholds")
+def check_admin_thresholds(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    metrics = get_margin_leakage_metrics(db, since)
+    alerts = []
+    margin_pct = float(metrics.get("gross_margin_pct", 100))
+    if margin_pct < settings.ALERT_MIN_GROSS_MARGIN_PCT:
+        alerts.append({
+            "level": "high",
+            "metric": "gross_margin_pct",
+            "message": f"Gross margin dropped to {margin_pct:.2f}% (threshold {settings.ALERT_MIN_GROSS_MARGIN_PCT}%)",
+        })
+    return {"alerts": alerts, "checked_at": datetime.now(timezone.utc).isoformat(), "margin_pct": margin_pct}
+
+
 @router.get("/metrics/priority-acquisition", response_model=List[PriorityAcquisitionRow])
 def get_priority_acquisition(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),

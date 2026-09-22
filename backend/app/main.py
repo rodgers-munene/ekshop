@@ -20,6 +20,7 @@ from app.routers.notifications import router as notifications_router
 from app.routers.geography import router as geography_router
 from app.routers.messaging_ws import router as messaging_ws_router
 from app.routers.invoices import router as invoices_router
+from app.routers.receipts import router as receipts_router
 
 app = FastAPI(title="Ekshop API", version="1.0.0")
 
@@ -50,6 +51,7 @@ app.include_router(investor.router)
 app.include_router(messaging.router)
 app.include_router(messaging_ws_router)
 app.include_router(invoices_router)
+app.include_router(receipts_router)
 app.include_router(hero_router)
 app.include_router(deals_router)
 app.include_router(notifications_router)
