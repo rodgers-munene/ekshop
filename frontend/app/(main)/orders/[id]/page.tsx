@@ -5,6 +5,7 @@ import { OrderGroup } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import PaymentStatusCheck from "./PaymentStatusCheck";
 import DeliveryTracker from "./DeliveryTracker";
+import CancelOrderButton from "./CancelOrderButton";
 
 const STATUS_STYLE: Record<string, string> = {
   pending_payment: "bg-amber/15 text-amber",
@@ -115,6 +116,7 @@ export default async function OrderDetailPage({ params }: Props) {
           </div>
           <Link href={`/invoices/${group.id}`} className="text-xs text-amber underline mt-1">Download invoice</Link>
           <Link href={`/receipts/${group.id}`} className="text-xs text-amber underline mt-1">Download receipt</Link>
+          <CancelOrderButton orderId={group.id} status={group.status} />
           <p className="text-xs text-muted pt-1">
             Placed {new Date(group.created_at).toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" })}
           </p>
