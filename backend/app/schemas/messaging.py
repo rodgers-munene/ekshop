@@ -32,3 +32,8 @@ class ConversationRead(BaseModel):
     messages: List[MessageRead] = []
 
     model_config = {"from_attributes": True}
+
+
+class ConversationCreate(BaseModel):
+    shop_id: Optional[uuid.UUID] = None
+    initial_message: Optional[str] = None

@@ -19,3 +19,18 @@ export async function GET() {
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });
 }
+
+export async function POST(req: NextRequest) {
+  const token = await getToken();
+  if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+
+  const body = await req.json().catch(() => ({}));
+  const res = await fetch(`${BASE_URL}/conversations`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  return NextResponse.json(data, { status: res.status });
+}

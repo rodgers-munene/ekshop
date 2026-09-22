@@ -10,11 +10,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.security import decode_access_token
 from app.core.crypto import encrypt_message, decrypt_message
 from app.dependencies.database import get_db
-from app.models.messaging import Conversation, Message, ActorRole
+from app.models.messaging import Conversation, Message, ActorRole, conversation_participants
 from app.models.commerce import Order
 from app.models.user import User
 from app.models.delivery import DeliveryAgent
-from app.schemas.messaging import MessageCreate, MessageRead, ConversationRead
+from app.schemas.messaging import MessageCreate, MessageRead, ConversationRead, ConversationCreate
+from app.models.shop import Shop
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 bearer_scheme = HTTPBearer()
@@ -89,6 +90,55 @@ def list_conversations(
             .all()
         )
     return conversations
+
+
+@router.post("", response_model=ConversationRead, status_code=status.HTTP_201_CREATED)
+def create_conversation(
+    payload: ConversationCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+):
+    identity = _get_user_from_token(credentials, db)
+    if not identity or not isinstance(identity, User):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    shop = db.query(Shop).filter(Shop.id == payload.shop_id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    conversation = Conversation(
+        buyer_id=identity.id,
+        shop_id=shop.id,
+    )
+    db.add(conversation)
+    db.flush()
+
+    db.execute(
+        conversation_participants.insert().values(
+            conversation_id=conversation.id,
+            user_id=identity.id,
+        )
+    )
+    db.execute(
+        conversation_participants.insert().values(
+            conversation_id=conversation.id,
+            user_id=shop.seller_id,
+        )
+    )
+
+    if payload.initial_message:
+        message = Message(
+            conversation_id=conversation.id,
+            sender_id=identity.id,
+            sender_type=ActorRole.customer,
+            body=encrypt_message(payload.initial_message),
+        )
+        db.add(message)
+        conversation.last_message_at = message.created_at
+
+    db.commit()
+    db.refresh(conversation)
+    return conversation
 
 
 @router.get("/{conversation_id}/messages", response_model=List[MessageRead])
