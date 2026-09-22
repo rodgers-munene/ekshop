@@ -27,21 +27,31 @@ function OverviewSkeleton() {
   );
 }
 
-export default function AdminOverviewClient({ initial }: { initial: AdminOverview }) {
+export default function AdminOverviewClient({ initial }: { initial: AdminOverview | null }) {
   const [period, setPeriod] = useState<PeriodKey>("month");
-  const [data, setData] = useState(initial);
+  const [data, setData] = useState<AdminOverview | null>(initial);
   const [loading, setLoading] = useState(false);
   const [drill, setDrill] = useState<DrillSpec | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     fetch(`/api/admin/stats/overview?period=${period}`)
-      .then((r) => r.json())
-      .then(setData)
-      .finally(() => setLoading(false));
+      .then((r) => (r.ok ? r.json() : Promise.resolve(null)))
+      .then((json) => {
+        if (!cancelled && json && typeof json === "object" && json.metrics) {
+          setData(json as AdminOverview);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [period]);
 
-  const { metrics: m, previous: p } = data;
+  const { metrics: m, previous: p } = data ?? { metrics: {} as AdminOverview["metrics"], previous: {} as AdminOverview["previous"] };
 
   const summary = [
     {
@@ -87,67 +97,73 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
         <div>
           <h1 className="text-2xl font-bold">Overview</h1>
           <p className="text-sm text-muted">
-            {formatDay(data.start)} – today — compared against the same span before
+            {data ? `${formatDay(data.start)} – today — compared against the same span before` : "Loading overview…"}
           </p>
         </div>
         <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
-      {loading ? (
-        <OverviewSkeleton />
-      ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          {summary.map((s) => (
-            <StatCard
-              key={s.label}
-              label={s.label}
-              value={s.value}
-              change={{
-                current: typeof s.value === "string" ? parseFloat(s.value) : s.value,
-                previous: s.prev,
-                label: "prev period",
-              }}
-              hint={s.hint}
-              onClick={() => setDrill(s.spec)}
-            />
-          ))}
-        </div>
+      {loading && <OverviewSkeleton />}
+
+      {!loading && !data && (
+        <div className="card p-10 text-center text-sm text-muted">Could not load overview stats.</div>
       )}
 
-      <h2 className="text-lg font-bold mb-3">Platform totals</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total users" value={data.totals.total_users} onClick={() => setDrill(usersSpec())} hint="Latest signups" />
-        <StatCard label="Buyers" value={data.totals.total_buyers} onClick={() => setDrill(usersSpec("buyer"))} hint="Latest buyer signups" />
-        <StatCard label="Sellers" value={data.totals.total_sellers} onClick={() => setDrill(usersSpec("seller"))} hint="Latest seller signups" />
-        <StatCard label="Total shops" value={data.totals.total_shops} onClick={() => setDrill(shopsSpec())} hint="Latest shops" />
-        <StatCard
-          label="Pending verification"
-          value={data.totals.shops_pending_verification}
-          onClick={() => setDrill(shopsSpec("pending", "Shops pending verification"))}
-          hint="Shops awaiting approval"
-        />
-        <StatCard label="Total products" value={data.totals.total_products} onClick={() => setDrill(productsSpec())} hint="Latest products" />
-        <StatCard label="Paid orders" value={data.totals.total_orders} onClick={() => setDrill(ordersSpec())} hint="Paid orders, all time" />
-        <StatCard
-          label="Revenue (all-time)"
-          value={formatKES(parseFloat(data.totals.revenue_total))}
-          onClick={() => setDrill(ordersSpec())}
-          hint="All paid orders"
-        />
-      </div>
+      {!loading && data && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+            {summary.map((s) => (
+              <StatCard
+                key={s.label}
+                label={s.label}
+                value={s.value}
+                change={{
+                  current: typeof s.value === "string" ? parseFloat(s.value) : s.value,
+                  previous: s.prev,
+                  label: "prev period",
+                }}
+                hint={s.hint}
+                onClick={() => setDrill(s.spec)}
+              />
+            ))}
+          </div>
 
-      {data.trend.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <SalesChart
-            data={data.trend.map((pt) => ({ label: pt.label, value: pt.revenue }))}
-            title="Revenue (last 14 days)"
-          />
-          <SalesChart
-            data={data.trend.map((pt) => ({ label: pt.label, value: pt.orders }))}
-            title="Orders (last 14 days)"
-            formatValue={(v) => `${v} order${v === 1 ? "" : "s"}`}
-          />
-        </div>
+          <h2 className="text-lg font-bold mb-3">Platform totals</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <StatCard label="Total users" value={data.totals.total_users} onClick={() => setDrill(usersSpec())} hint="Latest signups" />
+            <StatCard label="Buyers" value={data.totals.total_buyers} onClick={() => setDrill(usersSpec("buyer"))} hint="Latest buyer signups" />
+            <StatCard label="Sellers" value={data.totals.total_sellers} onClick={() => setDrill(usersSpec("seller"))} hint="Latest seller signups" />
+            <StatCard label="Total shops" value={data.totals.total_shops} onClick={() => setDrill(shopsSpec())} hint="Latest shops" />
+            <StatCard
+              label="Pending verification"
+              value={data.totals.shops_pending_verification}
+              onClick={() => setDrill(shopsSpec("pending", "Shops pending verification"))}
+              hint="Shops awaiting approval"
+            />
+            <StatCard label="Total products" value={data.totals.total_products} onClick={() => setDrill(productsSpec())} hint="Latest products" />
+            <StatCard label="Paid orders" value={data.totals.total_orders} onClick={() => setDrill(ordersSpec())} hint="Paid orders, all time" />
+            <StatCard
+              label="Revenue (all-time)"
+              value={formatKES(parseFloat(data.totals.revenue_total))}
+              onClick={() => setDrill(ordersSpec())}
+              hint="All paid orders"
+            />
+          </div>
+
+          {data.trend.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <SalesChart
+                data={data.trend.map((pt) => ({ label: pt.label, value: pt.revenue }))}
+                title="Revenue (last 14 days)"
+              />
+              <SalesChart
+                data={data.trend.map((pt) => ({ label: pt.label, value: pt.orders }))}
+                title="Orders (last 14 days)"
+                formatValue={(v) => `${v} order${v === 1 ? "" : "s"}`}
+              />
+            </div>
+          )}
+        </>
       )}
 
       <StatDrillDown

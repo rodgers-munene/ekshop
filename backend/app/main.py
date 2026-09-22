@@ -4,10 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.limiter import limiter
+from app.dependencies.database import get_db
 
 configure_logging()
 from app.routers import auth, users, shop, payments, admin, messaging, investor, subscriptions, cron

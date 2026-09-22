@@ -105,33 +105,33 @@ export default function AdminAnalyticsClient({
       setRefreshing(true);
       try {
         const [m, s, r, o, c, mm, oc, cr, sd, ov, ml] = await Promise.all([
-          fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/operations?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/cart?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/merchant-master-health?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/order-control-tower?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/stats/overview?period=${period}`).then((r) => r.json()),
-          fetch(`/api/admin/metrics/margin-leakage?period=${period}`).then((r) => r.json()),
+          fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/operations?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/cart?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/merchant-master-health?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/order-control-tower?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/stats/overview?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
+          fetch(`/api/admin/metrics/margin-leakage?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
         ]);
         if (!cancelled) {
-          setMerchants(asObj(m) as MerchantActivityMetrics | null);
-          setSales(asObj(s) as SalesDemandMetrics | null);
-          setRetention(asObj(r) as CustomerRetentionMetrics | null);
-          setOperations(asObj(o) as OperationsDeliveryMetrics | null);
-          setCart(asObj(c) as CartAbandonmentMetrics | null);
-          setMerchantMaster(asArr(mm) as MerchantMasterHealth[] | null);
-          setOrderControl(asArr(oc) as OrderControlTowerRow[] | null);
-          setCustomerRecovery(asArr(cr) as CustomerRecoveryRow[] | null);
-          setSupplyDemand(asArr(sd) as SupplyDemandRow[] | null);
-          setMarginLeakage(asObj(ml) as MarginLeakageMetrics | null);
-          setOverview(asObj(ov) as AdminOverview | null);
+          setMerchants(m);
+          setSales(s);
+          setRetention(r);
+          setOperations(o);
+          setCart(c);
+          setMerchantMaster(mm);
+          setOrderControl(oc);
+          setCustomerRecovery(cr);
+          setSupplyDemand(sd);
+          setMarginLeakage(ml);
+          setOverview(ov);
         }
       } finally {
-        setRefreshing(false);
+        if (!cancelled) setRefreshing(false);
       }
     }
 

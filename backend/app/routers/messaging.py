@@ -117,12 +117,14 @@ def create_conversation(
         conversation_participants.insert().values(
             conversation_id=conversation.id,
             user_id=identity.id,
+            joined_at=datetime.now(timezone.utc),
         )
     )
     db.execute(
         conversation_participants.insert().values(
             conversation_id=conversation.id,
             user_id=shop.seller_id,
+            joined_at=datetime.now(timezone.utc),
         )
     )
 

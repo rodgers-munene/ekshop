@@ -33,7 +33,12 @@ export default function MessagesPage() {
       {conversations.length === 0 ? (
         <div className="card flex flex-col items-center justify-center py-24 text-center">
           <p className="text-2xl font-extrabold mb-2">No conversations yet</p>
-          <p className="text-muted text-sm">Messages with sellers will show up here.</p>
+          <p className="text-muted text-sm mb-6">
+            Messages with sellers will show up here. Browse a shop and tap <strong>Message Seller</strong> to start.
+          </p>
+          <Link href="/products" className="btn-accent">
+            Browse Products
+          </Link>
         </div>
       ) : (
         <div className="space-y-2">
