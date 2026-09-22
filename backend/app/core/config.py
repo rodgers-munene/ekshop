@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     # Primary frontend origin, used to build payment provider redirect URLs
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # Structured logging
+    LOG_LEVEL: str = "INFO"
+    LOG_JSON: bool = False
+
     # M-Pesa Daraja API: the live checkout payment provider. Paystack is kept
     # only for seller subscription billing (see PAYSTACK_* below).
     MPESA_CONSUMER_KEY: str | None = None

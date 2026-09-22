@@ -6,9 +6,10 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.core.limiter import limiter
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+configure_logging()
 from app.routers import auth, users, shop, payments, admin, messaging, investor, subscriptions, cron
 from app.routers.catalog import categories_router, products_router
 from app.routers.commerce import cart_router, checkout_router, orders_router
@@ -61,5 +62,33 @@ app.include_router(cron.router)
 
 
 @app.get("/")
-def health():
+def root():
     return {"status": "ok", "message": "Ekshop API is running"}
+
+
+@app.get("/health")
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "up"
+    except Exception:
+        db_status = "down"
+    return {
+        "status": "ok" if db_status == "up" else "degraded",
+        "database": db_status,
+        "service": "ekshop-api",
+    }
+
+
+# Graceful shutdown: stop accepting new requests and finish in-flight work.
+try:
+    from uvicorn.signals import get_signals
+    import signal
+
+    def _graceful_shutdown(*args: object) -> None:
+        raise SystemExit(0)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, _graceful_shutdown)
+except Exception:
+    pass
