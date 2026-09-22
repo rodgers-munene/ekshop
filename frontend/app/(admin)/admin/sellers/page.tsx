@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { BadgeCheck } from "lucide-react";
 import { PaginatedResponse, Shop } from "@/types/interface";
 import Pagination from "@/components/admin/Pagination";
+import MessageUserButton from "@/components/MessageUserButton";
 
 type Filter = "pending" | "active" | "suspended" | "all";
 const LIMIT = 20;
@@ -113,6 +114,9 @@ export default function AdminSellersPage() {
                 <button onClick={() => suspend(shop.id)} className="text-xs py-1.5 px-3 rounded-md border border-danger text-danger hover:bg-danger/5">
                   Suspend
                 </button>
+                {shop.seller_id && (
+                  <MessageUserButton userId={shop.seller_id} userName={shop.name} />
+                )}
               </div>
             </div>
           ))}

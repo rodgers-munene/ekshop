@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-export default function MessageSellerButton({ shopId }: { shopId: string }) {
+export default function MessageBuyerButton({ buyerId, buyerName }: { buyerId: string; buyerName?: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -14,14 +14,10 @@ export default function MessageSellerButton({ shopId }: { shopId: string }) {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shop_id: shopId }),
+        body: JSON.stringify({ buyer_id: buyerId }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (res.status === 401) {
-          router.push(`/login?next=/messages`);
-          return;
-        }
         toast.error(data.detail ?? "Could not start conversation");
         return;
       }
@@ -38,7 +34,7 @@ export default function MessageSellerButton({ shopId }: { shopId: string }) {
       className="text-xs text-amber underline underline-offset-2 disabled:opacity-50"
       type="button"
     >
-      {loading ? "Starting…" : "Message seller"}
+      {loading ? "Starting…" : `Message ${buyerName ? buyerName.split(" ")[0] : "buyer"}`}
     </button>
   );
 }

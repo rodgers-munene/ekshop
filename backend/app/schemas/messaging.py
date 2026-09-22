@@ -36,4 +36,8 @@ class ConversationRead(BaseModel):
 
 class ConversationCreate(BaseModel):
     shop_id: Optional[uuid.UUID] = None
+    buyer_id: Optional[uuid.UUID] = None
+    agent_id: Optional[uuid.UUID] = None
+    admin_id: Optional[uuid.UUID] = None
+    user_id: Optional[uuid.UUID] = None
     initial_message: Optional[str] = None

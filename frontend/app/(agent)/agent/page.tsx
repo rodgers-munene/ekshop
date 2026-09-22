@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Delivery } from "@/types/interface";
+import MessageAdminButton from "@/components/MessageAdminButton";
 
 type AgentStatus = "available" | "busy" | "offline";
 
@@ -101,6 +102,7 @@ export default function AgentHomePage() {
           <span className={`w-2 h-2 rounded-full ${status === "available" ? "bg-success" : "bg-muted"}`} />
           {STATUS_LABELS[status]}
         </button>
+        <MessageAdminButton />
       </div>
 
       {/* Summary stats */}

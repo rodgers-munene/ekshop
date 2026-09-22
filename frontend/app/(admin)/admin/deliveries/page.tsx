@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { PaginatedResponse, DeliveryAgent, Order } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import Pagination from "@/components/admin/Pagination";
+import MessageAgentButton from "@/components/MessageAgentButton";
 
 const LIMIT = 20;
 
@@ -141,9 +142,12 @@ export default function AdminDeliveriesPage() {
                   <p className="font-medium">{a.name}</p>
                   <p className="text-xs text-muted">{a.email} · {a.phone}</p>
                 </div>
-                <div className="text-right text-xs text-muted">
-                  <p className="capitalize">{a.status}</p>
-                  <p>{a.total_deliveries} deliveries</p>
+                <div className="flex items-center gap-4">
+                  <div className="text-right text-xs text-muted">
+                    <p className="capitalize">{a.status}</p>
+                    <p>{a.total_deliveries} deliveries</p>
+                  </div>
+                  <MessageAgentButton agentId={a.id} agentName={a.name} />
                 </div>
               </div>
             ))}

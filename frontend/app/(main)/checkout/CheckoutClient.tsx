@@ -8,6 +8,7 @@ import { useCartStore } from "@/store/cartStore";
 import { UserAddress, GeoSelection } from "@/types/interface";
 import { formatKES, resolveImageUrl as resolveImg, decodeHtml } from "@/lib/utils";
 import LocationPicker from "@/components/geo/LocationPicker";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 type Step = "review" | "address" | "payment" | "polling";
 
@@ -333,7 +334,10 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
           <section className="card overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface">
               <h2 className="font-semibold">1. Your Items</h2>
-              <button onClick={() => router.push("/cart")} className="text-xs text-muted underline">Edit cart</button>
+              <div className="flex items-center gap-3">
+                {items[0]?.shop_id && <MessageSellerButton shopId={items[0].shop_id} />}
+                <button onClick={() => router.push("/cart")} className="text-xs text-muted underline">Edit cart</button>
+              </div>
             </div>
             <div className="divide-y divide-border">
               {items.map((item) => (

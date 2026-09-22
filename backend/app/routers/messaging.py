@@ -15,6 +15,7 @@ from app.models.commerce import Order
 from app.models.user import User
 from app.models.delivery import DeliveryAgent
 from app.schemas.messaging import MessageCreate, MessageRead, ConversationRead, ConversationCreate
+from app.schemas.user import UserRead
 from app.models.shop import Shop
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -49,7 +50,18 @@ def _get_user_from_token(credentials: HTTPAuthorizationCredentials, db: Session)
 
 def _is_participant(identity: Union[User, AuthenticatedIdentity], conversation: Conversation, db: Session) -> bool:
     if conversation.order_id is None:
-        return identity.id in {p.id for p in conversation.participants}
+        user_ids = {p.id for p in conversation.participants}
+        if identity.id in user_ids:
+            return True
+        if isinstance(identity, AuthenticatedIdentity):
+            participant = db.execute(
+                conversation_participants.select().where(
+                    conversation_participants.c.conversation_id == conversation.id,
+                    conversation_participants.c.agent_id == identity.id,
+                )
+            ).first()
+            return participant is not None
+        return False
     order = db.query(Order).filter(Order.id == conversation.order_id).first()
     if not order:
         return False
@@ -102,41 +114,183 @@ def create_conversation(
     if not identity or not isinstance(identity, User):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    shop = db.query(Shop).filter(Shop.id == payload.shop_id).first()
-    if not shop:
-        raise HTTPException(status_code=404, detail="Shop not found")
+    if payload.shop_id:
+        shop = db.query(Shop).filter(Shop.id == payload.shop_id).first()
+        if not shop:
+            raise HTTPException(status_code=404, detail="Shop not found")
 
-    conversation = Conversation(
-        buyer_id=identity.id,
-        shop_id=shop.id,
-    )
-    db.add(conversation)
-    db.flush()
+        conversation = Conversation(
+            buyer_id=identity.id,
+            shop_id=shop.id,
+        )
+        db.add(conversation)
+        db.flush()
 
-    db.execute(
-        conversation_participants.insert().values(
-            conversation_id=conversation.id,
-            user_id=identity.id,
-            joined_at=datetime.now(timezone.utc),
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                user_id=identity.id,
+                joined_at=datetime.now(timezone.utc),
+            )
         )
-    )
-    db.execute(
-        conversation_participants.insert().values(
-            conversation_id=conversation.id,
-            user_id=shop.seller_id,
-            joined_at=datetime.now(timezone.utc),
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                user_id=shop.seller_id,
+                joined_at=datetime.now(timezone.utc),
+            )
         )
-    )
 
-    if payload.initial_message:
-        message = Message(
-            conversation_id=conversation.id,
-            sender_id=identity.id,
-            sender_type=ActorRole.customer,
-            body=encrypt_message(payload.initial_message),
+        if payload.initial_message:
+            message = Message(
+                conversation_id=conversation.id,
+                sender_id=identity.id,
+                sender_type=ActorRole.customer,
+                body=encrypt_message(payload.initial_message),
+            )
+            db.add(message)
+            conversation.last_message_at = message.created_at
+    elif payload.buyer_id:
+        buyer = db.query(User).filter(User.id == payload.buyer_id).first()
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+
+        shop = db.query(Shop).filter(Shop.seller_id == identity.id).first()
+        if not shop:
+            raise HTTPException(status_code=404, detail="Seller shop not found")
+
+        conversation = Conversation(
+            buyer_id=buyer.id,
+            shop_id=shop.id,
         )
-        db.add(message)
-        conversation.last_message_at = message.created_at
+        db.add(conversation)
+        db.flush()
+
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                user_id=buyer.id,
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                user_id=identity.id,
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+
+        if payload.initial_message:
+            message = Message(
+                conversation_id=conversation.id,
+                sender_id=identity.id,
+                sender_type=ActorRole.seller,
+                body=encrypt_message(payload.initial_message),
+            )
+            db.add(message)
+            conversation.last_message_at = message.created_at
+    elif payload.agent_id:
+        agent = db.query(DeliveryAgent).filter(DeliveryAgent.id == payload.agent_id).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Delivery agent not found")
+
+        conversation = Conversation()
+        db.add(conversation)
+        db.flush()
+
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                user_id=identity.id,
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                agent_id=agent.id,
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+
+        if payload.initial_message:
+            message = Message(
+                conversation_id=conversation.id,
+                sender_id=identity.id,
+                sender_type=ActorRole.admin if isinstance(identity, User) and identity.role.value == "admin" else ActorRole.customer,
+                body=encrypt_message(payload.initial_message),
+            )
+            db.add(message)
+            conversation.last_message_at = message.created_at
+    elif payload.admin_id:
+        admin = db.query(User).filter(User.id == payload.admin_id, User.role == "admin").first()
+        if not admin:
+            raise HTTPException(status_code=404, detail="Admin not found")
+
+        conversation = Conversation()
+        db.add(conversation)
+        db.flush()
+
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                agent_id=identity.id,
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                user_id=admin.id,
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+
+        if payload.initial_message:
+            message = Message(
+                conversation_id=conversation.id,
+                sender_id=identity.id,
+                sender_type=ActorRole.agent,
+                body=encrypt_message(payload.initial_message),
+            )
+            db.add(message)
+            conversation.last_message_at = message.created_at
+    elif payload.user_id:
+        recipient = db.query(User).filter(User.id == payload.user_id).first()
+        if not recipient:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        conversation = Conversation()
+        db.add(conversation)
+        db.flush()
+
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                user_id=identity.id,
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+        db.execute(
+            conversation_participants.insert().values(
+                conversation_id=conversation.id,
+                user_id=recipient.id,
+                joined_at=datetime.now(timezone.utc),
+            )
+        )
+
+        if payload.initial_message:
+            message = Message(
+                conversation_id=conversation.id,
+                sender_id=identity.id,
+                sender_type=ActorRole.admin if isinstance(identity, User) and identity.role.value == "admin" else ActorRole.customer,
+                body=encrypt_message(payload.initial_message),
+            )
+            db.add(message)
+            conversation.last_message_at = message.created_at
+    else:
+        raise HTTPException(status_code=400, detail="Either shop_id, buyer_id, agent_id, admin_id, or user_id must be provided")
 
     db.commit()
     db.refresh(conversation)
@@ -220,3 +374,11 @@ def create_message(
         body=decrypt_message(message.body),
         created_at=message.created_at,
     )
+
+
+@router.get("/support-admin", response_model=UserRead)
+def get_support_admin(db: Session = Depends(get_db)):
+    admin = db.query(User).filter(User.role == "admin", User.status == "active").order_by(User.created_at.asc()).first()
+    if not admin:
+        raise HTTPException(status_code=404, detail="No active admin found")
+    return admin

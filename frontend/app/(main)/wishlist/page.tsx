@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Product } from "@/types/interface";
 import { useCartStore } from "@/store/cartStore";
 import ProductCard from "@/components/ProductCard";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 export default function WishlistPage() {
   const queryClient = useQueryClient();
@@ -92,6 +93,9 @@ export default function WishlistPage() {
               >
                 Add to Cart
               </button>
+              <div className="flex justify-center">
+                <MessageSellerButton shopId={product.shop_id} />
+              </div>
             </div>
           ))}
         </div>

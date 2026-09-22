@@ -5,6 +5,7 @@ import { Order } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import OrderStatusPill from "@/components/dashboard/OrderStatusPill";
 import OrderStatusAction from "@/components/dashboard/OrderStatusAction";
+import MessageBuyerButton from "@/components/MessageBuyerButton";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -54,6 +55,11 @@ export default async function DashboardOrderDetailPage({ params }: Props) {
           <div className="card p-5">
             <h2 className="font-semibold border-b border-border pb-2 mb-3">Buyer</h2>
             <p className="text-sm font-medium">{order.buyer_name ?? "Buyer"}</p>
+            {order.buyer_id && (
+              <div className="mt-2">
+                <MessageBuyerButton buyerId={order.buyer_id} buyerName={order.buyer_name} />
+              </div>
+            )}
             {address && (
               <p className="text-sm text-muted mt-1">
                 {address.phone}<br />
