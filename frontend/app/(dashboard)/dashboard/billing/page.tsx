@@ -202,6 +202,26 @@ export default async function BillingPage() {
                 defaultLabel={buttonLabel}
               />
 
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await fetch("/api/dashboard/subscription/trial-authorize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ plan_code: plan.code, billing_interval: subscription.billing_interval }),
+                  });
+                  const data = await res.json();
+                  if (res.ok && data.authorization_url) {
+                    window.location.href = data.authorization_url;
+                  } else {
+                    alert(data.detail ?? "Could not start trial. Please try again.");
+                  }
+                }}
+                className="w-full btn-accent py-3 text-sm font-semibold"
+              >
+                Start free trial
+              </button>
+
               <p className="text-xs text-muted text-center">
                 By continuing, you agree to the <a href="/terms" className="underline">Terms of Use</a> applicable to Ekshop and confirm you have read our <a href="/privacy" className="underline">Privacy Policy</a>.
               </p>

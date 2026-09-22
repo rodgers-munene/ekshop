@@ -52,6 +52,7 @@ export interface SubscriptionPlan {
   price_yearly: string | null;
   max_products: number | null;
   commission_rate: string;
+  trial_days: number;
 }
 
 export interface Subscription {
