@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { formatKES } from "@/lib/utils";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface InvoiceItem {
   name: string;
@@ -46,8 +48,44 @@ export default function CustomerInvoicePage() {
       .finally(() => setLoading(false));
   }, [orderId]);
 
-  const printInvoice = () => {
-    window.print();
+  const downloadPdf = () => {
+    if (!invoice) return;
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("EKSHOP KENYA", 14, 18);
+    doc.setFontSize(10);
+    doc.text("Official Purchase Receipt", 14, 24);
+    doc.text(`Invoice: ${invoice.invoice_id}`, 14, 30);
+    doc.text(`Order:   ${invoice.order_id.slice(0, 8)}`, 14, 36);
+    doc.text(`Date:    ${new Date(invoice.created_at).toLocaleDateString("en-KE")}`, 14, 42);
+
+    doc.text("Customer", 14, 52);
+    doc.text(invoice.customer_name, 14, 58);
+    doc.text(invoice.delivery_address || "—", 14, 64);
+
+    doc.text("Payment", 14, 74);
+    doc.text(`Status: ${invoice.payment_status}`, 14, 80);
+    doc.text(`Reference: ${invoice.payment_reference || "—"}`, 14, 86);
+
+    const rows = invoice.items.map((it) => [
+      it.name,
+      String(it.qty),
+      `KES ${Number(it.unit_price).toFixed(2)}`,
+      `KES ${Number(it.subtotal).toFixed(2)}`,
+    ]);
+    autoTable(doc, {
+      startY: 94,
+      head: [["Item", "Qty", "Unit price", "Subtotal"]],
+      body: rows,
+      theme: "grid",
+      headStyles: { fillColor: [15, 23, 42] },
+    });
+
+    const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+    doc.text(`Subtotal:      KES ${Number(invoice.subtotal).toFixed(2)}`, 14, finalY);
+    doc.text(`Delivery fee:  KES ${Number(invoice.delivery_fee).toFixed(2)}`, 14, finalY + 6);
+    doc.text(`Total paid:    KES ${Number(invoice.total).toFixed(2)}`, 14, finalY + 14);
+    doc.save(`ekshop-invoice-${invoice.order_id.slice(0, 8)}.pdf`);
   };
 
   if (loading) {
@@ -67,10 +105,6 @@ export default function CustomerInvoicePage() {
     );
   }
 
-  const subtotal = Number(invoice.subtotal || "0");
-  const deliveryFee = Number(invoice.delivery_fee || "0");
-  const total = Number(invoice.total || "0");
-
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -78,8 +112,8 @@ export default function CustomerInvoicePage() {
           <h1 className="text-2xl font-bold">Invoice</h1>
           <p className="text-sm text-muted">{invoice.invoice_id}</p>
         </div>
-        <button onClick={printInvoice} className="btn-accent text-sm">
-          Download / Print
+        <button onClick={downloadPdf} className="btn-accent text-sm">
+          Download PDF
         </button>
       </div>
 
@@ -129,15 +163,15 @@ export default function CustomerInvoicePage() {
         <div className="border-t border-border pt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted">Subtotal</span>
-            <span className="tabular-nums">{formatKES(subtotal)}</span>
+            <span className="tabular-nums">{formatKES(Number(invoice.subtotal))}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted">Delivery fee</span>
-            <span className="tabular-nums">{formatKES(deliveryFee)}</span>
+            <span className="tabular-nums">{formatKES(Number(invoice.delivery_fee))}</span>
           </div>
           <div className="flex justify-between font-bold text-base">
             <span>Total paid</span>
-            <span className="tabular-nums">{formatKES(total)}</span>
+            <span className="tabular-nums">{formatKES(Number(invoice.total))}</span>
           </div>
         </div>
 

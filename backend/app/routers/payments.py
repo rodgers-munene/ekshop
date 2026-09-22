@@ -25,6 +25,7 @@ from app.services import mpesa, paystack
 from app.services import recommendations as rec_service
 from app.services.notifications import create_notification, notify_admins_of_new_order
 from app.services.webhooks import emit_payment_success_webhook
+from app.services.email import send_invoice_email
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 logger = logging.getLogger(__name__)
@@ -213,6 +214,39 @@ async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
     _mark_order_paid(db, intent.order_group_id)
 
     db.commit()
+
+    try:
+        group = db.query(OrderGroup).filter(OrderGroup.id == intent.order_group_id).first()
+        if group:
+            buyer = db.query(User).filter(User.id == group.buyer_id).first()
+            if buyer and buyer.email:
+                invoice = {
+                    "invoice_id": f"INV-{group.id}",
+                    "order_id": str(group.id),
+                    "created_at": group.created_at.isoformat(),
+                    "customer_name": f"{buyer.first_name} {buyer.last_name}",
+                    "delivery_address": f"{group.delivery_address.get('exact_location') or group.delivery_address.get('town') or ''}, {group.delivery_address.get('county') or ''}".strip(", ") if group.delivery_address else "",
+                    "payment_reference": receipt,
+                    "payment_status": "paid",
+                    "items": [
+                        {
+                            "name": item.product_snapshot.get("name", "Product") if item.product_snapshot else "Product",
+                            "qty": item.quantity,
+                            "unit_price": str(item.unit_price),
+                            "subtotal": str(item.line_total),
+                        }
+                        for order in group.orders
+                        for item in order.items
+                    ],
+                    "subtotal": str(group.subtotal or 0),
+                    "delivery_fee": str(group.delivery_fee or 0),
+                    "total": str(group.total or 0),
+                    "currency": "KES",
+                }
+                send_invoice_email(buyer.email, invoice)
+    except Exception as exc:
+        logger.warning("Invoice email failed for order %s: %s", intent.order_group_id, exc)
+
     await emit_payment_success_webhook(None, str(intent.order_group_id), receipt, str(amount))
     return {"ResultCode": 0, "ResultDesc": "Accepted"}
 

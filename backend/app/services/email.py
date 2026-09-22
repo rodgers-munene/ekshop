@@ -269,3 +269,74 @@ def send_pos_provisioning_email(to_emails: Iterable[str], shop) -> None:
     subject = f"Tara POS provisioning needed — {shop.name}"
     for to in to_emails:
         _send(to=to, subject=subject, html=body_html)
+
+
+def send_invoice_email(to: str, invoice: dict) -> None:
+    e = html_lib.escape
+    invoice_id = e(str(invoice.get("invoice_id") or invoice.get("order_id", "")))
+    created_at = invoice.get("created_at", "")
+    customer_name = e(str(invoice.get("customer_name", "")))
+    delivery_address = e(str(invoice.get("delivery_address", "")))
+    payment_reference = e(str(invoice.get("payment_reference") or ""))
+    payment_status = e(str(invoice.get("payment_status", "")))
+    currency = e(str(invoice.get("currency", "KES")))
+    subtotal = e(str(invoice.get("subtotal", "0")))
+    delivery_fee = e(str(invoice.get("delivery_fee", "0")))
+    total = e(str(invoice.get("total", "0")))
+    invoice_url = f"{settings.FRONTEND_URL}/invoices/{invoice.get('order_id', '')}"
+
+    items_rows = "".join(
+        f"""
+        <tr>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;">{e(str(item.get('name', 'Product')))}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">{e(str(item.get('qty', '')))}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">KES {e(str(item.get('unit_price', '0')))}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">KES {e(str(item.get('subtotal', '0')))}</td>
+        </tr>
+        """
+        for item in invoice.get("items", [])
+    )
+
+    body_html = f"""
+        <h2>Ekshop Kenya — Invoice {invoice_id}</h2>
+        <p>Date: {e(created_at)}</p>
+
+        <h3>Customer</h3>
+        <p>
+            {customer_name}<br>
+            {delivery_address}
+        </p>
+
+        <h3>Payment</h3>
+        <p>
+            Status: {payment_status}<br>
+            Reference: {payment_reference or '-'}
+        </p>
+
+        <h3>Items</h3>
+        <table style="border-collapse:collapse;width:100%;">
+            <thead>
+                <tr>
+                    <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #333;">Item</th>
+                    <th style="text-align:center;padding:6px 8px;border-bottom:2px solid #333;">Qty</th>
+                    <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #333;">Unit price</th>
+                    <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #333;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_rows}
+            </tbody>
+        </table>
+
+        <h3>Totals</h3>
+        <p>Subtotal: <strong>KES {subtotal}</strong></p>
+        <p>Delivery fee: <strong>KES {delivery_fee}</strong></p>
+        <p>Total paid: <strong>KES {total}</strong></p>
+
+        <p><a href="{invoice_url}">Download or print invoice</a></p>
+    """
+    _send(
+        to=to,
+        subject=f"Ekshop invoice {invoice_id}",
+        html=body_html,
+    )
