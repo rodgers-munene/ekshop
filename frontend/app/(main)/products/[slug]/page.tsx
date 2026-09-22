@@ -11,6 +11,7 @@ import AddToCart from "./AddToCart";
 import ProductCard from "@/components/ProductCard";
 import ProductImageGallery from "./ProductImageGallery";
 import ViewTracker from "./ViewTracker";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -227,6 +228,13 @@ export default async function ProductDetailPage({ params }: Props) {
             <div className="border-t border-border pt-4">
               <AddToCart product={product} />
             </div>
+
+            {/* Message seller */}
+            {product.shop && (
+              <div className="border-t border-border pt-4">
+                <MessageSellerButton shopId={product.shop.id} />
+              </div>
+            )}
 
             {/* Tags */}
             {product.tags && product.tags.length > 0 && (

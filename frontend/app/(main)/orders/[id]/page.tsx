@@ -6,6 +6,7 @@ import { formatKES } from "@/lib/utils";
 import PaymentStatusCheck from "./PaymentStatusCheck";
 import DeliveryTracker from "./DeliveryTracker";
 import CancelOrderButton from "./CancelOrderButton";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 const STATUS_STYLE: Record<string, string> = {
   pending_payment: "bg-amber/15 text-amber",
@@ -95,6 +96,7 @@ export default async function OrderDetailPage({ params }: Props) {
                 ))}
               </div>
               <DeliveryTracker orderId={order.id} />
+              {order.shop?.id && <MessageSellerButton shopId={order.shop.id} />}
             </div>
           ))}
         </div>
