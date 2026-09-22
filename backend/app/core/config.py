@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # spirit as CRON_SECRET below, just carried in the URL instead.
     MPESA_CALLBACK_SECRET: str | None = None
 
+    # Outbound webhook for successful payment events (Make/Zapier/automations).
+    # Example: https://hook.us.make.com/...
+    PAYMENT_SUCCESS_WEBHOOK_URL: str | None = None
+
     # Paystack: seller subscription billing only (checkout uses M-Pesa above).
     PAYSTACK_SECRET_KEY: str | None = None
     PAYSTACK_PUBLIC_KEY: str | None = None

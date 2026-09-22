@@ -113,6 +113,7 @@ export default async function OrderDetailPage({ params }: Props) {
             <span>Total</span>
             <span className="text-ink">{formatKES(group.total)}</span>
           </div>
+          <Link href={`/invoices/${group.id}`} className="text-xs text-amber underline mt-1">Download invoice</Link>
           <p className="text-xs text-muted pt-1">
             Placed {new Date(group.created_at).toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" })}
           </p>

@@ -1,0 +1,282 @@
+{
+  "info": {
+    "name": "Ekshop Backend Core APIs",
+    "description": "Core Ekshop Kenya endpoints for auth, shops, products, cart/checkout, orders, delivery, admin analytics, messaging, and reports.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "admin_token", "value": "", "type": "string" },
+    { "key": "agent_token", "value": "", "type": "string" },
+    { "key": "buyer_token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register buyer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }],
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Jane Buyer\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"Secret123!\",\n  \"role\": \"buyer\",\n  \"phone\": \"254712345678\"\n}" }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }],
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"jane@example.com\",\n  \"password\": \"Secret123!\"\n}" }
+          }
+        },
+        {
+          "name": "Refresh token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }],
+            "url": { "raw": "{{base_url}}/auth/refresh", "host": ["{{base_url}}"], "path": ["auth", "refresh"] },
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"<refresh_token>\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shops",
+      "item": [
+        {
+          "name": "List shops",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/shops?page=1&limit=20", "host": ["{{base_url}}"], "path": ["shops"] }
+          }
+        },
+        {
+          "name": "Nearby shops",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/shops/nearby?lat=-1.286&lng=36.817&radius_km=20", "host": ["{{base_url}}"], "path": ["shops", "nearby"] }
+          }
+        },
+        {
+          "name": "Create shop",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/shops", "host": ["{{base_url}}"], "path": ["shops"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Nyeri Central Supermarket\",\n  \"county\": \"Nyeri\",\n  \"town\": \"Nyeri Town\",\n  \"lat\": -0.4167,\n  \"lng\": 36.95\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List products",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/products?page=1&limit=20", "host": ["{{base_url}}"], "path": ["products"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cart & Checkout",
+      "item": [
+        {
+          "name": "Get cart",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/cart", "host": ["{{base_url}}], "path": ["cart"] }
+          }
+        },
+        {
+          "name": "Checkout delivery fee preview",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/checkout/delivery-fee-preview", "host": ["{{base_url}}"], "path": ["checkout", "delivery-fee-preview"] },
+            "body": { "mode": "raw", "raw": "{\n  \"address_id\": \"<address_id>\",\n  \"items\": [{\n    \"product_id\": \"<product_id>\",\n    \"quantity\": 2\n  }]\n}" }
+          }
+        },
+        {
+          "name": "Create order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/checkout", "host": ["{{base_url}}"], "path": ["checkout"] },
+            "body": { "mode": "raw", "raw": "{\n  \"address_id\": \"<address_id>\",\n  \"items\": [{\n    \"product_id\": \"<product_id>\",\n    \"quantity\": 2\n  }]\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "My orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/orders", "host": ["{{base_url}}"], "path": ["orders"] }
+          }
+        },
+        {
+          "name": "Track delivery",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/delivery/<order_id>/track", "host": ["{{base_url}}"], "path": ["delivery", "<order_id>", "track"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delivery / Agent",
+      "item": [
+        {
+          "name": "Agent login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }],
+            "url": { "raw": "{{base_url}}/delivery/auth/login", "host": ["{{base_url}}"], "path": ["delivery", "auth", "login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"rider@example.com\",\n  \"password\": \"Secret123!\"\n}" }
+          }
+        },
+        {
+          "name": "My deliveries",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{agent_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/delivery/me", "host": ["{{base_url}}"], "path": ["delivery", "me"] }
+          }
+        },
+        {
+          "name": "Update delivery status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{agent_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/delivery/<delivery_id>/status", "host": ["{{base_url}}"], "path": ["delivery", "<delivery_id>", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"picked\"\n}" }
+          }
+        },
+        {
+          "name": "Update agent location",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{agent_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/delivery/agents/me/location", "host": ["{{base_url}}"], "path": ["delivery", "agents", "me", "location"] },
+            "body": { "mode": "raw", "raw": "{\n  \"lat\": -0.4167,\n  \"lng\": 36.95\n}" }
+          }
+        },
+        {
+          "name": "Optimize route",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{agent_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/delivery/optimize-route", "host": ["{{base_url}}"], "path": ["delivery", "optimize-route"] },
+            "body": { "mode": "raw", "raw": "{\n  \"delivery_ids\": [\"<uuid>\", \"<uuid>\"]\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messaging",
+      "item": [
+        {
+          "name": "List conversations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/conversations", "host": ["{{base_url}}"], "path": ["conversations"] }
+          }
+        },
+        {
+          "name": "List messages",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/conversations/<conversation_id>/messages", "host": ["{{base_url}}"], "path": ["conversations", "<conversation_id>", "messages"] }
+          }
+        },
+        {
+          "name": "Send message",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{buyer_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/conversations/<conversation_id>/messages", "host": ["{{base_url}}"], "path": ["conversations", "<conversation_id>", "messages"] },
+            "body": { "mode": "raw", "raw": "{\n  \"body\": \"Where is my order?\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Analytics & Reports",
+      "item": [
+        {
+          "name": "Stats overview",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/admin/stats/overview?period=month", "host": ["{{base_url}}"], "path": ["admin", "stats", "overview"] }
+          }
+        },
+        {
+          "name": "Margin leakage metrics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/admin/metrics/margin-leakage?period=month", "host": ["{{base_url}}"], "path": ["admin", "metrics", "margin-leakage"] }
+          }
+        },
+        {
+          "name": "Download margin leakage CSV",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/admin/reports/margin-leakage.csv?period=month", "host": ["{{base_url}}"], "path": ["admin", "reports", "margin-leakage.csv"] }
+          }
+        },
+        {
+          "name": "Merchant master health",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/admin/metrics/merchant-master-health?period=month", "host": ["{{base_url}}"], "path": ["admin", "metrics", "merchant-master-health"] }
+          }
+        },
+        {
+          "name": "Order control tower",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/admin/metrics/order-control-tower?period=month", "host": ["{{base_url}}"], "path": ["admin", "metrics", "order-control-tower"] }
+          }
+        },
+        {
+          "name": "Customer recovery",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/admin/metrics/customer-recovery?period=month", "host": ["{{base_url}}"], "path": ["admin", "metrics", "customer-recovery"] }
+          }
+        },
+        {
+          "name": "Supply demand matrix",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}", "type": "text" }],
+            "url": { "raw": "{{base_url}}/admin/metrics/supply-demand?period=month", "host": ["{{base_url}}"], "path": ["admin", "metrics", "supply-demand"] }
+          }
+        }
+      ]
+    }
+  ]
+}

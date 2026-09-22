@@ -24,6 +24,7 @@ from app.schemas.payment import (
 from app.services import mpesa, paystack
 from app.services import recommendations as rec_service
 from app.services.notifications import create_notification, notify_admins_of_new_order
+from app.services.webhooks import emit_payment_success_webhook
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 logger = logging.getLogger(__name__)
@@ -212,6 +213,7 @@ async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
     _mark_order_paid(db, intent.order_group_id)
 
     db.commit()
+    await emit_payment_success_webhook(None, str(intent.order_group_id), receipt, str(amount))
     return {"ResultCode": 0, "ResultDesc": "Accepted"}
 
 
