@@ -148,24 +148,59 @@ def expire_overdue_subscriptions(db: Session) -> int:
 
     for subscription in subscriptions:
         if subscription.status == SubscriptionStatus.trialing:
-            subscription.status = SubscriptionStatus.pending_payment
-            subscription.shop.status = ShopStatus.pending
-            subscription.shop.seller.status = UserStatus.pending
-            try:
-                email_service.send_trial_expired_email(
-                    subscription.shop.seller.email,
-                    subscription.shop,
-                    subscription.plan.name,
+            if subscription.authorization_code:
+                try:
+                    plan = subscription.plan
+                    interval = subscription.billing_interval
+                    amount = plan.price_yearly if interval == BillingInterval.annual and plan.price_yearly else plan.price_monthly
+                    reference = f"eks_sub_auto_{uuid.uuid4().hex[:20]}"
+                    paystack.charge_authorization(
+                        authorization_code=subscription.authorization_code,
+                        email=subscription.shop.seller.email,
+                        amount=amount,
+                        reference=reference,
+                    )
+                    subscription.provider_ref = reference
+                    db.flush()
+                except Exception as exc:
+                    logger.warning("Auto-renewal charge failed for subscription %s: %s", subscription.id, exc)
+                    subscription.status = SubscriptionStatus.pending_payment
+                    subscription.shop.status = ShopStatus.pending
+                    subscription.shop.seller.status = UserStatus.pending
+                    try:
+                        email_service.send_trial_expired_email(
+                            subscription.shop.seller.email,
+                            subscription.shop,
+                            subscription.plan.name,
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to send trial-expired email for subscription %s: %s", subscription.id, e)
+                    _notify_seller(
+                        db,
+                        subscription,
+                        type="trial_expired",
+                        title="Your free trial has ended",
+                        body=f"Your {subscription.plan.name} trial for {subscription.shop.name} has ended. Subscribe now to keep your shop live.",
+                    )
+            else:
+                subscription.status = SubscriptionStatus.pending_payment
+                subscription.shop.status = ShopStatus.pending
+                subscription.shop.seller.status = UserStatus.pending
+                try:
+                    email_service.send_trial_expired_email(
+                        subscription.shop.seller.email,
+                        subscription.shop,
+                        subscription.plan.name,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to send trial-expired email for subscription %s: %s", subscription.id, e)
+                _notify_seller(
+                    db,
+                    subscription,
+                    type="trial_expired",
+                    title="Your free trial has ended",
+                    body=f"Your {subscription.plan.name} trial for {subscription.shop.name} has ended. Subscribe now to keep your shop live.",
                 )
-            except Exception as e:
-                logger.warning("Failed to send trial-expired email for subscription %s: %s", subscription.id, e)
-            _notify_seller(
-                db,
-                subscription,
-                type="trial_expired",
-                title="Your free trial has ended",
-                body=f"Your {subscription.plan.name} trial for {subscription.shop.name} has ended. Subscribe now to keep your shop live.",
-            )
         else:
             subscription.status = SubscriptionStatus.past_due
             shop = subscription.shop

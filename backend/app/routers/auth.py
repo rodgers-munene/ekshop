@@ -168,17 +168,18 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
             db.rollback()
             raise HTTPException(status_code=409, detail="That shop name is taken, please try a different one")
 
-        # No payment required up front: the seller gets a 7-day free trial
+        # No payment required up front: the seller gets a free trial
         # of the chosen plan. They can use the dashboard and shop immediately
         # after verifying their email; payment is only needed to continue
         # after the trial ends.
+        trial_days = max(0, plan.trial_days or 0)
         subscription = Subscription(
             shop_id=shop.id,
             plan_id=plan.id,
-            status=SubscriptionStatus.trialing,
+            status=SubscriptionStatus.trialing if trial_days > 0 else SubscriptionStatus.pending_payment,
             billing_interval=BillingInterval.monthly,
             current_period_start=datetime.now(timezone.utc),
-            current_period_end=datetime.now(timezone.utc) + timedelta(days=7),
+            current_period_end=datetime.now(timezone.utc) + timedelta(days=trial_days),
             reminder_7d_sent_at=None,
             reminder_1d_sent_at=None,
         )
@@ -303,6 +304,11 @@ def subscription_status(reference: str, db: Session = Depends(get_db)):
         except Exception:
             result = {}
         if result.get("status") == "success":
+            customer = result.get("customer") or {}
+            authorization = result.get("authorization") or {}
+            subscription.customer_ref = customer.get("customer_code") or subscription.customer_ref
+            subscription.authorization_code = authorization.get("authorization_code") or subscription.authorization_code
+            subscription.last_activated_ref = reference
             activate_subscription(db, subscription)
             db.commit()
             payment_confirmed = subscription.last_activated_ref == reference

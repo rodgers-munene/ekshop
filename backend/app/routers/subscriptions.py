@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.dependencies.auth import require_seller_allow_unpaid
+from app.dependencies.auth import get_current_active_user
 from app.dependencies.database import get_db
 from app.models.shop import Shop
-from app.models.subscription import SubscriptionPlan
+from app.models.subscription import BillingInterval, Subscription, SubscriptionPlan, SubscriptionStatus
 from app.models.user import User
 from app.schemas.subscription import (
     RenewSubscriptionRequest,

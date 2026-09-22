@@ -45,6 +45,22 @@ def verify_webhook_signature(raw_body: bytes, signature: str | None) -> bool:
     expected = hmac.new(
         settings.PAYSTACK_SECRET_KEY.encode("utf-8"),
         raw_body,
-        hashlib.sha512,
+        hashlib.sha512(),
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+def charge_authorization(authorization_code: str, email: str, amount: str, reference: str) -> dict:
+    response = httpx.post(
+        f"{PAYSTACK_BASE_URL}/transaction/charge_authorization",
+        json={
+            "authorization_code": authorization_code,
+            "email": email,
+            "amount": to_subunit(amount),
+            "currency": "KES",
+            "reference": reference,
+        },
+        headers={"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"},
+    )
+    response.raise_for_status()
+    return response.json()["data"]

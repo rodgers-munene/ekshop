@@ -36,6 +36,7 @@ class SubscriptionPlan(Base):
     commission_rate = Column(String(10), nullable=False)
     features = Column(JSONB)
     is_active = Column(Boolean, default=True, nullable=False)
+    trial_days = Column(Integer, default=0, nullable=False)
 
     subscriptions = relationship("Subscription", foreign_keys="Subscription.plan_id", back_populates="plan")
 
@@ -56,6 +57,7 @@ class Subscription(Base):
     pending_billing_interval = Column(Enum(BillingInterval, native_enum=False))
     provider_ref = Column(String(100))
     customer_ref = Column(String(100))
+    authorization_code = Column(String(100))
     last_activated_ref = Column(String(100))
     status = Column(Enum(SubscriptionStatus, native_enum=False), default=SubscriptionStatus.trialing, nullable=False)
     current_period_start = Column(DateTime(timezone=True))
