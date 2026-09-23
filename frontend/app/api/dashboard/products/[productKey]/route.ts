@@ -18,3 +18,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ pr
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });
 }
+
+export async function DELETE(_: Request, { params }: { params: Promise<{ productKey: string }> }) {
+  const { productKey } = await params;
+  const cookieStore = await cookies();
+  const token = cookieStore.get("ekshop_token")?.value;
+  if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+
+  const res = await fetch(`${BASE_URL}/products/${productKey}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return NextResponse.json({}, { status: res.status });
+}

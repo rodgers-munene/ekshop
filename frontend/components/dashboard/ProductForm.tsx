@@ -220,6 +220,37 @@ export default function ProductForm({
     }
   }
 
+  async function onDelete() {
+    if (!product || mode !== "edit") return;
+    if (!confirm("Delete this product? This cannot be undone.")) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/dashboard/products/${product.slug}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error("Could not delete product");
+        return;
+      }
+      toast.success("Product deleted");
+      router.push("/dashboard/products");
+    } catch {
+      toast.error("Something went wrong. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onDeleteVariant(variantId: string) {
+    if (!product || mode !== "edit") return;
+    if (!confirm("Delete this variant?")) return;
+    const res = await fetch(`/api/dashboard/products/${product.id}/variants/${variantId}`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("Could not delete variant");
+      return;
+    }
+    toast.success("Variant deleted");
+    router.refresh();
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-6 max-w-2xl">
       <div className="card p-5 space-y-4">
@@ -372,8 +403,11 @@ export default function ProductForm({
         {mode === "edit" && product?.variants && product.variants.length > 0 && (
           <ul className="text-sm mb-3 space-y-1">
             {product.variants.map((v) => (
-              <li key={v.id} className="bg-surface rounded px-3 py-1.5">
-                {v.name}: {v.value} {v.stock_qty ? `(${v.stock_qty} in stock)` : ""}
+              <li key={v.id} className="bg-surface rounded px-3 py-1.5 flex items-center justify-between">
+                <span>
+                  {v.name}: {v.value} {v.stock_qty ? `(${v.stock_qty} in stock)` : ""}
+                </span>
+                <button type="button" onClick={() => onDeleteVariant(v.id)} className="text-danger text-xs ml-2">Delete</button>
               </li>
             ))}
           </ul>
@@ -399,6 +433,11 @@ export default function ProductForm({
       <button type="submit" disabled={loading} className="btn-accent disabled:opacity-50">
         {loading ? "Saving..." : mode === "create" ? "Create product" : "Save changes"}
       </button>
+      {mode === "edit" && product && (
+        <button type="button" onClick={onDelete} disabled={loading} className="text-xs text-danger underline underline-offset-2 disabled:opacity-50 ml-4">
+          Delete product
+        </button>
+      )}
     </form>
   );
 }
