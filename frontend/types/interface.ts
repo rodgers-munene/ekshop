@@ -32,6 +32,10 @@ export interface Shop {
   logo_url?: string;
   banner_url?: string;
   county?: string;
+  town?: string;
+  phone?: string;
+  exact_location?: string;
+  seller_id?: string;
   is_verified: boolean;
   is_featured: boolean;
   rating_avg: string;
@@ -140,6 +144,7 @@ export interface Order {
   total: string;
   items: OrderItem[];
   created_at: string;
+  buyer_id?: string;
   buyer_name?: string;
   delivery_address?: {
     first_name: string;
