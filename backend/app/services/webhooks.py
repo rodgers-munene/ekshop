@@ -36,3 +36,18 @@ async def emit_payment_success_webhook(db_session_factory, order_group_id: str, 
         },
     }
     await emit_webhook(url, payload)
+
+
+async def emit_order_paid_webhook(db_session_factory, order_group_id: str) -> None:
+    url = getattr(settings, "PAYMENT_SUCCESS_WEBHOOK_URL", None)
+    if not url:
+        return
+
+    payload = {
+        "event": "order.paid",
+        "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        "data": {
+            "order_id": order_group_id,
+        },
+    }
+    await emit_webhook(url, payload)
