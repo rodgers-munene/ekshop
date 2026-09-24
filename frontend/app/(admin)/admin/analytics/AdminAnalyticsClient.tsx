@@ -225,6 +225,17 @@ export default function AdminAnalyticsClient({
           </div>
 
           {marginLeakage && <RevenueLeakageMonitor data={marginLeakage} />}
+          {overviewPrevious && (
+            <div className="mt-4 p-4 bg-muted/30 rounded">
+              <h3 className="font-bold mb-3">Previous Period Comparison</h3>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard label="Prev. revenue" value={formatKES(overviewPrevious?.metrics?.revenue)} />
+                <StatCard label="Prev. orders" value={overviewPrevious?.metrics?.orders ?? "—"} />
+                <StatCard label="Prev. AOV" value={formatKES(overviewPrevious?.metrics?.average_order_value)} />
+                <StatCard label="Prev. new users" value={overviewPrevious?.metrics?.new_users ?? "—"} />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
