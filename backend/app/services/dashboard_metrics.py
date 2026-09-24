@@ -753,3 +753,217 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
         "mpesa_rate_pct": float(MPESA_RATE * 100),
         "trend": trend,
     }
+
+
+def get_real_time_metrics(db: Session, minutes: int = 15) -> dict:
+    """Get real-time metrics for the last N minutes."""
+    since = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    active_users = (
+        db.query(func.count(func.distinct(UserEvent.session_id)))
+        .filter(UserEvent.event_type == EventType.purchase, UserEvent.created_at >= since)
+        .scalar()
+        or 0
+    )
+    # Count unique sessions with any activity in the period
+    active_sessions = (
+        db.query(func.count(func.distinct(UserEvent.session_id)))
+        .filter(UserEvent.created_at >= since)
+        .scalar()
+        or 0
+    )
+    # Recent purchases
+    recent_purchases = (
+        db.query(func.count(OrderGroup.id))
+        .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at >= since)
+        .scalar()
+        or 0
+    )
+    # Active carts (sessions with add_to_cart but no purchase)
+    active_carts = (
+        db.query(func.count(func.distinct(UserEvent.session_id)))
+        .filter(
+            UserEvent.event_type == EventType.add_to_cart,
+            UserEvent.created_at >= since,
+        )
+        .scalar()
+        or 0
+    )
+    return {
+        "active_sessions": active_sessions,
+        "active_users": active_users,
+        "recent_purchases": recent_purchases,
+        "active_carts": active_carts,
+    }
+
+
+def get_acquisition_metrics(db: Session, since: datetime, until: datetime) -> dict:
+    """Acquisition metrics: new vs returning users, similar to Google Analytics."""
+    new_users = (
+        db.query(func.count(User.id))
+        .filter(User.role == UserRole.buyer, User.created_at >= since, User.created_at < until)
+        .scalar()
+        or 0
+    )
+    # Users who had their first paid order in this period
+    first_order_subq = (
+        db.query(OrderGroup.buyer_id, func.min(OrderGroup.created_at).label("first_at"))
+        .filter(OrderGroup.status == OrderGroupStatus.paid)
+        .group_by(OrderGroup.buyer_id)
+        .subquery()
+    )
+    first_time_buyers = (
+        db.query(func.count(first_order_subq.c.buyer_id))
+        .filter(first_order_subq.c.first_at >= since, first_order_subq.c.first_at < until)
+        .scalar()
+        or 0
+    )
+    # Returning buyers: had previous orders before this period but also ordered in this period
+    buyers_with_previous = (
+        db.query(func.count(distinct(OrderGroup.buyer_id)))
+        .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at < since)
+        .scalar()
+        or 0
+    )
+    returning_buyers = (
+        db.query(func.count(OrderGroup.buyer_id))
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.buyer_id.in_(
+                db.query(OrderGroup.buyer_id).filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at < since)
+            ),
+            OrderGroup.created_at >= since,
+            OrderGroup.created_at < until,
+        )
+        .scalar()
+        or 0
+    )
+    total_users_in_period = new_users + returning_buyers  # simplified
+    new_user_rate = round((new_users / total_users_in_period) * 100, 2) if total_users_in_period else 0.0
+    returning_user_rate = round((returning_buyers / total_users_in_period) * 100, 2) if total_users_in_period else 0.0
+    return {
+        "new_users": new_users,
+        "returning_buyers": returning_buyers,
+        "new_user_rate": new_user_rate,
+        "returning_user_rate": returning_user_rate,
+        "total_users_in_period": total_users_in_period,
+    }
+
+
+def get_behavior_metrics(db: Session, since: datetime, until: datetime) -> dict:
+    """Behavior metrics: event funnel similar to Google Analytics."""
+    # Event funnel: view -> click -> add_to_cart -> purchase
+    views = (
+        db.query(func.count(func.distinct(UserEvent.session_id)))
+        .filter(
+            UserEvent.event_type == EventType.view,
+            UserEvent.created_at >= since,
+            UserEvent.created_at < until,
+        )
+        .scalar()
+        or 0
+    )
+    clicks = (
+        db.query(func.count(func.distinct(UserEvent.session_id)))
+        .filter(
+            UserEvent.event_type == EventType.click,
+            UserEvent.created_at >= since,
+            UserEvent.created_at < until,
+        )
+        .scalar()
+        or 0
+    )
+    add_to_carts = (
+        db.query(func.count(func.distinct(UserEvent.session_id)))
+        .filter(
+            UserEvent.event_type == EventType.add_to_cart,
+            UserEvent.created_at >= since,
+            UserEvent.created_at < until,
+        )
+        .scalar()
+        or 0
+    )
+    purchases = (
+        db.query(func.count(func.distinct(UserEvent.session_id)))
+        .filter(
+            UserEvent.event_type == EventType.purchase,
+            UserEvent.created_at >= since,
+            UserEvent.created_at < until,
+        )
+        .scalar()
+        or 0
+    )
+    # Conversion rates at each funnel stage
+    view_to_click_rate = round((clicks / views) * 100, 2) if views else 0.0
+    click_to_cart_rate = round((add_to_carts / clicks) * 100, 2) if clicks else 0.0
+    cart_to_purchase_rate = round((purchases / add_to_carts) * 100, 2) if add_to_carts else 0.0
+    overall_conversion_rate = round((purchases / views) * 100, 2) if views else 0.0
+    return {
+        "views": views,
+        "clicks": clicks,
+        "add_to_carts": add_to_carts,
+        "purchases": purchases,
+        "view_to_click_rate": view_to_click_rate,
+        "click_to_cart_rate": click_to_cart_rate,
+        "cart_to_purchase_rate": cart_to_purchase_rate,
+        "overall_conversion_rate": overall_conversion_rate,
+    }
+
+
+def get_ecommerce_metrics(db: Session, since: datetime, until: datetime) -> dict:
+    """E-commerce metrics: transactions, revenue, AOV, similar to Google Analytics e-commerce."""
+    paid_groups = db.query(OrderGroup).filter(
+        OrderGroup.status == OrderGroupStatus.paid,
+        OrderGroup.created_at >= since,
+        OrderGroup.created_at < until,
+    )
+    order_count = paid_groups.count()
+    gmv = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
+    average_order_value = (gmv / order_count).quantize(Decimal("0.01")) if order_count else Decimal("0")
+    # Conversion rate: sessions with purchase / total sessions
+    total_sessions = (
+        db.query(func.count(func.distinct(UserEvent.session_id)))
+        .filter(UserEvent.created_at >= since, UserEvent.created_at < until)
+        .scalar()
+        or 0
+    )
+    conversion_rate = round((order_count / total_sessions) * 100, 2) if total_sessions else 0.0
+    # Revenue per session
+    revenue_per_session = (gmv / Decimal(total_sessions)).quantize(Decimal("0.02")) if total_sessions else Decimal("0.00")
+    # Top products by revenue
+    top_products = (
+        db.query(
+            OrderItem.product_id,
+            func.sum(OrderItem.quantity).label("units"),
+            func.sum(cast(OrderItem.line_total, Numeric)).label("revenue"),
+        )
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(OrderGroup, OrderGroup.id == Order.group_id)
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= since,
+            OrderGroup.created_at < until,
+        )
+        .group_by(OrderItem.product_id)
+        .order_by(desc(func.sum(OrderItem.quantity)))
+        .limit(5)
+        .all()
+    )
+    products_map = {
+        p.id: p for p in db.query(Product).filter(Product.id.in_([r.product_id for r in top_products if r.product_id]).all())
+    }
+    top_products_data = []
+    for r in top_products:
+        product = products_map.get(r.product_id)
+        top_products_data.append({
+            "name": product.name if product else "Unknown",
+            "units": int(r.units),
+            "revenue": str(Decimal(r.revenue or 0).quantize(Decimal("0.01"))),
+        })
+    return {
+        "transactions": order_count,
+        "revenue": str(gmv),
+        "average_order_value": str(average_order_value),
+        "conversion_rate": conversion_rate,
+        "revenue_per_session": str(revenue_per_session),
+        "top_products": top_products_data,
+    }

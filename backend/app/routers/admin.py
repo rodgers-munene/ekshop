@@ -523,6 +523,49 @@ def get_priority_acquisition(
     return dashboard_metrics.get_priority_acquisition(db, since, until)
 
 
+@router.get("/metrics/real-time", response_model=RealTimeMetrics)
+def get_real_time_metrics(
+    minutes: int = Query(15, ge=1, le=60),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    return dashboard_metrics.get_real_time_metrics(db, since)
+
+
+@router.get("/metrics/acquisition", response_model=AcquisitionMetrics)
+def get_acquisition_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_acquisition_metrics(db, since, until)
+
+
+@router.get("/metrics/behavior", response_model=BehaviorMetrics)
+def get_behavior_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_behavior_metrics(db, since, until)
+
+
+@router.get("/metrics/ecommerce", response_model=EcommerceMetrics)
+def get_ecommerce_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_ecommerce_metrics(db, since, until)
+
+
 # ── Drill-down lists (click a stat card, see the rows behind it) ─────────────
 
 @router.get("/orders", response_model=RecentOrderListResponse)
