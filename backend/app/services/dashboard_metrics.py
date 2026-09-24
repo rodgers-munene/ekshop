@@ -967,3 +967,53 @@ def get_ecommerce_metrics(db: Session, since: datetime, until: datetime) -> dict
         "revenue_per_session": str(revenue_per_session),
         "top_products": top_products_data,
     }
+
+
+def get_top_merchants_insight(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
+    until = _bound(since, until)
+    rows = (
+        db.query(Shop.name, func.count(Order.id).label("orders"), func.sum(Order.total).label("revenue"))
+        .join(Order, Order.shop_id == Shop.id)
+        .filter(Order.created_at >= since, Order.created_at <= until, Shop.status == ShopStatus.active)
+        .group_by(Shop.name)
+        .order_by(func.count(Order.id).desc())
+        .limit(5)
+        .all()
+    )
+    return [
+        {
+            "name": name,
+            "orders": orders,
+            "revenue": str(Decimal(revenue or 0).quantize(Decimal("0.01"))),
+        }
+        for name, orders, revenue in rows
+    ]
+
+
+def get_churn_risks_insight(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
+    until = _bound(since, until)
+    last_order_sq = (
+        db.query(
+            OrderGroup.buyer_id.label("buyer_id"),
+            func.max(OrderGroup.created_at).label("last_order_at"),
+        )
+        .group_by(OrderGroup.buyer_id)
+        .subquery()
+    )
+    rows = (
+        db.query(User.first_name, User.last_name, User.email, last_order_sq.c.last_order_at)
+        .join(last_order_sq, last_order_sq.c.buyer_id == User.id)
+        .filter(User.role == UserRole.buyer, last_order_sq.c.last_order_at < since)
+        .order_by(last_order_sq.c.last_order_at.asc())
+        .limit(10)
+        .all()
+    )
+    return [
+        {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "last_order_at": last_order_at.isoformat() if last_order_at else None,
+        }
+        for first_name, last_name, email, last_order_at in rows
+    ]

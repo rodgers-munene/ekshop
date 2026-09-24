@@ -30,6 +30,8 @@ import {
   AcquisitionMetrics,
   BehaviorMetrics,
   EcommerceMetrics,
+  TopMerchantInsight,
+  ChurnRiskInsight,
 } from "@/types/interface";
 
 type Section = "overview" | "merchants" | "sales" | "retention" | "operations" | "cart" | "merchant-master" | "order-control" | "customer-recovery" | "supply-demand" | "margin";
@@ -108,6 +110,8 @@ export default function AdminAnalyticsClient({
   const [acquisition, setAcquisition] = useState<AcquisitionMetrics | null>(null);
   const [behavior, setBehavior] = useState<BehaviorMetrics | null>(null);
   const [ecommerce, setEcommerce] = useState<EcommerceMetrics | null>(null);
+  const [topMerchants, setTopMerchants] = useState<TopMerchantInsight[] | null>(null);
+  const [churnRisks, setChurnRisks] = useState<ChurnRiskInsight[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +122,7 @@ export default function AdminAnalyticsClient({
     async function load() {
       setRefreshing(true);
       try {
-        const [m, s, r, o, c, mm, oc, cr, sd, ov, ml, rt, acq, beh, ecom] = await Promise.all([
+        const [m, s, r, o, c, mm, oc, cr, sd, ov, ml, rt, acq, beh, ecom, tm, ch] = await Promise.all([
           fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
@@ -134,9 +138,11 @@ export default function AdminAnalyticsClient({
           fetch(`/api/admin/metrics/acquisition?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/behavior?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/ecommerce?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/top-merchants?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/churn-risks?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
         ]);
         const prevPeriod = period === "month" ? "week" : period === "week" ? "yesterday" : period === "yesterday" ? "today" : "month";
-        const [mp, sp, rp, op, cp, mmp, opc, cpr, spd, ovp, mlp, mprt, mpacq, mpbeh, mpecom] = await Promise.all([
+        const [mp, sp, rp, op, cp, mmp, opc, cpr, spd, ovp, mlp, mprt, mpacq, mpbeh, mpecom, ptm, pch] = await Promise.all([
           fetch(`/api/admin/metrics/merchants?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/sales?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/retention?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
@@ -152,6 +158,8 @@ export default function AdminAnalyticsClient({
           fetch(`/api/admin/metrics/acquisition?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/behavior?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/ecommerce?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/top-merchants?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/churn-risks?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
         ]);
         if (!cancelled) {
           setMerchants(m);
@@ -170,6 +178,8 @@ export default function AdminAnalyticsClient({
           setAcquisition(acq);
           setBehavior(beh);
           setEcommerce(ecom);
+          setTopMerchants(tm);
+          setChurnRisks(ch);
         }
       } finally {
         if (!cancelled) setRefreshing(false);
@@ -292,6 +302,56 @@ export default function AdminAnalyticsClient({
                 <StatCard label="Conversion rate" value={`${ecommerce.conversion_rate}%`} />
                 <StatCard label="Revenue/session" value={formatKES(ecommerce.revenue_per_session)} />
                 <StatCard label="Top products" value={ecommerce.top_products.length > 0 ? ecommerce.top_products.length + " products" : "—"} />
+              </div>
+            </div>
+          )}
+          {topMerchants && topMerchants.length > 0 && (
+            <div className="mt-4 p-4 bg-muted/30 rounded">
+              <h3 className="font-bold mb-3">Top Merchants</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted border-b">
+                      <th className="text-left py-2 px-3">Shop</th>
+                      <th className="text-right py-2 px-3">Orders</th>
+                      <th className="text-right py-2 px-3">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topMerchants.map((row, idx) => (
+                      <tr key={idx} className="border-b last:border-0">
+                        <td className="py-2 px-3 font-medium">{row.name}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{row.orders}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{formatKES(row.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {churnRisks && churnRisks.length > 0 && (
+            <div className="mt-4 p-4 bg-muted/30 rounded">
+              <h3 className="font-bold mb-3">Churn Risks</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted border-b">
+                      <th className="text-left py-2 px-3">Buyer</th>
+                      <th className="text-left py-2 px-3">Email</th>
+                      <th className="text-left py-2 px-3">Last order</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {churnRisks.map((row, idx) => (
+                      <tr key={idx} className="border-b last:border-0">
+                        <td className="py-2 px-3 font-medium">{row.first_name} {row.last_name}</td>
+                        <td className="py-2 px-3">{row.email}</td>
+                        <td className="py-2 px-3">{row.last_order_at ? new Date(row.last_order_at).toLocaleDateString() : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

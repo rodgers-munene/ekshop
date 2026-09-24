@@ -660,6 +660,19 @@ export interface EcommerceMetrics {
   top_products: TopPurchasedProduct[];
 }
 
+export interface TopMerchantInsight {
+  name: string;
+  orders: number;
+  revenue: string;
+}
+
+export interface ChurnRiskInsight {
+  first_name: string;
+  last_name: string;
+  email: string;
+  last_order_at: string | null;
+}
+
 export interface OrderNotificationRecipient {
   id: string;
   email: string;

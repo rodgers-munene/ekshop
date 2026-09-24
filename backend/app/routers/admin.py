@@ -514,7 +514,7 @@ def check_admin_thresholds(
 
     margin = get_margin_leakage_metrics(db, since)
     margin_pct = float(margin.get("gross_margin_pct", 100))
-    if margin_pct < min_margin:
+    if automation.alert_gross_margin_enabled and margin_pct < min_margin:
         alerts.append({
             "level": "high",
             "metric": "gross_margin_pct",
@@ -523,7 +523,7 @@ def check_admin_thresholds(
 
     sales = get_sales_demand_metrics(db, since, now)
     cancellation_rate = float(sales.get("order_cancellation_rate", 0))
-    if cancellation_rate > max_cancel:
+    if automation.alert_order_cancellation_enabled and cancellation_rate > max_cancel:
         alerts.append({
             "level": "medium",
             "metric": "order_cancellation_rate",
@@ -532,7 +532,7 @@ def check_admin_thresholds(
 
     cart = get_cart_abandonment_metrics(db, since, now)
     abandonment_rate = float(cart.get("cart_abandonment_rate", 0))
-    if abandonment_rate > max_abandon:
+    if automation.alert_cart_abandonment_enabled and abandonment_rate > max_abandon:
         alerts.append({
             "level": "medium",
             "metric": "cart_abandonment_rate",
@@ -541,7 +541,7 @@ def check_admin_thresholds(
 
     ops = get_operations_delivery_metrics(db, since, now)
     on_time = ops.get("on_time_delivery_rate")
-    if on_time is not None and float(on_time) < min_delivery:
+    if automation.alert_on_time_delivery_enabled and on_time is not None and float(on_time) < min_delivery:
         alerts.append({
             "level": "high",
             "metric": "on_time_delivery_rate",
@@ -1061,3 +1061,23 @@ def delete_deal(deal_id: uuid.UUID, db: Session = Depends(get_db), _: User = Dep
         raise HTTPException(404, "Deal not found")
     db.delete(deal)
     db.commit()
+
+
+@router.get("/metrics/top-merchants")
+def get_top_merchants_insight(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, 30)
+    return dashboard_metrics.get_top_merchants_insight(db, since, until)
+
+
+@router.get("/metrics/churn-risks")
+def get_churn_risks_insight(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, 30)
+    return dashboard_metrics.get_churn_risks_insight(db, since, until)

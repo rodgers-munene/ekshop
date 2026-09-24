@@ -12,6 +12,10 @@ interface AutomationSettings {
   alert_max_order_cancellation_rate: number;
   alert_min_on_time_delivery_rate: number;
   alert_max_cart_abandonment_rate: number;
+  alert_gross_margin_enabled: boolean;
+  alert_order_cancellation_enabled: boolean;
+  alert_cart_abandonment_enabled: boolean;
+  alert_on_time_delivery_enabled: boolean;
   daily_admin_report_enabled: boolean;
   daily_admin_report_email: string | null;
   weekly_insight_digest_enabled: boolean;
@@ -95,6 +99,40 @@ export default function AutomationSettingsPage() {
 
       <div className="card p-5 space-y-4">
         <h2 className="font-bold">Alert Thresholds</h2>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.alert_gross_margin_enabled}
+              onChange={(e) => update({ alert_gross_margin_enabled: e.target.checked })}
+            />
+            <span className="text-sm font-medium">Gross margin alerts</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.alert_order_cancellation_enabled}
+              onChange={(e) => update({ alert_order_cancellation_enabled: e.target.checked })}
+            />
+            <span className="text-sm font-medium">Order cancellation alerts</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.alert_cart_abandonment_enabled}
+              onChange={(e) => update({ alert_cart_abandonment_enabled: e.target.checked })}
+            />
+            <span className="text-sm font-medium">Cart abandonment alerts</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.alert_on_time_delivery_enabled}
+              onChange={(e) => update({ alert_on_time_delivery_enabled: e.target.checked })}
+            />
+            <span className="text-sm font-medium">On-time delivery alerts</span>
+          </label>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="block space-y-1">
             <span className="text-sm font-medium">Min gross margin %</span>
