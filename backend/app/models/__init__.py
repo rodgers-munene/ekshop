@@ -1,6 +1,7 @@
 from app.models.user import User, EmailVerification, PasswordReset, RefreshToken, NotificationPreference
 from app.models.shop import Shop, ShopPaymentMethod
 from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview
+from app.models.product_import import ProductImport, ProductImportRow
 from app.models.commerce import UserAddress, Cart, CartItem, Wishlist, OrderGroup, Order, OrderItem
 from app.models.geography import County, SubCounty, Ward
 from app.models.payment import Payment, PaymentIntent
@@ -17,6 +18,7 @@ __all__ = [
     "User", "EmailVerification", "PasswordReset", "RefreshToken", "NotificationPreference",
     "Shop", "ShopPaymentMethod",
     "Category", "Product", "ProductImage", "ProductVariant", "ProductReview",
+    "ProductImport", "ProductImportRow",
     "UserAddress", "Cart", "CartItem", "Wishlist", "OrderGroup", "Order", "OrderItem",
     "County", "SubCounty", "Ward",
     "Payment", "PaymentIntent",

@@ -25,11 +25,17 @@ from app.schemas.catalog import (
     ProductVariantRead,
     ReviewCreate,
     ReviewRead,
+    BulkStatusRequest,
+    BulkStatusResult,
 )
 from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview
 from app.models.shop import Shop
 from app.services import storage
-from app.services.catalog import with_active_shop
+from app.services.catalog import (
+    with_active_shop,
+    unique_product_slug,
+    remaining_product_slots,
+)
 
 categories_router = APIRouter(prefix="/categories", tags=["categories"])
 products_router = APIRouter(prefix="/products", tags=["products"])
@@ -203,33 +209,6 @@ def delete_category(
 # PRODUCTS
 
 # seller creates a product
-def _slugify(value: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return slug[:200] or "product"
-
-
-def _unique_product_slug(db: Session, shop_id: uuid.UUID, source: str) -> str:
-    """A slug that is free within this shop.
-
-    Slugs are unique per shop, so a seller listing a second "Smocha" used to hit
-    a raw integrity error. Suffixing keeps the first-come slug stable and lets
-    the duplicate through under -2, -3, and so on.
-    """
-    base = _slugify(source)
-    taken = {
-        row[0]
-        for row in db.query(Product.slug)
-        .filter(Product.shop_id == shop_id, Product.slug.like(f"{base}%"))
-        .all()
-    }
-    if base not in taken:
-        return base
-    suffix = 2
-    while f"{base}-{suffix}" in taken:
-        suffix += 1
-    return f"{base}-{suffix}"
-
-
 @products_router.post(
     "/",
     response_model=ProductRead,
@@ -246,20 +225,17 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), curren
     if not shop:
         raise HTTPException(status_code=404, detail="Shop doesn't exist.")
 
-    max_products = shop.subscription.plan.max_products if shop.subscription else None
-    if max_products is not None:
-        current_count = db.query(func.count(Product.id)).filter(
-            Product.shop_id == shop.id,
-            Product.status != ProductStatus.draft,
-        ).scalar()
-        if current_count >= max_products:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Your plan allows up to {max_products} published products. Upgrade to list more.",
-            )
+    # Drafts are free, so this only bites on something the seller means to show.
+    slots = remaining_product_slots(db, shop)
+    if slots is not None and slots <= 0 and payload.status != ProductStatus.draft:
+        max_products = shop.subscription.plan.max_products
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your plan allows up to {max_products} published products. Upgrade to list more.",
+        )
 
     product_data = payload.model_dump(exclude={"variants"})
-    product_data["slug"] = _unique_product_slug(
+    product_data["slug"] = unique_product_slug(
         db, shop.id, product_data.get("slug") or payload.name
     )
     product = Product(**product_data, shop_id=shop.id)
@@ -277,6 +253,100 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), curren
     db.refresh(product)
     
     return product
+
+# Declared ahead of the /{slug} routes so "bulk-status" is never read as a slug.
+MAX_BULK_IDS = 500
+
+
+@products_router.post(
+    "/bulk-status",
+    response_model=BulkStatusResult,
+    summary="Seller changes the status of many of their products at once",
+)
+def bulk_update_status(
+    payload: BulkStatusRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Publish, pause or re-draft a whole selection in one call.
+
+    Reviewing a bulk import means turning hundreds of drafts live at once, which
+    spans many pages of the dashboard -- so the selection can either be named by
+    id or described by a filter, and the filter is resolved here rather than the
+    client shipping back thousands of ids.
+    """
+    shop = db.query(Shop).filter(
+        Shop.seller_id == current_user.id
+    ).with_for_update().first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    if not payload.product_ids and not payload.filter:
+        raise HTTPException(
+            status_code=400,
+            detail="Name the products to change, or a filter describing them",
+        )
+
+    query = db.query(Product.id, Product.status).filter(Product.shop_id == shop.id)
+
+    if payload.product_ids:
+        if len(payload.product_ids) > MAX_BULK_IDS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Up to {MAX_BULK_IDS} products per request. Use a filter for more.",
+            )
+        query = query.filter(Product.id.in_(payload.product_ids))
+    else:
+        criteria = payload.filter
+        if criteria.status is not None:
+            query = query.filter(Product.status == criteria.status)
+        if criteria.in_stock is True:
+            query = query.filter(Product.stock_qty > 0)
+        elif criteria.in_stock is False:
+            query = query.filter(Product.stock_qty <= 0)
+        if criteria.q:
+            query = query.filter(Product.name.ilike(f"%{criteria.q}%"))
+
+    # nothing to gain from rewriting rows that already hold the target status
+    selected = [(pid, st) for pid, st in query.all() if st != payload.status]
+    if not selected:
+        return BulkStatusResult(updated=0, detail="Nothing to change")
+
+    # Only a draft becoming visible spends a plan slot. Moving between the
+    # visible statuses (paused -> active and back) is already counted, and
+    # anything going *to* draft gives a slot back.
+    promoting = [pid for pid, st in selected if st == ProductStatus.draft]
+    already_counted = [pid for pid, st in selected if st != ProductStatus.draft]
+
+    skipped = 0
+    detail = None
+    if payload.status != ProductStatus.draft:
+        slots = remaining_product_slots(db, shop)
+        if slots is not None and len(promoting) > slots:
+            skipped = len(promoting) - slots
+            promoting = promoting[:slots]
+            max_products = shop.subscription.plan.max_products
+            detail = (
+                f"Published up to your plan's limit of {max_products}. "
+                f"{skipped} stayed as drafts — upgrade to publish the rest."
+            )
+
+    ids = already_counted + promoting
+    if not ids:
+        return BulkStatusResult(updated=0, skipped_over_limit=skipped, detail=detail)
+
+    # chunked so a selection of several thousand can't run into Postgres'
+    # bind-parameter ceiling
+    for start in range(0, len(ids), 1000):
+        db.execute(
+            update(Product)
+            .where(Product.shop_id == shop.id, Product.id.in_(ids[start : start + 1000]))
+            .values(status=payload.status)
+        )
+    db.commit()
+
+    return BulkStatusResult(updated=len(ids), skipped_over_limit=skipped, detail=detail)
+
 
 # get product with limits and option for filter (Category, count, price, range, search term)
 @products_router.get(
@@ -423,10 +493,28 @@ def update_product(slug: str, payload: ProductUpdate, db: Session= Depends(get_d
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    # Publishing through here used to skip the plan cap entirely -- create
+    # checked it, update didn't -- so a seller could save a draft and then PATCH
+    # it live past their limit. Only a draft turning visible spends a slot.
+    fields = payload.model_dump(exclude_unset=True)
+    new_status = fields.get("status")
+    if (
+        new_status is not None
+        and new_status != ProductStatus.draft
+        and product.status == ProductStatus.draft
+    ):
+        slots = remaining_product_slots(db, shop)
+        if slots is not None and slots <= 0:
+            max_products = shop.subscription.plan.max_products
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your plan allows up to {max_products} published products. Upgrade to list more.",
+            )
+
     update_stmt = update(Product).where(
         Product.slug == slug,
         Product.shop_id == shop.id,
-    ).values(**payload.model_dump(exclude_unset=True))
+    ).values(**fields)
     
     db.execute(update_stmt)
     db.commit()

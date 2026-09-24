@@ -11,6 +11,7 @@ from app.core.limiter import limiter
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 from app.routers import auth, users, shop, payments, admin, messaging, investor, subscriptions, cron
 from app.routers.catalog import categories_router, products_router
+from app.routers.product_import import router as product_import_router
 from app.routers.commerce import cart_router, checkout_router, orders_router
 from app.routers.delivery import router as delivery_router
 from app.routers.recommendations import router as recommendations_router
@@ -37,6 +38,7 @@ app.include_router(users.router)
 app.include_router(shop.router)
 app.include_router(categories_router)
 app.include_router(products_router)
+app.include_router(product_import_router)
 app.include_router(cart_router)
 app.include_router(checkout_router)
 app.include_router(orders_router)

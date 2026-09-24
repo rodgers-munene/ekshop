@@ -100,6 +100,9 @@ def get_my_shop(
 def get_my_products(
     status_filter: Optional[ProductStatus] = Query(None, alias="status"),
     q: Optional[str] = None,
+    # Reviewing a bulk import means working through the in-stock rows first: a
+    # stock export lands thousands of products, most of them at zero.
+    in_stock: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, le=100),
     db: Session = Depends(get_db),
@@ -122,6 +125,10 @@ def get_my_products(
         query = query.filter(Product.status == status_filter)
     if q:
         query = query.filter(Product.name.ilike(f"%{q}%"))
+    if in_stock is True:
+        query = query.filter(Product.stock_qty > 0)
+    elif in_stock is False:
+        query = query.filter(Product.stock_qty <= 0)
 
     total = query.count()
     products = (

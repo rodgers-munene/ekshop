@@ -176,3 +176,32 @@ class ReviewRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BulkStatusFilter(BaseModel):
+    """Which of the seller's own products to act on, when not naming ids."""
+
+    status: Optional[ProductStatus] = None
+    in_stock: Optional[bool] = None
+    q: Optional[str] = None
+
+
+class BulkStatusRequest(BaseModel):
+    """Flip the status of many products at once.
+
+    Either name the products (`product_ids`) or describe them (`filter`). The
+    filter form exists because reviewing a bulk import means publishing hundreds
+    of drafts that span many pages of the dashboard -- an id list can't carry a
+    selection the seller made with "select everything matching this".
+    """
+
+    status: ProductStatus
+    product_ids: Optional[List[uuid.UUID]] = None
+    filter: Optional[BulkStatusFilter] = None
+
+
+class BulkStatusResult(BaseModel):
+    updated: int
+    # set when the plan's product cap stopped this short of the full selection
+    skipped_over_limit: int = 0
+    detail: Optional[str] = None

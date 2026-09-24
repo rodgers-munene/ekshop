@@ -556,3 +556,85 @@ export interface PaginatedResponse<T> {
   limit: number;
   results: T[];
 }
+
+// Bulk product import
+export type ImportStatus =
+  | "parsing"
+  | "ready"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+/** What to do with a row whose code already exists in the shop. */
+export type DuplicateAction = "skip" | "update_stock_price" | "create_new";
+
+export type ImportRowStatus =
+  | "valid"
+  | "invalid"
+  | "created"
+  | "updated"
+  | "skipped"
+  | "failed";
+
+export interface ProductImportRow {
+  id: string;
+  row_number: number;
+  sku?: string | null;
+  name?: string | null;
+  price?: string | null;
+  stock_qty?: number | null;
+  brand?: string | null;
+  status: ImportRowStatus;
+  error?: string | null;
+  matched_product_id?: string | null;
+  product_id?: string | null;
+}
+
+export interface ProductImport {
+  id: string;
+  shop_id: string;
+  filename: string;
+  status: ImportStatus;
+  category_id?: string | null;
+  on_duplicate: DuplicateAction;
+
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  /** Of the valid rows, how many the shop already holds under the same code. */
+  matched_rows: number;
+
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+  failed_count: number;
+
+  error_message?: string | null;
+  created_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+/** An import plus the handful of rows the review screen shows. */
+export interface ImportPreview extends ProductImport {
+  sample: ProductImportRow[];
+  problems: ProductImportRow[];
+}
+
+export interface ImportCommitResult {
+  status: ImportStatus;
+  processed: number;
+  /** Rows still staged. The client keeps committing while this is above zero. */
+  remaining: number;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+  failed_count: number;
+}
+
+export interface BulkStatusResult {
+  updated: number;
+  skipped_over_limit: number;
+  detail?: string | null;
+}
