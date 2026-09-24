@@ -408,3 +408,38 @@ class MarginLeakageMetrics(BaseModel):
     commission_rate_pct: float
     mpesa_rate_pct: float
     trend: List[MarginLeakageTrendPoint]
+
+
+class RealTimeMetrics(BaseModel):
+    active_sessions: int
+    active_users: int
+    recent_purchases: int
+    active_carts: int
+
+
+class AcquisitionMetrics(BaseModel):
+    new_users: int
+    returning_buyers: int
+    new_user_rate: float
+    returning_user_rate: float
+    total_users_in_period: int
+
+
+class BehaviorMetrics(BaseModel):
+    views: int
+    clicks: int
+    add_to_carts: int
+    purchases: int
+    view_to_click_rate: float
+    click_to_cart_rate: float
+    cart_to_purchase_rate: float
+    overall_conversion_rate: float
+
+
+class EcommerceMetrics(BaseModel):
+    transactions: int
+    revenue: str
+    average_order_value: str
+    conversion_rate: float
+    revenue_per_session: str
+    top_products: List[TopPurchasedProduct] = []
