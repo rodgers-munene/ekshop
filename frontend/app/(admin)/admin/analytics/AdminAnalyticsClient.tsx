@@ -139,7 +139,7 @@ export default function AdminAnalyticsClient({
     return () => {
       cancelled = true;
     };
-  }, [period, setRefreshing]);
+  }, [period]);
 
   return (
     <div>
