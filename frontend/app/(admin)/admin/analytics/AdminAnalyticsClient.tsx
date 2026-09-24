@@ -92,11 +92,11 @@ export default function AdminAnalyticsClient({
   const [section, setSection] = useState<Section>("overview");
   const [refreshing, setRefreshing] = useState(false);
   const [drill, setDrill] = useState<DrillSpec | null>(null);
-  const [merchants, setMerchants] = useState<PeriodData["current"] | null>(initMerchants);
-  const [sales, setSales] = useState<PeriodData["current"] | null>(initSales);
-  const [retention, setRetention] = useState<PeriodData["current"] | null>(initRetention);
-  const [operations, setOperations] = useState<PeriodData["current"] | null>(initOperations);
-  const [cart, setCart] = useState<PeriodData["current"] | null>(initCart);
+  const [merchants, setMerchants] = useState(initMerchants);
+  const [sales, setSales] = useState(initSales);
+  const [retention, setRetention] = useState(initRetention);
+  const [operations, setOperations] = useState(initOperations);
+  const [cart, setCart] = useState(initCart);
   const [merchantMaster, setMerchantMaster] = useState<MerchantMasterHealth[] | null>(initMerchantMaster);
   const [orderControl, setOrderControl] = useState<OrderControlTowerRow[] | null>(initOrderControl);
   const [customerRecovery, setCustomerRecovery] = useState<CustomerRecoveryRow[] | null>(initCustomerRecovery);
@@ -104,6 +104,10 @@ export default function AdminAnalyticsClient({
   const [marginLeakage, setMarginLeakage] = useState<MarginLeakageMetrics | null>(initMarginLeakage);
   const [overview, setOverview] = useState<AdminOverview | null>(initOverview);
   const [overviewPrevious, setOverviewPrevious] = useState<AdminOverview | null>(null);
+  const [realTime, setRealTime] = useState<RealTimeMetrics | null>(null);
+  const [acquisition, setAcquisition] = useState<AcquisitionMetrics | null>(null);
+  const [behavior, setBehavior] = useState<BehaviorMetrics | null>(null);
+  const [ecommerce, setEcommerce] = useState<EcommerceMetrics | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,7 +118,7 @@ export default function AdminAnalyticsClient({
     async function load() {
       setRefreshing(true);
       try {
-        const [m, s, r, o, c, mm, oc, cr, sd, ov, ml] = await Promise.all([
+        const [m, s, r, o, c, mm, oc, cr, sd, ov, ml, rt, acq, beh, ecom] = await Promise.all([
           fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
@@ -126,9 +130,13 @@ export default function AdminAnalyticsClient({
           fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
           fetch(`/api/admin/stats/overview?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
           fetch(`/api/admin/metrics/margin-leakage?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/real-time?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/acquisition?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/behavior?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/ecommerce?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
         ]);
         const prevPeriod = period === "month" ? "week" : period === "week" ? "yesterday" : period === "yesterday" ? "today" : "month";
-        const [mp, sp, rp, op, cp, mmp, opc, cpr, spd, ovp, mlp] = await Promise.all([
+        const [mp, sp, rp, op, cp, mmp, opc, cpr, spd, ovp, mlp, mprt, mpacq, mpbeh, mpecom] = await Promise.all([
           fetch(`/api/admin/metrics/merchants?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/sales?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
           fetch(`/api/admin/metrics/retention?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
@@ -140,6 +148,10 @@ export default function AdminAnalyticsClient({
           fetch(`/api/admin/metrics/supply-demand?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
           fetch(`/api/admin/stats/overview?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
           fetch(`/api/admin/metrics/margin-leakage?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/real-time?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/acquisition?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/behavior?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/ecommerce?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
         ]);
         if (!cancelled) {
           setMerchants(m);
@@ -153,18 +165,11 @@ export default function AdminAnalyticsClient({
           setSupplyDemand(sd);
           setMarginLeakage(ml);
           setOverview(ov);
-          setOverviewPrevious({
-            merchants: mmp,
-            sales: sp,
-            retention: rp,
-            operations: op,
-            cart: cp,
-            merchantMaster: mmp ? [...(mmp as MerchantMasterHealth[])] : null,
-            orderControl: opc,
-            customerRecovery: cpr,
-            supplyDemand: spd,
-            marginLeakage: mlp,
-          });
+          setOverviewPrevious(ovp);
+          setRealTime(rt);
+          setAcquisition(acq);
+          setBehavior(beh);
+          setEcommerce(ecom);
         }
       } finally {
         if (!cancelled) setRefreshing(false);
@@ -237,6 +242,56 @@ export default function AdminAnalyticsClient({
                 <StatCard label="Prev. orders" value={overviewPrevious?.metrics?.orders ?? "—"} />
                 <StatCard label="Prev. AOV" value={formatKES(overviewPrevious?.metrics?.average_order_value)} />
                 <StatCard label="Prev. new users" value={overviewPrevious?.metrics?.new_users ?? "—"} />
+              </div>
+            </div>
+          )}
+          {realTime && (
+            <div className="mt-4 p-4 bg-muted/30 rounded">
+              <h3 className="font-bold mb-3">Real-time</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <StatCard label="Active sessions" value={realTime.active_sessions} />
+                <StatCard label="Active users" value={realTime.active_users} />
+                <StatCard label="Recent purchases" value={realTime.recent_purchases} />
+                <StatCard label="Active carts" value={realTime.active_carts} />
+              </div>
+            </div>
+          )}
+          {acquisition && (
+            <div className="mt-4 p-4 bg-muted/30 rounded">
+              <h3 className="font-bold mb-3">Acquisition</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <StatCard label="New users" value={acquisition.new_users} />
+                <StatCard label="Returning buyers" value={acquisition.returning_buyers} />
+                <StatCard label="New user rate" value={`${acquisition.new_user_rate}%`} />
+                <StatCard label="Returning user rate" value={`${acquisition.returning_user_rate}%`} />
+              </div>
+            </div>
+          )}
+          {behavior && (
+            <div className="mt-4 p-4 bg-muted/30 rounded">
+              <h3 className="font-bold mb-3">Behavior</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <StatCard label="Views" value={behavior.views} />
+                <StatCard label="Clicks" value={behavior.clicks} />
+                <StatCard label="Add to cart" value={behavior.add_to_carts} />
+                <StatCard label="Purchases" value={behavior.purchases} />
+                <StatCard label="View-to-click" value={`${behavior.view_to_click_rate}%`} />
+                <StatCard label="Click-to-cart" value={`${behavior.click_to_cart_rate}%`} />
+                <StatCard label="Cart-to-purchase" value={`${behavior.cart_to_purchase_rate}%`} />
+                <StatCard label="Overall conversion" value={`${behavior.overall_conversion_rate}%`} />
+              </div>
+            </div>
+          )}
+          {ecommerce && (
+            <div className="mt-4 p-4 bg-muted/30 rounded">
+              <h3 className="font-bold mb-3">E-commerce</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <StatCard label="Transactions" value={ecommerce.transactions} />
+                <StatCard label="Revenue" value={formatKES(ecommerce.revenue)} />
+                <StatCard label="Average order value" value={formatKES(ecommerce.average_order_value)} />
+                <StatCard label="Conversion rate" value={`${ecommerce.conversion_rate}%`} />
+                <StatCard label="Revenue/session" value={formatKES(ecommerce.revenue_per_session)} />
+                <StatCard label="Top products" value={ecommerce.top_products.length > 0 ? ecommerce.top_products.length + " products" : "—"} />
               </div>
             </div>
           )}

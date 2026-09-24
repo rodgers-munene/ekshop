@@ -620,6 +620,41 @@ export interface MarginLeakageMetrics {
   trend: MarginLeakageTrendPoint[];
 }
 
+export interface RealTimeMetrics {
+  active_sessions: number;
+  active_users: number;
+  recent_purchases: number;
+  active_carts: number;
+}
+
+export interface AcquisitionMetrics {
+  new_users: number;
+  returning_buyers: number;
+  new_user_rate: number;
+  returning_user_rate: number;
+  total_users_in_period: number;
+}
+
+export interface BehaviorMetrics {
+  views: number;
+  clicks: number;
+  add_to_carts: number;
+  purchases: number;
+  view_to_click_rate: number;
+  click_to_cart_rate: number;
+  cart_to_purchase_rate: number;
+  overall_conversion_rate: number;
+}
+
+export interface EcommerceMetrics {
+  transactions: number;
+  revenue: string;
+  average_order_value: string;
+  conversion_rate: number;
+  revenue_per_session: string;
+  top_products: TopPurchasedProduct[];
+}
+
 export interface OrderNotificationRecipient {
   id: string;
   email: string;
