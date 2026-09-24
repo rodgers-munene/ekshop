@@ -31,6 +31,7 @@ from app.schemas.delivery import (
 )
 from pydantic import BaseModel
 from app.services.notifications import create_notification
+from app.services.webhooks import emit_delivery_status_webhook
 from app.services.delivery_pricing import (
     get_or_create_rate_settings,
     calculate_delivery_fee,
@@ -213,13 +214,15 @@ async def assign_delivery(
 
     db.commit()
     db.refresh(delivery)
+
+    await emit_delivery_status_webhook(str(delivery.id), "assigned", str(delivery.order_id))
     return delivery
 
 
 # ── Agent: update delivery status ─────────────────────────────────────────────
 
 @router.patch("/{delivery_id}/status", response_model=DeliveryRead)
-def update_delivery_status(
+async def update_delivery_status(
     delivery_id: uuid.UUID,
     payload: DeliveryStatusUpdate,
     db: Session = Depends(get_db),
@@ -278,6 +281,8 @@ def update_delivery_status(
 
     db.commit()
     db.refresh(delivery)
+
+    await emit_delivery_status_webhook(str(delivery.id), payload.status.value, str(delivery.order_id))
     return delivery
 
 

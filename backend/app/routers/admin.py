@@ -26,6 +26,7 @@ from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
+from app.models.automation import AutomationSettings
 from app.schemas.admin import (
     AdminEmailStatus,
     AdminEmailTestRequest,
@@ -63,9 +64,11 @@ from app.schemas.admin import (
 from app.schemas.commerce import OrderRead
 from app.schemas.shop import ShopRead
 from app.schemas.user import UserRead
+from app.schemas.automation import AutomationSettingsRead, AutomationSettingsUpdate
 from app.services import storage
 from app.services import email as email_service
 from app.services import dashboard_metrics
+from app.services import automation as automation_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -503,43 +506,71 @@ def check_admin_thresholds(
     now = datetime.now(timezone.utc)
     alerts = []
 
+    automation = automation_service.get_or_create_automation_settings(db)
+    min_margin = automation.alert_min_gross_margin_pct
+    max_cancel = automation.alert_max_order_cancellation_rate
+    max_abandon = automation.alert_max_cart_abandonment_rate
+    min_delivery = automation.alert_min_on_time_delivery_rate
+
     margin = get_margin_leakage_metrics(db, since)
     margin_pct = float(margin.get("gross_margin_pct", 100))
-    if margin_pct < settings.ALERT_MIN_GROSS_MARGIN_PCT:
+    if margin_pct < min_margin:
         alerts.append({
             "level": "high",
             "metric": "gross_margin_pct",
-            "message": f"Gross margin dropped to {margin_pct:.2f}% (threshold {settings.ALERT_MIN_GROSS_MARGIN_PCT}%)",
+            "message": f"Gross margin dropped to {margin_pct:.2f}% (threshold {min_margin}%)",
         })
 
     sales = get_sales_demand_metrics(db, since, now)
     cancellation_rate = float(sales.get("order_cancellation_rate", 0))
-    if cancellation_rate > settings.ALERT_MAX_ORDER_CANCELLATION_RATE:
+    if cancellation_rate > max_cancel:
         alerts.append({
             "level": "medium",
             "metric": "order_cancellation_rate",
-            "message": f"Order cancellation rate is {cancellation_rate:.2f}% (threshold {settings.ALERT_MAX_ORDER_CANCELLATION_RATE}%)",
+            "message": f"Order cancellation rate is {cancellation_rate:.2f}% (threshold {max_cancel}%)",
         })
 
     cart = get_cart_abandonment_metrics(db, since, now)
     abandonment_rate = float(cart.get("cart_abandonment_rate", 0))
-    if abandonment_rate > settings.ALERT_MAX_CART_ABANDONMENT_RATE:
+    if abandonment_rate > max_abandon:
         alerts.append({
             "level": "medium",
             "metric": "cart_abandonment_rate",
-            "message": f"Cart abandonment rate is {abandonment_rate:.2f}% (threshold {settings.ALERT_MAX_CART_ABANDONMENT_RATE}%)",
+            "message": f"Cart abandonment rate is {abandonment_rate:.2f}% (threshold {max_abandon}%)",
         })
 
     ops = get_operations_delivery_metrics(db, since, now)
     on_time = ops.get("on_time_delivery_rate")
-    if on_time is not None and float(on_time) < settings.ALERT_MIN_ON_TIME_DELIVERY_RATE:
+    if on_time is not None and float(on_time) < min_delivery:
         alerts.append({
             "level": "high",
             "metric": "on_time_delivery_rate",
-            "message": f"On-time delivery rate is {float(on_time):.2f}% (threshold {settings.ALERT_MIN_ON_TIME_DELIVERY_RATE}%)",
+            "message": f"On-time delivery rate is {float(on_time):.2f}% (threshold {min_delivery}%)",
         })
 
     return {"alerts": alerts, "checked_at": datetime.now(timezone.utc).isoformat(), "margin_pct": margin_pct}
+
+
+@router.get("/automation/settings", response_model=AutomationSettingsRead)
+def get_automation_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return automation_service.get_or_create_automation_settings(db)
+
+
+@router.put("/automation/settings", response_model=AutomationSettingsRead)
+def update_automation_settings(
+    payload: AutomationSettingsUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    settings = automation_service.get_or_create_automation_settings(db)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(settings, field, value)
+    db.commit()
+    db.refresh(settings)
+    return settings
 
 
 @router.get("/metrics/priority-acquisition", response_model=List[PriorityAcquisitionRow])

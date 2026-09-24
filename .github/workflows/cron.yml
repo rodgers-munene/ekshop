@@ -3,6 +3,7 @@ name: Scheduled cron jobs
 on:
   schedule:
     - cron: "0 3 * * *"
+    - cron: "0 4 * * 1"
   workflow_dispatch:
 
 jobs:
@@ -25,3 +26,8 @@ jobs:
       - name: Send daily admin report
         run: |
           curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/admin/daily-report" -H "x-cron-secret: $CRON_SECRET"
+
+      - name: Send weekly insight digest
+        if: ${{ github.event.schedule == '0 4 * * 1' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/admin/weekly-insight-digest" -H "x-cron-secret: $CRON_SECRET"
