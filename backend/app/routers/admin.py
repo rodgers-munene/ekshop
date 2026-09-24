@@ -500,15 +500,45 @@ def check_admin_thresholds(
     _: User = Depends(require_admin),
 ):
     since = datetime.now(timezone.utc) - timedelta(days=1)
-    metrics = get_margin_leakage_metrics(db, since)
+    now = datetime.now(timezone.utc)
     alerts = []
-    margin_pct = float(metrics.get("gross_margin_pct", 100))
+
+    margin = get_margin_leakage_metrics(db, since)
+    margin_pct = float(margin.get("gross_margin_pct", 100))
     if margin_pct < settings.ALERT_MIN_GROSS_MARGIN_PCT:
         alerts.append({
             "level": "high",
             "metric": "gross_margin_pct",
             "message": f"Gross margin dropped to {margin_pct:.2f}% (threshold {settings.ALERT_MIN_GROSS_MARGIN_PCT}%)",
         })
+
+    sales = get_sales_demand_metrics(db, since, now)
+    cancellation_rate = float(sales.get("order_cancellation_rate", 0))
+    if cancellation_rate > settings.ALERT_MAX_ORDER_CANCELLATION_RATE:
+        alerts.append({
+            "level": "medium",
+            "metric": "order_cancellation_rate",
+            "message": f"Order cancellation rate is {cancellation_rate:.2f}% (threshold {settings.ALERT_MAX_ORDER_CANCELLATION_RATE}%)",
+        })
+
+    cart = get_cart_abandonment_metrics(db, since, now)
+    abandonment_rate = float(cart.get("cart_abandonment_rate", 0))
+    if abandonment_rate > settings.ALERT_MAX_CART_ABANDONMENT_RATE:
+        alerts.append({
+            "level": "medium",
+            "metric": "cart_abandonment_rate",
+            "message": f"Cart abandonment rate is {abandonment_rate:.2f}% (threshold {settings.ALERT_MAX_CART_ABANDONMENT_RATE}%)",
+        })
+
+    ops = get_operations_delivery_metrics(db, since, now)
+    on_time = ops.get("on_time_delivery_rate")
+    if on_time is not None and float(on_time) < settings.ALERT_MIN_ON_TIME_DELIVERY_RATE:
+        alerts.append({
+            "level": "high",
+            "metric": "on_time_delivery_rate",
+            "message": f"On-time delivery rate is {float(on_time):.2f}% (threshold {settings.ALERT_MIN_ON_TIME_DELIVERY_RATE}%)",
+        })
+
     return {"alerts": alerts, "checked_at": datetime.now(timezone.utc).isoformat(), "margin_pct": margin_pct}
 
 

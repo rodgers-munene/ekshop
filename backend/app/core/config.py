@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     ALERT_MIN_GROSS_MARGIN_PCT: float = 90.0
     ALERT_MAX_MPESA_LATENCY_SECONDS: float = 2.0
     ALERT_MAX_HOSTING_COST_PER_ORDER: float = 20.0
+    ALERT_MAX_ORDER_CANCELLATION_RATE: float = 10.0
+    ALERT_MIN_ON_TIME_DELIVERY_RATE: float = 80.0
+    ALERT_MAX_CART_ABANDONMENT_RATE: float = 70.0
 
     ORS_API_KEY: str | None = None
     ORS_BASE_URL: str = "https://api.openrouteservice.org"
