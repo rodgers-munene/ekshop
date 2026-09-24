@@ -30,6 +30,11 @@ import {
 
 type Section = "overview" | "merchants" | "sales" | "retention" | "operations" | "cart" | "merchant-master" | "order-control" | "customer-recovery" | "supply-demand" | "margin";
 
+interface PeriodData {
+  current: unknown;
+  previous: unknown;
+}
+
 const SECTIONS: { key: Section; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "margin", label: "Revenue Leakage & Margin" },
@@ -83,17 +88,18 @@ export default function AdminAnalyticsClient({
   const [section, setSection] = useState<Section>("overview");
   const [refreshing, setRefreshing] = useState(false);
   const [drill, setDrill] = useState<DrillSpec | null>(null);
-  const [merchants, setMerchants] = useState(initMerchants);
-  const [sales, setSales] = useState(initSales);
-  const [retention, setRetention] = useState(initRetention);
-  const [operations, setOperations] = useState(initOperations);
-  const [cart, setCart] = useState(initCart);
+  const [merchants, setMerchants] = useState<PeriodData["current"] | null>(initMerchants);
+  const [sales, setSales] = useState<PeriodData["current"] | null>(initSales);
+  const [retention, setRetention] = useState<PeriodData["current"] | null>(initRetention);
+  const [operations, setOperations] = useState<PeriodData["current"] | null>(initOperations);
+  const [cart, setCart] = useState<PeriodData["current"] | null>(initCart);
   const [merchantMaster, setMerchantMaster] = useState<MerchantMasterHealth[] | null>(initMerchantMaster);
   const [orderControl, setOrderControl] = useState<OrderControlTowerRow[] | null>(initOrderControl);
   const [customerRecovery, setCustomerRecovery] = useState<CustomerRecoveryRow[] | null>(initCustomerRecovery);
   const [supplyDemand, setSupplyDemand] = useState<SupplyDemandRow[] | null>(initSupplyDemand);
   const [marginLeakage, setMarginLeakage] = useState<MarginLeakageMetrics | null>(initMarginLeakage);
   const [overview, setOverview] = useState<AdminOverview | null>(initOverview);
+  const [overviewPrevious, setOverviewPrevious] = useState<AdminOverview | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +123,20 @@ export default function AdminAnalyticsClient({
           fetch(`/api/admin/stats/overview?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
           fetch(`/api/admin/metrics/margin-leakage?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
         ]);
+        const prevPeriod = period === "month" ? "week" : period === "week" ? "yesterday" : period === "yesterday" ? "today" : "month";
+        const [mp, sp, rp, op, cp, mmp, opc, cpr, spd, ovp, mlp] = await Promise.all([
+          fetch(`/api/admin/metrics/merchants?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/sales?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/retention?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/operations?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/cart?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/merchant-master-health?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/order-control-tower?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/customer-recovery?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/supply-demand?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/stats/overview?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
+          fetch(`/api/admin/metrics/margin-leakage?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+        ]);
         if (!cancelled) {
           setMerchants(m);
           setSales(s);
@@ -129,6 +149,18 @@ export default function AdminAnalyticsClient({
           setSupplyDemand(sd);
           setMarginLeakage(ml);
           setOverview(ov);
+          setOverviewPrevious({
+            merchants: mmp,
+            sales: sp,
+            retention: rp,
+            operations: op,
+            cart: cp,
+            merchantMaster: mmp ? [...(mmp as MerchantMasterHealth[])] : null,
+            orderControl: opc,
+            customerRecovery: cpr,
+            supplyDemand: spd,
+            marginLeakage: mlp,
+          });
         }
       } finally {
         if (!cancelled) setRefreshing(false);
