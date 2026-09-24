@@ -1,0 +1,27 @@
+name: Scheduled cron jobs
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  cron:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BACKEND_URL: ${{ secrets.BACKEND_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+    steps:
+      - name: Run billing cycle
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/billing-cycle" -H "x-cron-secret: $CRON_SECRET"
+
+      - name: Reconcile M-Pesa payments
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/mpesa-reconcile" -H "x-cron-secret: $CRON_SECRET"
+
+      - name: Send daily admin report
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/admin/daily-report" -H "x-cron-secret: $CRON_SECRET"
