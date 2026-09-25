@@ -21,10 +21,10 @@ plain_env = {
   ALGORITHM                 = "HS256"
   ACCESS_TOKEN_EXPIRE_DAYS  = "15"
   REFRESH_TOKEN_EXPIRE_DAYS = "7"
-  CORS_ORIGINS              = "https://ekshop.co.ke,https://www.ekshop.co.ke"
-  FRONTEND_URL               = "https://ekshop.co.ke"
+  CORS_ORIGINS              = "https://ekshop.store,https://www.ekshop.store"
+  FRONTEND_URL               = "https://ekshop.store"
   PAYSTACK_PUBLIC_KEY        = "pk_live_xxx"
-  EMAIL_FROM                 = "Ekshop <no-reply@ekshop.co.ke>"
+  EMAIL_FROM                 = "Ekshop <notifications@mail.ekshop.store>"
   MPESA_SHORTCODE             = "174379"
   # Only set this if MPESA_SHORTCODE above is a Store/Organization number
   # with a separate Till (Buy Goods) number linked to it — omit entirely for

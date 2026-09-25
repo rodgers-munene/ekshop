@@ -18,7 +18,7 @@ export default function CareersPage() {
         </p>
         <p>
           In the meantime, if you think you&apos;d be a great fit for Ekshop, feel free to reach out at{" "}
-          <span className="text-muted">careers@ekshop.co.ke</span>.
+          <span className="text-muted">supportteam@ekshop.store</span>.
         </p>
       </div>
     </div>

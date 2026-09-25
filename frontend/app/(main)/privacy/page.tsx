@@ -89,7 +89,7 @@ export default function PrivacyPage() {
 
         <section>
           <h2 className="font-semibold text-base mb-2">9. Contact</h2>
-          <p>For privacy questions or data requests, contact <span className="text-muted">privacy@ekshop.co.ke</span>.</p>
+          <p>For privacy questions or data requests, contact <span className="text-muted">supportteam@ekshop.store</span>.</p>
         </section>
       </div>
     </div>
