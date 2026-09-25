@@ -17,7 +17,6 @@ export default function robots(): MetadataRoute.Robots {
           "/cart",
           "/messages",
           "/orders",
-          "/ir-f1c04c9098",
         ],
       },
     ],
