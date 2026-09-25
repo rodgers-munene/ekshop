@@ -195,7 +195,7 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
       {order && (
         <div className="card p-5 mb-6">
           <p className="text-xs text-muted mb-3">Messages</p>
-          <MessageThread deliveryId={delivery.id} orderId={order.id} />
+          <MessageThread apiBase="/api/agent/conversations" orderId={order.id} />
         </div>
       )}
 

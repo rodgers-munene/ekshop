@@ -1,47 +1,18 @@
-import uuid
 import json
-from datetime import datetime, timezone
-from typing import Dict, Set
+import uuid
+from typing import Dict
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
-from app.core.security import decode_access_token
-from app.core.crypto import encrypt_message, decrypt_message
 from app.dependencies.database import get_db
-from app.models.messaging import Conversation, Message, actor_role_for
-from app.models.commerce import Order
-from app.models.user import User
-from app.models.delivery import DeliveryAgent
-from app.schemas.messaging import MessageCreate, MessageRead
+from app.models.messaging import Conversation, Message
+from app.services.messaging import Actor, add_message, is_participant, message_read, resolve_actor
 
 router = APIRouter(tags=["messaging-ws"])
 
-bearer_scheme = HTTPBearer()
-
-active_connections: Dict[str, Set[WebSocket]] = {}
-
-
-def _authenticate(token: str, db: Session):
-    try:
-        payload = decode_access_token(token)
-        user_id = payload.get("sub")
-        token_type = payload.get("type")
-        if not user_id:
-            raise HTTPException(401, "Invalid token")
-        if token_type == "agent":
-            agent = db.query(DeliveryAgent).filter(DeliveryAgent.id == uuid.UUID(user_id)).first()
-            if not agent:
-                raise HTTPException(401, "Agent not found")
-            return {"type": "agent", "id": agent.id, "name": agent.name}
-        user = db.query(User).filter(User.id == uuid.UUID(user_id)).first()
-        if not user:
-            raise HTTPException(401, "User not found")
-        return {"type": user.role.value, "id": user.id, "name": user.name}
-    except JWTError:
-        raise HTTPException(401, "Invalid token")
+# room (conversation id) -> connected sockets and who is on each
+active_connections: Dict[str, Dict[WebSocket, Actor]] = {}
 
 
 @router.websocket("/ws/conversations/{conversation_id}")
@@ -52,64 +23,54 @@ async def websocket_conversation(
     db: Session = Depends(get_db),
 ):
     await websocket.accept()
+    actor = resolve_actor(token, db)
     try:
-        identity = _authenticate(token, db)
-    except HTTPException:
+        conversation = db.get(Conversation, uuid.UUID(conversation_id))
+    except ValueError:
+        conversation = None
+    if not actor or not conversation or not is_participant(db, actor, conversation):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    conv = db.query(Conversation).filter(Conversation.id == uuid.UUID(conversation_id)).first()
-    if not conv:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
-    room_key = str(conv.id)
-    if room_key not in active_connections:
-        active_connections[room_key] = set()
-    active_connections[room_key].add(websocket)
+    room_key = str(conversation.id)
+    active_connections.setdefault(room_key, {})[websocket] = actor
 
     try:
         while True:
-            data = await websocket.receive_text()
-            payload = json.loads(data)
-            body = payload.get("body", "").strip()
-            if not body:
+            try:
+                payload = json.loads(await websocket.receive_text())
+            except ValueError:
+                continue
+            body = str(payload.get("body", "")).strip() if isinstance(payload, dict) else ""
+            if not body or len(body) > 4000:
                 continue
 
-            encrypted = encrypt_message(body)
-            message = Message(
-                conversation_id=conv.id,
-                sender_id=identity["id"],
-                sender_type=actor_role_for(identity["type"]),
-                body=encrypted,
-            )
-            db.add(message)
+            # Access can change mid-connection (e.g. an agent is taken off the order).
+            db.refresh(conversation)
+            if not is_participant(db, actor, conversation):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                break
+
+            message = add_message(db, conversation, actor, body)
             db.commit()
             db.refresh(message)
-
-            read_model = MessageRead(
-                id=message.id,
-                conversation_id=message.conversation_id,
-                sender_id=message.sender_id,
-                sender_type=message.sender_type,
-                body=decrypt_message(message.body),
-                created_at=message.created_at,
-            )
-            await _broadcast(room_key, read_model.model_dump(mode="json"))
+            await _broadcast(room_key, message)
     except WebSocketDisconnect:
         pass
     finally:
-        active_connections[room_key].discard(websocket)
-        if not active_connections[room_key]:
-            del active_connections[room_key]
+        room = active_connections.get(room_key, {})
+        room.pop(websocket, None)
+        if not room:
+            active_connections.pop(room_key, None)
 
 
-async def _broadcast(room_key: str, message: dict) -> None:
-    dead: Set[WebSocket] = set()
-    for ws in active_connections.get(room_key, set()):
+async def _broadcast(room_key: str, message: Message) -> None:
+    room = active_connections.get(room_key, {})
+    dead = []
+    for ws, viewer in list(room.items()):
         try:
-            await ws.send_json(message)
+            await ws.send_json(message_read(message, viewer).model_dump(mode="json"))
         except Exception:
-            dead.add(ws)
+            dead.append(ws)
     for ws in dead:
-        active_connections[room_key].discard(ws)
+        room.pop(ws, None)

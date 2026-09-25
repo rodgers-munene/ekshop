@@ -5,13 +5,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { useAuthStore } from "@/store/authStore";
 import { Conversation } from "@/types/interface";
 
 export default function ConversationPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuthStore();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -70,11 +68,12 @@ export default function ConversationPage() {
     <div className="w-full max-w-2xl mx-auto px-4 md:px-6 py-6 flex flex-col h-[80vh]">
       <div className="flex items-center gap-3 mb-4">
         <Link href="/messages" className="text-xs text-muted hover:text-amber underline">← Messages</Link>
+        <h1 className="font-semibold truncate">{conversation.title}</h1>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {conversation.messages.map((m) => {
-          const mine = m.sender_id === user?.id;
+          const mine = m.is_mine;
           return (
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div
@@ -82,6 +81,10 @@ export default function ConversationPage() {
                   mine ? "bg-amber text-ink" : "bg-surface text-ink border border-border"
                 }`}
               >
+                {/* Order chats have three sides, so name whoever else is talking. */}
+                {!mine && conversation.order_id && m.sender_name && (
+                  <p className="text-[10px] font-semibold text-muted mb-0.5">{m.sender_name}</p>
+                )}
                 {m.body}
                 <p className={`text-[10px] mt-1 ${mine ? "text-ink/60" : "text-muted"}`}>
                   {new Date(m.created_at).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}

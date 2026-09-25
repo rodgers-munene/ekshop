@@ -34,6 +34,7 @@ export default async function AgentLayout({ children }: { children: React.ReactN
           <NavItem href="/agent" icon="home" label="Home" />
           <NavItem href="/agent/deliveries" icon="deliveries" label="Deliveries" />
           <NavItem href="/agent/route" icon="route" label="Route" />
+          <NavItem href="/agent/messages" icon="messages" label="Messages" />
           <NavItem href="/agent/earnings" icon="earnings" label="Earnings" />
         </div>
       </nav>
@@ -47,6 +48,7 @@ function NavItem({ href, icon, label }: { href: string; icon: string; label: str
     deliveries: "M4 5h16v13H4zM4 9h16M8 5v4M16 5v4",
     route: "M12 2a10 10 0 100 20 10 10 0 000-20zM12 8v4l3 3",
     earnings: "M12 2v20M17 6H9.5a2.5 2.5 0 000 5h5a2.5 2.5 0 010 5H7",
+    messages: "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
   };
 
   return (

@@ -225,23 +225,6 @@ export interface RouteOptimizationResponse {
   stops: RouteStop[];
 }
 
-// Messaging
-export interface Conversation {
-  id: string;
-  order_id: string;
-  created_at: string;
-  messages: Message[];
-}
-
-export interface Message {
-  id: string;
-  conversation_id: string;
-  sender_id?: string;
-  sender_type: string;
-  body: string;
-  created_at: string;
-}
-
 // Notifications
 export interface Notification {
   id: string;
@@ -254,31 +237,39 @@ export interface Notification {
 }
 
 // Messaging
+export type MessageSenderType = "customer" | "seller" | "agent" | "admin";
+
 export interface Message {
   id: string;
-  sender_id?: string;
+  conversation_id: string;
+  sender_id?: string | null;
+  sender_agent_id?: string | null;
+  sender_type: MessageSenderType;
+  sender_name?: string | null;
   body: string;
   is_read: boolean;
+  // Relative to the signed-in user or agent.
+  is_mine: boolean;
   created_at: string;
-}
-
-export interface Conversation {
-  id: string;
-  buyer_id: string;
-  shop_id: string;
-  last_message_at: string;
-  messages: Message[];
 }
 
 export interface ConversationSummary {
   id: string;
-  buyer_id: string;
-  shop_id: string;
-  shop_name?: string;
-  buyer_name?: string;
-  last_message_at: string;
-  last_message_body?: string;
+  buyer_id?: string | null;
+  shop_id?: string | null;
+  order_id?: string | null;
+  // Who the conversation is with, from the viewer's side.
+  title: string;
+  shop_name?: string | null;
+  buyer_name?: string | null;
+  last_message_at?: string | null;
+  created_at: string;
+  last_message_body?: string | null;
   unread_count: number;
+}
+
+export interface Conversation extends ConversationSummary {
+  messages: Message[];
 }
 
 // Admin

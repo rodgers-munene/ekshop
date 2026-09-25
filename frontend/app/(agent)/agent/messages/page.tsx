@@ -3,49 +3,42 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ConversationSummary } from "@/types/interface";
+import MessageAdminButton from "@/components/MessageAdminButton";
 
-export default function MessagesPage() {
-  const { data: conversations = [], isPending: loading } = useQuery({
-    queryKey: ["conversations"],
+export default function AgentMessagesPage() {
+  const { data: conversations = [], isPending } = useQuery({
+    queryKey: ["conversations", "/api/agent/conversations"],
     queryFn: () =>
-      fetch("/api/conversations")
+      fetch("/api/agent/conversations")
         .then((r) => r.json())
         .then((data) => (Array.isArray(data) ? (data as ConversationSummary[]) : [])),
+    refetchInterval: 15000,
   });
 
-  if (loading) {
-    return (
-      <div className="w-full max-w-2xl mx-auto px-4 md:px-6 py-8">
-        <div className="h-7 w-32 bg-ink/10 rounded animate-pulse mb-6" />
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <h1 className="text-2xl font-bold">Messages</h1>
+        <MessageAdminButton />
+      </div>
+
+      {isPending ? (
         <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="card p-4 h-16 animate-pulse" />
           ))}
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full max-w-2xl mx-auto px-4 md:px-6 py-8">
-      <h1 className="text-2xl font-bold mb-6 border-b border-border pb-4">Messages</h1>
-
-      {conversations.length === 0 ? (
-        <div className="card flex flex-col items-center justify-center py-24 text-center">
-          <p className="text-2xl font-extrabold mb-2">No conversations yet</p>
-          <p className="text-muted text-sm mb-6">
-            Messages with sellers will show up here. Browse a shop and tap <strong>Message Seller</strong> to start.
-          </p>
-          <Link href="/products" className="btn-accent">
-            Browse Products
-          </Link>
+      ) : conversations.length === 0 ? (
+        <div className="card flex flex-col items-center justify-center py-16 text-center">
+          <p className="font-bold mb-1">No conversations yet</p>
+          <p className="text-sm text-muted">Chats with customers about your deliveries and with Ekshop support show up here.</p>
         </div>
       ) : (
         <div className="space-y-2">
           {conversations.map((c) => (
             <Link
               key={c.id}
-              href={`/messages/${c.id}`}
+              href={`/agent/messages/${c.id}`}
               className="card flex items-center justify-between gap-3 p-4 hover:border-amber/50 transition-colors"
             >
               <div className="min-w-0">

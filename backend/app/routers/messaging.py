@@ -1,384 +1,215 @@
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Union
+from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session, selectinload
-from jose import JWTError
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.core.security import decode_access_token
-from app.core.crypto import encrypt_message, decrypt_message
 from app.dependencies.database import get_db
-from app.models.messaging import Conversation, Message, ActorRole, actor_role_for, conversation_participants
 from app.models.commerce import Order
-from app.models.user import User
 from app.models.delivery import DeliveryAgent
-from app.schemas.messaging import MessageCreate, MessageRead, ConversationRead, ConversationCreate
-from app.schemas.user import UserRead
+from app.models.messaging import Conversation, Message
 from app.models.shop import Shop
+from app.models.user import User, UserRole, UserStatus
+from app.schemas.messaging import (
+    ConversationCreate,
+    ConversationRead,
+    ConversationSummary,
+    MessageCreate,
+    MessageRead,
+    SupportAdminRead,
+)
+from app.services.messaging import (
+    Actor,
+    add_message,
+    add_participants,
+    can_access_order,
+    conversation_read,
+    conversation_summary,
+    find_direct_conversation,
+    get_or_create_conversation,
+    is_participant,
+    message_read,
+    not_sent_by,
+    resolve_actor,
+    visible_conversations,
+)
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 bearer_scheme = HTTPBearer()
 
 
-class AuthenticatedIdentity:
-    def __init__(self, type: str, id: uuid.UUID, name: str):
-        self.type = type
-        self.id = id
-        self.name = name
-
-
-def _get_user_from_token(credentials: HTTPAuthorizationCredentials, db: Session) -> Optional[Union[User, AuthenticatedIdentity]]:
-    try:
-        payload = decode_access_token(credentials.credentials)
-        user_id: str = payload.get("sub")
-        if not user_id:
-            return None
-    except JWTError:
-        return None
-
-    if payload.get("type") == "agent":
-        agent = db.query(DeliveryAgent).filter(DeliveryAgent.id == uuid.UUID(user_id)).first()
-        if not agent:
-            return None
-        return AuthenticatedIdentity(type="agent", id=agent.id, name=agent.name)
-
-    user = db.query(User).filter(User.id == uuid.UUID(user_id)).first()
-    return user
-
-
-def _is_participant(identity: Union[User, AuthenticatedIdentity], conversation: Conversation, db: Session) -> bool:
-    if conversation.order_id is None:
-        user_ids = {p.id for p in conversation.participants}
-        if identity.id in user_ids:
-            return True
-        if isinstance(identity, AuthenticatedIdentity):
-            participant = db.execute(
-                conversation_participants.select().where(
-                    conversation_participants.c.conversation_id == conversation.id,
-                    conversation_participants.c.agent_id == identity.id,
-                )
-            ).first()
-            return participant is not None
-        return False
-    order = db.query(Order).filter(Order.id == conversation.order_id).first()
-    if not order:
-        return False
-    if isinstance(identity, User):
-        return order.buyer_id == identity.id or (order.shop and order.shop.seller_id == identity.id)
-    return False
-
-
-@router.get("", response_model=List[ConversationRead])
-def list_conversations(
+def get_actor(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
-):
-    identity = _get_user_from_token(credentials, db)
-    if not identity:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    base_query = (
-        db.query(Conversation)
-        .options(selectinload(Conversation.messages).selectinload(Message.sender))
-    )
-
-    if isinstance(identity, User):
-        conversations = (
-            base_query.join(Order, Order.id == Conversation.order_id, isouter=True)
-            .filter(
-                (Conversation.order_id.is_(None) & Conversation.participants.any(id=identity.id))
-                | (Order.buyer_id == identity.id)
-                | (Order.shop.has(seller_id=identity.id))
-            )
-            .order_by(Conversation.created_at.desc())
-            .all()
-        )
-    else:
-        conversations = (
-            base_query.filter(Conversation.order_id.is_(None) & Conversation.participants.any(id=identity.id))
-            .order_by(Conversation.created_at.desc())
-            .all()
-        )
-    return conversations
+) -> Actor:
+    """Buyers, sellers and admins (user tokens) and delivery agents (agent tokens)."""
+    actor = resolve_actor(credentials.credentials, db)
+    if not actor:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
+    return actor
 
 
-@router.post("", response_model=ConversationRead, status_code=status.HTTP_201_CREATED)
-def create_conversation(
-    payload: ConversationCreate,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
-):
-    identity = _get_user_from_token(credentials, db)
-    if not identity or not isinstance(identity, User):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    if payload.shop_id:
-        shop = db.query(Shop).filter(Shop.id == payload.shop_id).first()
-        if not shop:
-            raise HTTPException(status_code=404, detail="Shop not found")
-
-        conversation = Conversation(
-            buyer_id=identity.id,
-            shop_id=shop.id,
-        )
-        db.add(conversation)
-        db.flush()
-
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                user_id=identity.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                user_id=shop.seller_id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-
-        if payload.initial_message:
-            message = Message(
-                conversation_id=conversation.id,
-                sender_id=identity.id,
-                sender_type=ActorRole.customer,
-                body=encrypt_message(payload.initial_message),
-            )
-            db.add(message)
-            conversation.last_message_at = message.created_at
-    elif payload.buyer_id:
-        buyer = db.query(User).filter(User.id == payload.buyer_id).first()
-        if not buyer:
-            raise HTTPException(status_code=404, detail="Buyer not found")
-
-        shop = db.query(Shop).filter(Shop.seller_id == identity.id).first()
-        if not shop:
-            raise HTTPException(status_code=404, detail="Seller shop not found")
-
-        conversation = Conversation(
-            buyer_id=buyer.id,
-            shop_id=shop.id,
-        )
-        db.add(conversation)
-        db.flush()
-
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                user_id=buyer.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                user_id=identity.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-
-        if payload.initial_message:
-            message = Message(
-                conversation_id=conversation.id,
-                sender_id=identity.id,
-                sender_type=ActorRole.seller,
-                body=encrypt_message(payload.initial_message),
-            )
-            db.add(message)
-            conversation.last_message_at = message.created_at
-    elif payload.agent_id:
-        agent = db.query(DeliveryAgent).filter(DeliveryAgent.id == payload.agent_id).first()
-        if not agent:
-            raise HTTPException(status_code=404, detail="Delivery agent not found")
-
-        conversation = Conversation()
-        db.add(conversation)
-        db.flush()
-
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                user_id=identity.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                agent_id=agent.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-
-        if payload.initial_message:
-            message = Message(
-                conversation_id=conversation.id,
-                sender_id=identity.id,
-                sender_type=ActorRole.admin if isinstance(identity, User) and identity.role.value == "admin" else ActorRole.customer,
-                body=encrypt_message(payload.initial_message),
-            )
-            db.add(message)
-            conversation.last_message_at = message.created_at
-    elif payload.admin_id:
-        admin = db.query(User).filter(User.id == payload.admin_id, User.role == "admin").first()
-        if not admin:
-            raise HTTPException(status_code=404, detail="Admin not found")
-
-        conversation = Conversation()
-        db.add(conversation)
-        db.flush()
-
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                agent_id=identity.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                user_id=admin.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-
-        if payload.initial_message:
-            message = Message(
-                conversation_id=conversation.id,
-                sender_id=identity.id,
-                sender_type=ActorRole.agent,
-                body=encrypt_message(payload.initial_message),
-            )
-            db.add(message)
-            conversation.last_message_at = message.created_at
-    elif payload.user_id:
-        recipient = db.query(User).filter(User.id == payload.user_id).first()
-        if not recipient:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        conversation = Conversation()
-        db.add(conversation)
-        db.flush()
-
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                user_id=identity.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-        db.execute(
-            conversation_participants.insert().values(
-                conversation_id=conversation.id,
-                user_id=recipient.id,
-                joined_at=datetime.now(timezone.utc),
-            )
-        )
-
-        if payload.initial_message:
-            message = Message(
-                conversation_id=conversation.id,
-                sender_id=identity.id,
-                sender_type=ActorRole.admin if isinstance(identity, User) and identity.role.value == "admin" else ActorRole.customer,
-                body=encrypt_message(payload.initial_message),
-            )
-            db.add(message)
-            conversation.last_message_at = message.created_at
-    else:
-        raise HTTPException(status_code=400, detail="Either shop_id, buyer_id, agent_id, admin_id, or user_id must be provided")
-
-    db.commit()
-    db.refresh(conversation)
+def _conversation_for(db: Session, conversation_id: uuid.UUID, actor: Actor) -> Conversation:
+    conversation = db.get(Conversation, conversation_id)
+    # 404 for both, so ids of other people's conversations aren't confirmed.
+    if not conversation or not is_participant(db, actor, conversation):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
     return conversation
 
 
-@router.get("/{conversation_id}/messages", response_model=List[MessageRead])
-def list_messages(
-    conversation_id: uuid.UUID,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
-):
-    identity = _get_user_from_token(credentials, db)
-    if not identity:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(404, "Conversation not found")
-
-    if not _is_participant(identity, conversation, db):
-        raise HTTPException(403, "Not a participant in this conversation")
-
-    messages = (
-        db.query(Message)
-        .options(selectinload(Message.sender))
-        .filter(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at.asc())
+@router.get("", response_model=List[ConversationSummary])
+def list_conversations(db: Session = Depends(get_db), actor: Actor = Depends(get_actor)):
+    conversations = (
+        visible_conversations(db, actor)
+        .order_by(func.coalesce(Conversation.last_message_at, Conversation.created_at).desc())
         .all()
     )
-    return [
-        MessageRead(
-            id=m.id,
-            conversation_id=m.conversation_id,
-            sender_id=m.sender_id,
-            sender_type=m.sender_type,
-            body=decrypt_message(m.body),
-            created_at=m.created_at,
+    return [conversation_summary(db, c, actor) for c in conversations]
+
+
+@router.post("", response_model=ConversationRead, status_code=status.HTTP_201_CREATED)
+def start_conversation(
+    payload: ConversationCreate,
+    db: Session = Depends(get_db),
+    actor: Actor = Depends(get_actor),
+):
+    """Open (or resume) a conversation. Starting one that already exists
+    returns it, so "Message seller" twice lands in the same thread."""
+    targets = [f for f in ("shop_id", "buyer_id", "order_id", "agent_id", "admin_id", "user_id") if getattr(payload, f)]
+    if len(targets) != 1:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Provide exactly one of shop_id, buyer_id, order_id, agent_id, admin_id or user_id",
         )
-        for m in messages
-    ]
+    target = targets[0]
+
+    if target == "shop_id":
+        if not actor.user:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only customers can message a shop")
+        shop = db.get(Shop, payload.shop_id)
+        if not shop:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Shop not found")
+        if shop.seller_id == actor.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "You can't start a conversation with your own shop")
+        conversation = get_or_create_conversation(db, buyer_id=actor.id, shop_id=shop.id, order_id=None)
+        add_participants(db, conversation, [actor, Actor(user=shop.seller)])
+
+    elif target == "buyer_id":
+        shop = db.query(Shop).filter(Shop.seller_id == actor.id).first() if actor.user else None
+        if not shop:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only sellers can message a customer")
+        buyer = db.get(User, payload.buyer_id)
+        # Sellers can only reach customers who ordered from them, not any account.
+        has_ordered = buyer and db.query(Order.id).filter(Order.buyer_id == buyer.id, Order.shop_id == shop.id).first()
+        if not has_ordered:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+        conversation = get_or_create_conversation(db, buyer_id=buyer.id, shop_id=shop.id, order_id=None)
+        add_participants(db, conversation, [Actor(user=buyer), actor])
+
+    elif target == "order_id":
+        order = db.get(Order, payload.order_id)
+        if not order or not can_access_order(actor, order):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
+        conversation = get_or_create_conversation(
+            db, order_id=order.id, buyer_id=order.buyer_id, shop_id=order.shop_id
+        )
+
+    elif target == "agent_id":
+        if not actor.is_admin:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only admins can message delivery agents")
+        agent = db.get(DeliveryAgent, payload.agent_id)
+        if not agent:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Delivery agent not found")
+        other = Actor(agent=agent)
+        conversation = find_direct_conversation(db, actor, other) or Conversation()
+        db.add(conversation)
+        db.flush()
+        add_participants(db, conversation, [actor, other])
+
+    elif target == "admin_id":
+        if not actor.agent:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only delivery agents can message support this way")
+        admin = db.get(User, payload.admin_id)
+        if not admin or admin.role != UserRole.admin or admin.status != UserStatus.active:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Admin not found")
+        other = Actor(user=admin)
+        conversation = find_direct_conversation(db, actor, other) or Conversation()
+        db.add(conversation)
+        db.flush()
+        add_participants(db, conversation, [actor, other])
+
+    else:  # user_id
+        if not actor.is_admin:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only admins can message any user")
+        recipient = db.get(User, payload.user_id)
+        if not recipient:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        if recipient.id == actor.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "You can't message yourself")
+        other = Actor(user=recipient)
+        conversation = find_direct_conversation(db, actor, other) or Conversation()
+        db.add(conversation)
+        db.flush()
+        add_participants(db, conversation, [actor, other])
+
+    if payload.initial_message and payload.initial_message.strip():
+        add_message(db, conversation, actor, payload.initial_message.strip())
+
+    db.commit()
+    db.refresh(conversation)
+    return conversation_read(db, conversation, actor)
+
+
+@router.get("/support-admin", response_model=SupportAdminRead)
+def get_support_admin(db: Session = Depends(get_db), actor: Actor = Depends(get_actor)):
+    """The admin that delivery agents' "Message support" button writes to."""
+    admin = (
+        db.query(User)
+        .filter(User.role == UserRole.admin, User.status == UserStatus.active)
+        .order_by(User.created_at.asc())
+        .first()
+    )
+    if not admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No active admin found")
+    return admin
+
+
+@router.get("/{conversation_id}", response_model=ConversationRead)
+def get_conversation(conversation_id: uuid.UUID, db: Session = Depends(get_db), actor: Actor = Depends(get_actor)):
+    return conversation_read(db, _conversation_for(db, conversation_id, actor), actor)
+
+
+@router.get("/{conversation_id}/messages", response_model=List[MessageRead])
+def list_messages(conversation_id: uuid.UUID, db: Session = Depends(get_db), actor: Actor = Depends(get_actor)):
+    return conversation_read(db, _conversation_for(db, conversation_id, actor), actor).messages
 
 
 @router.post("/{conversation_id}/messages", response_model=MessageRead, status_code=status.HTTP_201_CREATED)
-def create_message(
+def send_message(
     conversation_id: uuid.UUID,
     payload: MessageCreate,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
+    actor: Actor = Depends(get_actor),
 ):
-    identity = _get_user_from_token(credentials, db)
-    if not identity:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(404, "Conversation not found")
-
-    if not _is_participant(identity, conversation, db):
-        raise HTTPException(403, "Not a participant in this conversation")
-
-    if isinstance(identity, User):
-        sender_type = actor_role_for(identity.role.value)
-    else:
-        sender_type = ActorRole.agent
-
-    message = Message(
-        conversation_id=conversation_id,
-        sender_id=identity.id,
-        sender_type=sender_type,
-        body=encrypt_message(payload.body),
-    )
-    db.add(message)
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Message can't be empty")
+    conversation = _conversation_for(db, conversation_id, actor)
+    message = add_message(db, conversation, actor, body)
     db.commit()
     db.refresh(message)
-    return MessageRead(
-        id=message.id,
-        conversation_id=message.conversation_id,
-        sender_id=message.sender_id,
-        sender_type=message.sender_type,
-        body=decrypt_message(message.body),
-        created_at=message.created_at,
-    )
+    return message_read(message, actor)
 
 
-@router.get("/support-admin", response_model=UserRead)
-def get_support_admin(db: Session = Depends(get_db)):
-    admin = db.query(User).filter(User.role == "admin", User.status == "active").order_by(User.created_at.asc()).first()
-    if not admin:
-        raise HTTPException(status_code=404, detail="No active admin found")
-    return admin
+@router.patch("/{conversation_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+def mark_conversation_read(conversation_id: uuid.UUID, db: Session = Depends(get_db), actor: Actor = Depends(get_actor)):
+    conversation = _conversation_for(db, conversation_id, actor)
+    db.query(Message).filter(
+        Message.conversation_id == conversation.id,
+        Message.is_read.is_(False),
+        not_sent_by(actor),
+    ).update({"is_read": True}, synchronize_session=False)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
