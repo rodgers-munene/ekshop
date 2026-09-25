@@ -1,33 +1,27 @@
-name: Scheduled cron jobs
+name: Scheduled admin reports
+
+# Billing and M-Pesa reconciliation have their own workflows
+# (subscription-billing-cron.yml, mpesa-reconcile-cron.yml); running them
+# here too would process the same subscriptions twice.
 
 on:
   schedule:
-    - cron: "0 3 * * *"
-    - cron: "0 4 * * 1"
-  workflow_dispatch:
+    - cron: "0 4 * * *" # 04:00 UTC daily = 07:00 Nairobi
+  workflow_dispatch: {}
 
 jobs:
-  cron:
+  reports:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      BACKEND_URL: ${{ secrets.BACKEND_URL }}
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
-
     steps:
-      - name: Run billing cycle
-        run: |
-          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/billing-cycle" -H "x-cron-secret: $CRON_SECRET"
-
-      - name: Reconcile M-Pesa payments
-        run: |
-          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/mpesa-reconcile" -H "x-cron-secret: $CRON_SECRET"
-
       - name: Send daily admin report
         run: |
-          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/admin/daily-report" -H "x-cron-secret: $CRON_SECRET"
+          curl -sf -X POST "${{ secrets.BACKEND_BASE_URL }}/internal/cron/admin/daily-report" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
 
-      - name: Send weekly insight digest
-        if: ${{ github.event.schedule == '0 4 * * 1' || github.event_name == 'workflow_dispatch' }}
+      - name: Send weekly insight digest (Mondays, or on a manual run)
         run: |
-          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/admin/weekly-insight-digest" -H "x-cron-secret: $CRON_SECRET"
+          if [ "$(date -u +%u)" = "1" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            curl -sf -X POST "${{ secrets.BACKEND_BASE_URL }}/internal/cron/admin/weekly-insight-digest" \
+              -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
+          fi

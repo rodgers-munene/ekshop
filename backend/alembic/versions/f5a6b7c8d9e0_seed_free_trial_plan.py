@@ -50,6 +50,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        subscription_plans.delete().where(subscription_plans.c.code == "free_trial")
-    )
+    op.execute("DELETE FROM subscription_plans WHERE code = 'free_trial'")

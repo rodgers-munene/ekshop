@@ -473,7 +473,6 @@ async def paystack_callback(request: Request, db: Session = Depends(get_db)):
         customer = tx.get("customer") or {}
         authorization = tx.get("authorization") or {}
         subscription.customer_ref = customer.get("customer_code") or subscription.customer_ref
-        subscription.last_activated_ref = reference
         subscription.authorization_code = authorization.get("authorization_code") or subscription.authorization_code
 
         activate_subscription(db, subscription)

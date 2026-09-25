@@ -55,7 +55,7 @@ def verify_webhook_signature(raw_body: bytes, signature: str | None) -> bool:
     expected = hmac.new(
         settings.PAYSTACK_SECRET_KEY.encode("utf-8"),
         raw_body,
-        hashlib.sha512(),
+        hashlib.sha512,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
 

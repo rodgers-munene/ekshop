@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -8,7 +7,6 @@ from app.models.shop import ShopStatus
 from app.models.subscription import BillingInterval, Subscription, SubscriptionStatus
 from app.models.user import UserStatus
 from app.services import email as email_service
-from app.services import paystack
 from app.services.notifications import notify_admins_of_pos_provisioning
 import logging
 
@@ -49,7 +47,7 @@ def activate_subscription(db: Session, subscription: Subscription) -> None:
 
     now = datetime.now(timezone.utc)
     extending_active_period = (
-        subscription.status == SubscriptionStatus.active
+        subscription.status in (SubscriptionStatus.active, SubscriptionStatus.trialing)
         and subscription.current_period_end is not None
         and subscription.current_period_end > now
     )
@@ -63,7 +61,7 @@ def activate_subscription(db: Session, subscription: Subscription) -> None:
 
     subscription.status = SubscriptionStatus.active
     subscription.last_activated_ref = subscription.provider_ref
-    if not extending_active_period:
+    if not extending_active_period or subscription.current_period_start is None:
         subscription.current_period_start = now
     period_base = subscription.current_period_end if extending_active_period else now
     period_days = PERIOD_DAYS_BY_INTERVAL[BillingInterval(subscription.billing_interval)]
@@ -150,59 +148,26 @@ def expire_overdue_subscriptions(db: Session) -> int:
 
     for subscription in subscriptions:
         if subscription.status == SubscriptionStatus.trialing:
-            if subscription.authorization_code:
-                try:
-                    plan = subscription.plan
-                    interval = subscription.billing_interval
-                    amount = plan.price_yearly if interval == BillingInterval.annual and plan.price_yearly else plan.price_monthly
-                    reference = f"eks_sub_auto_{uuid.uuid4().hex[:20]}"
-                    paystack.charge_authorization(
-                        authorization_code=subscription.authorization_code,
-                        email=subscription.shop.seller.email,
-                        amount=amount,
-                        reference=reference,
-                    )
-                    subscription.provider_ref = reference
-                    db.flush()
-                except Exception as exc:
-                    logger.warning("Auto-renewal charge failed for subscription %s: %s", subscription.id, exc)
-                    subscription.status = SubscriptionStatus.pending_payment
-                    subscription.shop.status = ShopStatus.pending
-                    subscription.shop.seller.status = UserStatus.pending
-                    try:
-                        email_service.send_trial_expired_email(
-                            subscription.shop.seller.email,
-                            subscription.shop,
-                            subscription.plan.name,
-                        )
-                    except Exception as e:
-                        logger.warning("Failed to send trial-expired email for subscription %s: %s", subscription.id, e)
-                    _notify_seller(
-                        db,
-                        subscription,
-                        type="trial_expired",
-                        title="Your free trial has ended",
-                        body=f"Your {subscription.plan.name} trial for {subscription.shop.name} has ended. Subscribe now to keep your shop live.",
-                    )
-            else:
-                subscription.status = SubscriptionStatus.pending_payment
-                subscription.shop.status = ShopStatus.pending
-                subscription.shop.seller.status = UserStatus.pending
-                try:
-                    email_service.send_trial_expired_email(
-                        subscription.shop.seller.email,
-                        subscription.shop,
-                        subscription.plan.name,
-                    )
-                except Exception as e:
-                    logger.warning("Failed to send trial-expired email for subscription %s: %s", subscription.id, e)
-                _notify_seller(
-                    db,
-                    subscription,
-                    type="trial_expired",
-                    title="Your free trial has ended",
-                    body=f"Your {subscription.plan.name} trial for {subscription.shop.name} has ended. Subscribe now to keep your shop live.",
+            # No card is collected for a trial, so the seller pays through the
+            # normal renew flow; until then the shop is locked.
+            subscription.status = SubscriptionStatus.pending_payment
+            subscription.shop.status = ShopStatus.pending
+            subscription.shop.seller.status = UserStatus.pending
+            try:
+                email_service.send_trial_expired_email(
+                    subscription.shop.seller.email,
+                    subscription.shop,
+                    subscription.plan.name,
                 )
+            except Exception as e:
+                logger.warning("Failed to send trial-expired email for subscription %s: %s", subscription.id, e)
+            _notify_seller(
+                db,
+                subscription,
+                type="trial_expired",
+                title="Your free trial has ended",
+                body=f"Your {subscription.plan.name} trial for {subscription.shop.name} has ended. Subscribe now to keep your shop live.",
+            )
         else:
             subscription.status = SubscriptionStatus.past_due
             shop = subscription.shop

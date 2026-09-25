@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.dependencies.auth import get_current_active_user, require_seller_allow_unpaid
+from app.dependencies.auth import require_seller_allow_unpaid
 from app.dependencies.database import get_db
 from app.models.shop import Shop
-from app.models.subscription import BillingInterval, Subscription, SubscriptionPlan, SubscriptionStatus
+from app.models.subscription import SubscriptionPlan
 from app.models.user import User
 from app.schemas.subscription import (
     RenewSubscriptionRequest,
@@ -48,57 +48,6 @@ def get_my_subscription(
     current_user: User = Depends(require_seller_allow_unpaid),
 ):
     return _get_my_subscription(db, current_user)
-
-
-@router.post(
-    "/trial/authorize",
-    response_model=RenewSubscriptionResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Start trial payment authorization",
-    description="""
-Initializes a Paystack transaction to collect card authorization for the
-current trial plan. This does not charge the card now; it only saves an
-authorization code that can be used for auto-renewal when the trial ends.
-""",
-)
-def authorize_trial_payment(
-    body: RenewSubscriptionRequest = RenewSubscriptionRequest(),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_seller_allow_unpaid),
-):
-    subscription = _get_my_subscription(db, current_user)
-
-    if subscription.status != SubscriptionStatus.trialing:
-        raise HTTPException(status_code=400, detail="Only trialing subscriptions can authorize payment")
-
-    plan = subscription.plan
-    if body.plan_code is not None and body.plan_code != plan.code:
-        plan = db.query(SubscriptionPlan).filter(SubscriptionPlan.code == body.plan_code, SubscriptionPlan.is_active.is_(True)).first()
-        if not plan:
-            raise HTTPException(status_code=404, detail="Unknown plan")
-        subscription.pending_plan_id = plan.id
-
-    interval = body.billing_interval or subscription.billing_interval
-    if body.billing_interval is not None and body.billing_interval != subscription.billing_interval:
-        subscription.pending_billing_interval = body.billing_interval
-
-    amount = plan.price_yearly if interval == BillingInterval.annual and plan.price_yearly else plan.price_monthly
-
-    reference = f"eks_trial_auth_{uuid.uuid4().hex[:20]}"
-    try:
-        result = paystack.initialize_transaction(
-            email=current_user.email,
-            amount=amount,
-            reference=reference,
-            callback_url=f"{settings.FRONTEND_URL}/dashboard/billing/payment-status?ref={reference}",
-        )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Paystack error: {str(e)}")
-
-    subscription.provider_ref = reference
-    db.commit()
-
-    return RenewSubscriptionResponse(authorization_url=result["authorization_url"], reference=reference)
 
 
 @router.post(

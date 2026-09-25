@@ -168,20 +168,18 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
             db.rollback()
             raise HTTPException(status_code=409, detail="That shop name is taken, please try a different one")
 
-        # No payment required up front: the seller gets a free trial
-        # of the chosen plan. They can use the dashboard and shop immediately
-        # after verifying their email; payment is only needed to continue
-        # after the trial ends.
+        # Plans with trial_days get a free trial: no payment up front, and the
+        # seller and shop go live once the email is verified. Payment is only
+        # needed to continue after current_period_end. current_period_start
+        # stays unset until the first payment, which is how
+        # activate_subscription recognises a first activation.
         trial_days = max(0, plan.trial_days or 0)
         subscription = Subscription(
             shop_id=shop.id,
             plan_id=plan.id,
             status=SubscriptionStatus.trialing if trial_days > 0 else SubscriptionStatus.pending_payment,
             billing_interval=BillingInterval.monthly,
-            current_period_start=datetime.now(timezone.utc),
-            current_period_end=datetime.now(timezone.utc) + timedelta(days=trial_days),
-            reminder_7d_sent_at=None,
-            reminder_1d_sent_at=None,
+            current_period_end=datetime.now(timezone.utc) + timedelta(days=trial_days) if trial_days > 0 else None,
         )
         db.add(subscription)
         db.flush()
@@ -218,8 +216,8 @@ Confirm an email address using the token sent during registration.
 1. Looks up the token in `email_verifications`: must be unused and not expired.
 2. Marks the token as used (one-time use).
 3. **Buyers:** sets the user's status from `pending` → `active`; they can log in.
-4. **Sellers on a 7-day free trial:** sets the user's status from `pending` → `active`;
-   they can log in and use the dashboard immediately.
+4. **Sellers on a free trial:** sets the user's and the shop's status from `pending` →
+   `active`; they can log in and sell immediately.
 5. **Sellers without a trial:** the account stays `pending`, because payment is what
    activates them. They can still sign in from here — `/auth/login` issues a
    token once the email is verified — and the dashboard renders locked until
@@ -248,9 +246,9 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == verification.user_id).first()
     verification.used_at = datetime.now(timezone.utc)
 
-    # Sellers on a 7-day free trial are activated here so they can use the
-    # dashboard and shop immediately after verifying their email. Sellers
-    # without a trial stay `pending` until their first payment confirms.
+    # Sellers on a free trial are activated here, account and shop, so they
+    # can sell immediately after verifying their email. Sellers without a
+    # trial stay `pending` until their first payment confirms.
     if user.role != UserRole.seller:
         user.status = UserStatus.active
     elif (
@@ -259,12 +257,17 @@ def verify_email(token: str, db: Session = Depends(get_db)):
         and user.shop.subscription.status == SubscriptionStatus.trialing
     ):
         user.status = UserStatus.active
+        user.shop.status = ShopStatus.active
 
     db.commit()
 
     if user.role == UserRole.seller:
         return {
-            "message": "Email verified. Sign in to activate your shop.",
+            "message": (
+                "Email verified. Sign in to start selling."
+                if user.status == UserStatus.active
+                else "Email verified. Sign in to activate your shop."
+            ),
             "next": "login",
             "seller": True,
         }
@@ -308,7 +311,6 @@ def subscription_status(reference: str, db: Session = Depends(get_db)):
             authorization = result.get("authorization") or {}
             subscription.customer_ref = customer.get("customer_code") or subscription.customer_ref
             subscription.authorization_code = authorization.get("authorization_code") or subscription.authorization_code
-            subscription.last_activated_ref = reference
             activate_subscription(db, subscription)
             db.commit()
             payment_confirmed = subscription.last_activated_ref == reference
