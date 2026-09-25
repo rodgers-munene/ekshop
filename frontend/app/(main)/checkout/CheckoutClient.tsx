@@ -4,16 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, RefreshCw, Smartphone } from "lucide-react";
+import { AlertTriangle, RefreshCw, Smartphone, MapPin } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import {
   County,
   DeliveryFeePreview,
+  GeoSelection,
   SubCounty,
   UserAddress,
   Ward,
 } from "@/types/interface";
 import { formatKES, resolveImageUrl as resolveImg, decodeHtml } from "@/lib/utils";
+import LocationPicker from "@/components/geo/LocationPicker";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 type Step = "review" | "address" | "payment" | "polling";
 
@@ -73,6 +76,8 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState("");
   const phoneTouchedRef = useRef(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [pinSaving, setPinSaving] = useState(false);
 
   const subtotal = totalPrice();
   const total = subtotal + deliveryFee;
@@ -199,6 +204,30 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, checkoutRequestId]);
+
+  async function updateAddressPin(sel: GeoSelection) {
+    if (!selectedAddressId) return;
+    setPinSaving(true);
+    try {
+      const res = await fetch(`/api/account/addresses/${selectedAddressId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: sel.lat, lng: sel.lng, sublocation: sel.sublocation ?? "" }),
+      });
+      if (!res.ok) throw new Error();
+      setAddresses((prev) =>
+        prev.map((a) =>
+          a.id === selectedAddressId ? { ...a, lat: sel.lat, lng: sel.lng, sublocation: sel.sublocation ?? "" } : a
+        )
+      );
+      setMapOpen(false);
+      toast.success("Location pinned");
+    } catch {
+      toast.error("Failed to save location. Try again.");
+    } finally {
+      setPinSaving(false);
+    }
+  }
 
   async function placeOrder() {
     if (!selectedAddressId) { toast.error("Select a delivery address"); return; }
@@ -367,7 +396,10 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
           <section className="card overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface">
               <h2 className="font-semibold">1. Your Items</h2>
-              <button onClick={() => router.push("/cart")} className="text-xs text-muted underline">Edit cart</button>
+              <div className="flex items-center gap-3">
+                {items[0]?.shop_id && <MessageSellerButton shopId={items[0].shop_id} />}
+                <button onClick={() => router.push("/cart")} className="text-xs text-muted underline">Edit cart</button>
+              </div>
             </div>
             <div className="divide-y divide-border">
               {items.map((item) => (
@@ -417,11 +449,21 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
                         )}
                       </p>
                       <p className="text-xs text-muted">
-                        {[addr.ward?.name, addr.town, addr.county].filter(Boolean).join(", ")} · {addr.phone}
+                        {[addr.ward?.name, addr.town, addr.county].filter(Boolean).join(", ")}
+                        {addr.sublocation ? ` · ${addr.sublocation}` : ""}
+                        {" · "}{addr.phone}
                       </p>
+                      {addr.id === selectedAddressId && addr.lat && addr.sublocation && (
+                        <p className="text-xs text-green-600 mt-0.5">Pinned: {addr.sublocation}</p>
+                      )}
                     </div>
                   </label>
                 ))
+              )}
+              {selectedAddress && !selectedAddress.lat && (
+                <button type="button" onClick={() => setMapOpen(true)} className="flex items-center gap-2 text-xs text-amber hover:underline pt-1">
+                  <MapPin size={14} /> Pin delivery location on map
+                </button>
               )}
 
               {selectedAddress && addressIncomplete && (
@@ -528,6 +570,23 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
           </div>
         </div>
       </div>
+
+      {mapOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMapOpen(false)}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-2 text-center text-sm font-medium text-white">
+              Drop the pin where our rider should deliver — switch between Satellite and Streets
+            </p>
+            <LocationPicker
+              initial={selectedAddress?.lat != null && selectedAddress.lng != null ? { lat: selectedAddress.lat, lng: selectedAddress.lng } : undefined}
+              onCancel={() => setMapOpen(false)}
+              onConfirm={(sel) => {
+                if (!pinSaving) updateAddressPin(sel);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

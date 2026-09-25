@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { serverFetch } from "@/lib/server-api";
-import { Category, ProductListResponse } from "@/types/interface";
+import { Category, ProductListResponse, Shop } from "@/types/interface";
 import ProductCard from "@/components/ProductCard";
+import { Crosshair } from "lucide-react";
 
 interface Props {
   searchParams: Promise<{
@@ -10,6 +11,8 @@ interface Props {
     q?: string;
     county?: string;
     page?: string;
+    lat?: string;
+    lng?: string;
   }>;
 }
 
@@ -40,8 +43,69 @@ export async function generateMetadata({
   };
 }
 
+function NearbyShops({ shops }: { shops: Shop[] }) {
+  if (shops.length === 0) {
+    return (
+      <div className="card p-6 text-center">
+        <p className="text-sm text-muted">No shops found nearby. Try increasing the search radius.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {shops.map((shop) => (
+        <Link
+          key={shop.id}
+          href={`/shops/${shop.slug}`}
+          className="card p-4 flex items-start justify-between gap-3 hover:border-amber transition-colors"
+        >
+          <div>
+            <p className="font-semibold text-sm">{shop.name}</p>
+            <p className="text-xs text-muted">
+              {shop.county && `${shop.county} · `}
+              {shop.distance_km != null ? `${shop.distance_km} km away` : ""}
+            </p>
+          </div>
+          {shop.is_verified && <span className="text-xs text-success font-medium">Verified</span>}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function NearMeButton() {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!navigator.geolocation) {
+          alert("Geolocation is not supported by your browser");
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const params = new URLSearchParams(window.location.search);
+            params.set("lat", String(pos.coords.latitude));
+            params.set("lng", String(pos.coords.longitude));
+            window.location.search = params.toString();
+          },
+          () => {
+            alert("Couldn't get your location. Check browser permissions.");
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }}
+      className="w-full flex items-center justify-center gap-2 text-xs py-2 px-3 rounded-md border border-border hover:border-amber transition-colors"
+    >
+      <Crosshair size={14} />
+      Use my location
+    </button>
+  );
+}
+
 export default async function ProductsPage({ searchParams }: Props) {
-  const { category, q, county, page } = await searchParams;
+  const { category, q, county, page, lat, lng } = await searchParams;
   const currentPage = parseInt(page ?? "1");
 
   const params = new URLSearchParams();
@@ -51,7 +115,7 @@ export default async function ProductsPage({ searchParams }: Props) {
   params.set("page", String(currentPage));
   params.set("limit", "20");
 
-  const [data, categories] = await Promise.all([
+  const [data, categories, nearby] = await Promise.all([
     serverFetch<ProductListResponse>(`/products/?${params}`).catch((e) => {
       console.error("PRODUCTS ERROR:", e.message);
       return null;
@@ -60,11 +124,15 @@ export default async function ProductsPage({ searchParams }: Props) {
       console.error("CATEGORIES ERROR:", e.message);
       return [];
     }),
+    lat && lng
+      ? serverFetch<Shop[]>(`/shops/nearby?lat=${lat}&lng=${lng}&radius_km=20`).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   const products = data?.results ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
+  const isNearby = Boolean(lat && lng);
 
   return (
     <div className="w-full px-4 md:px-6 py-4">
@@ -76,11 +144,13 @@ export default async function ProductsPage({ searchParams }: Props) {
               ? `Results for "${q}"`
               : category
                 ? category.replace(/-/g, " ")
-                : "All Products"}
+                : isNearby
+                  ? "Shops near you"
+                  : "All Products"}
           </h1>
-          <span className="text-sm text-muted">{total} products</span>
+          <span className="text-sm text-muted">{isNearby ? `${nearby.length} nearby` : `${total} products`}</span>
         </div>
-        {county && (
+        {county && !isNearby && (
           <div className="mt-2">
             <Link
               href={`/products?${new URLSearchParams({ ...(category ? { category } : {}), ...(q ? { q } : {}) })}`}
@@ -90,7 +160,23 @@ export default async function ProductsPage({ searchParams }: Props) {
             </Link>
           </div>
         )}
+        {isNearby && (
+          <div className="mt-2">
+            <Link
+              href={`/products?${new URLSearchParams({ ...(category ? { category } : {}), ...(q ? { q } : {}), ...(county ? { county } : {}) })}`}
+              className="inline-flex items-center gap-1.5 text-xs bg-surface border border-border rounded-full px-3 py-1 hover:border-amber transition-colors"
+            >
+              Hide nearby
+            </Link>
+          </div>
+        )}
       </div>
+
+      {isNearby && (
+        <div className="mb-4">
+          <NearbyShops shops={nearby} />
+        </div>
+      )}
 
       <div className="flex gap-4">
         {/* ── Sidebar filters ─────────────────────────────── */}
@@ -122,6 +208,9 @@ export default async function ProductsPage({ searchParams }: Props) {
                 Filter by county
               </button>
             </form>
+            <div className="mt-3">
+              <NearMeButton />
+            </div>
           </div>
 
           <div className="card p-4">

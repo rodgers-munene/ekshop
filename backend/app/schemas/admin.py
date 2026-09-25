@@ -214,6 +214,143 @@ class OperationsDeliveryMetrics(BaseModel):
     delivery_revenue: str
 
 
+class CartAbandonedProduct(BaseModel):
+    product_id: Optional[uuid.UUID] = None
+    name: str
+    slug: Optional[str]
+    units: int
+    at_risk_revenue: str
+
+
+class TopPurchasedProduct(BaseModel):
+    product_id: Optional[uuid.UUID] = None
+    name: str
+    slug: Optional[str]
+    units: int
+    revenue: str
+
+
+class CartAbandonmentMetrics(BaseModel):
+    """Real cart-funnel metrics computed from persisted carts and paid orders:
+    how many carts were touched in the window, how many converted to a paid
+    order, which products sit abandoned in carts, and which were bought most."""
+    carts_touched: int
+    converted_carts: int
+    abandoned_carts: int
+    cart_abandonment_rate: float
+    abandoned_units: int
+    at_risk_revenue: str
+    abandoned_products: List[CartAbandonedProduct] = []
+    top_products: List[TopPurchasedProduct] = []
+
+
+class MerchantMasterHealth(BaseModel):
+    merchant: str
+    location: str
+    category: str
+    stage: str
+    activity: int
+    catalogue: int
+    demand: int
+    reliability: int
+    growth: int
+    health: int
+    health_tier: str
+    last_login: Optional[datetime]
+    orders_30d: int
+    dispatch_hrs: float
+    cancel_pct: float
+    response_min: int
+    next_action: str
+    owner: str
+
+
+class OrderControlTowerRow(BaseModel):
+    order_id: str
+    received: datetime
+    merchant: str
+    customer: str
+    ack_time: Optional[datetime]
+    accepted: bool
+    ready_time: Optional[datetime]
+    rider_assigned: Optional[str]
+    pickup_time: Optional[datetime]
+    delivered_time: Optional[datetime]
+    dispatch_hrs: float
+    delivery_hrs: float
+    status: str
+    exception_owner: str
+
+
+class CustomerRecoveryRow(BaseModel):
+    customer: str
+    segment: str
+    last_activity: Optional[datetime]
+    cart_value: str
+    issue_trigger: str
+    contact_date: Optional[datetime]
+    channel: str
+    response: str
+    recovered_order: bool
+    next_action: str
+
+
+class SupplyDemandRow(BaseModel):
+    category_area: str
+    searches_views: int
+    cart_adds: int
+    orders: int
+    active_shops: int
+    products_live: int
+    demand_score: int
+    supply_score: int
+    gap: int
+    action: str
+
+
+class PriorityAcquisitionRow(BaseModel):
+    prospect: str
+    category: str
+    area: str
+    demand_evidence: str
+    reliability_potential: str
+    strategic_value: str
+    priority_score: int
+    reason: str
+
+
+class AdminOverviewPeriodMetrics(BaseModel):
+    revenue: str
+    orders: int
+    average_order_value: str
+    new_users: int
+    new_buyers: int
+    new_sellers: int
+    new_shops: int
+    new_products: int
+    cart_abandonment_rate: float
+
+
+class AdminOverviewTotals(BaseModel):
+    total_users: int
+    total_buyers: int
+    total_sellers: int
+    total_shops: int
+    shops_pending_verification: int
+    total_products: int
+    total_orders: int
+    revenue_total: str
+
+
+class AdminOverviewRead(BaseModel):
+    period: str
+    start: datetime
+    metrics: AdminOverviewPeriodMetrics
+    previous: AdminOverviewPeriodMetrics
+    totals: AdminOverviewTotals
+    trend: List[AdminTrendPoint]
+
+
 class OrderNotificationRecipientCreate(BaseModel):
     email: str
     label: Optional[str] = None
@@ -232,3 +369,120 @@ class OrderNotificationRecipientRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AdminEmailTestRequest(BaseModel):
+    to: str
+
+
+class AdminEmailTestResult(BaseModel):
+    success: bool
+    detail: str
+
+
+class AdminEmailStatus(BaseModel):
+    """Why order/subs emails do or don't go out: whether Resend is configured,
+    whether the configured From domain is verified (Resend rejects mail on
+    unverified domains), and how many active recipients exist."""
+    resend_configured: bool
+    from_address: str
+    from_domain: str
+    verified_domains: List[str]
+    from_domain_verified: bool
+    domains_error: Optional[str] = None
+    active_recipient_count: int
+
+
+class RecentOrderRow(BaseModel):
+    id: str
+    short_id: str
+    created_at: datetime
+    buyer_name: str
+    total: str
+    item_count: int
+    shop_count: int
+
+
+class RecentOrderListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[RecentOrderRow]
+
+
+class AdminProductRow(BaseModel):
+    id: uuid.UUID
+    name: str
+    price: str
+    status: str
+    shop_name: Optional[str] = None
+    created_at: datetime
+
+
+class AdminProductListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[AdminProductRow]
+
+
+class MarginLeakageTrendPoint(BaseModel):
+    label: str
+    gmv: float
+    platform_commission: float
+    mpesa_fees: float
+    net_profit: float
+    gross_margin_pct: float
+    aov: float
+
+
+class MarginLeakageMetrics(BaseModel):
+    period: str
+    start: datetime
+    end: datetime
+    gmv: str
+    orders: int
+    average_order_value: str
+    platform_commission: str
+    mpesa_fees: str
+    server_cost: str
+    net_profit: str
+    gross_margin_pct: float
+    commission_rate_pct: float
+    mpesa_rate_pct: float
+    trend: List[MarginLeakageTrendPoint]
+
+
+class RealTimeMetrics(BaseModel):
+    active_sessions: int
+    active_users: int
+    recent_purchases: int
+    active_carts: int
+
+
+class AcquisitionMetrics(BaseModel):
+    new_users: int
+    returning_buyers: int
+    new_user_rate: float
+    returning_user_rate: float
+    total_users_in_period: int
+
+
+class BehaviorMetrics(BaseModel):
+    views: int
+    clicks: int
+    add_to_carts: int
+    purchases: int
+    view_to_click_rate: float
+    click_to_cart_rate: float
+    cart_to_purchase_rate: float
+    overall_conversion_rate: float
+
+
+class EcommerceMetrics(BaseModel):
+    transactions: int
+    revenue: str
+    average_order_value: str
+    conversion_rate: float
+    revenue_per_session: str
+    top_products: List[TopPurchasedProduct] = []

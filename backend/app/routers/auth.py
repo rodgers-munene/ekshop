@@ -25,7 +25,12 @@ from app.services import paystack
 from app.services.geography import resolve_county_name
 from app.services.subscriptions import activate_subscription
 from app.models.shop import Shop, ShopStatus
-from app.models.subscription import Subscription, SubscriptionPlan, SubscriptionStatus
+from app.models.subscription import (
+    BillingInterval,
+    Subscription,
+    SubscriptionPlan,
+    SubscriptionStatus,
+)
 from app.models.user import (
     EmailVerification,
     EmailVerificationPurpose,
@@ -131,6 +136,8 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
         last_name=payload.last_name,
         phone=payload.phone,
         county=county,
+        lat=payload.lat,
+        lng=payload.lng,
         role=payload.role,
     )
     db.add(user)
@@ -150,6 +157,8 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
             name=payload.shop_name,
             slug=_generate_unique_shop_slug(db, payload.shop_name),
             status=ShopStatus.pending,
+            lat=payload.lat,
+            lng=payload.lng,
         )
         db.add(shop)
         try:
@@ -159,12 +168,18 @@ def register(request: Request, payload: UserCreate, db: Session = Depends(get_db
             db.rollback()
             raise HTTPException(status_code=409, detail="That shop name is taken, please try a different one")
 
-        # No Paystack transaction yet: the seller opens one by verifying their
-        # email, so a scraped or mistyped address can't reach checkout.
+        # Plans with trial_days get a free trial: no payment up front, and the
+        # seller and shop go live once the email is verified. Payment is only
+        # needed to continue after current_period_end. current_period_start
+        # stays unset until the first payment, which is how
+        # activate_subscription recognises a first activation.
+        trial_days = max(0, plan.trial_days or 0)
         subscription = Subscription(
             shop_id=shop.id,
             plan_id=plan.id,
-            status=SubscriptionStatus.pending_payment,
+            status=SubscriptionStatus.trialing if trial_days > 0 else SubscriptionStatus.pending_payment,
+            billing_interval=BillingInterval.monthly,
+            current_period_end=datetime.now(timezone.utc) + timedelta(days=trial_days) if trial_days > 0 else None,
         )
         db.add(subscription)
         db.flush()
@@ -201,8 +216,10 @@ Confirm an email address using the token sent during registration.
 1. Looks up the token in `email_verifications`: must be unused and not expired.
 2. Marks the token as used (one-time use).
 3. **Buyers:** sets the user's status from `pending` → `active`; they can log in.
-4. **Sellers:** the account stays `pending`, because payment is what activates a
-   seller. They can sign in from here all the same — `/auth/login` issues a
+4. **Sellers on a free trial:** sets the user's and the shop's status from `pending` →
+   `active`; they can log in and sell immediately.
+5. **Sellers without a trial:** the account stays `pending`, because payment is what
+   activates them. They can still sign in from here — `/auth/login` issues a
    token once the email is verified — and the dashboard renders locked until
    the subscription is paid for.
 
@@ -229,17 +246,28 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == verification.user_id).first()
     verification.used_at = datetime.now(timezone.utc)
 
-    # A seller stays `pending` -- payment, not verification, is what activates
-    # them. They can still sign in from here: login issues a token once the
-    # email is verified, and the dashboard renders locked until they pay.
+    # Sellers on a free trial are activated here, account and shop, so they
+    # can sell immediately after verifying their email. Sellers without a
+    # trial stay `pending` until their first payment confirms.
     if user.role != UserRole.seller:
         user.status = UserStatus.active
+    elif (
+        user.shop
+        and user.shop.subscription
+        and user.shop.subscription.status == SubscriptionStatus.trialing
+    ):
+        user.status = UserStatus.active
+        user.shop.status = ShopStatus.active
 
     db.commit()
 
     if user.role == UserRole.seller:
         return {
-            "message": "Email verified. Sign in to activate your shop.",
+            "message": (
+                "Email verified. Sign in to start selling."
+                if user.status == UserStatus.active
+                else "Email verified. Sign in to activate your shop."
+            ),
             "next": "login",
             "seller": True,
         }
@@ -279,6 +307,10 @@ def subscription_status(reference: str, db: Session = Depends(get_db)):
         except Exception:
             result = {}
         if result.get("status") == "success":
+            customer = result.get("customer") or {}
+            authorization = result.get("authorization") or {}
+            subscription.customer_ref = customer.get("customer_code") or subscription.customer_ref
+            subscription.authorization_code = authorization.get("authorization_code") or subscription.authorization_code
             activate_subscription(db, subscription)
             db.commit()
             payment_confirmed = subscription.last_activated_ref == reference

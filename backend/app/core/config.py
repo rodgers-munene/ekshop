@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     # Primary frontend origin, used to build payment provider redirect URLs
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # Structured logging
+    LOG_LEVEL: str = "INFO"
+    LOG_JSON: bool = False
+
     # M-Pesa Daraja API: the live checkout payment provider. Paystack is kept
     # only for seller subscription billing (see PAYSTACK_* below).
     MPESA_CONSUMER_KEY: str | None = None
@@ -37,6 +41,10 @@ class Settings(BaseSettings):
     # spirit as CRON_SECRET below, just carried in the URL instead.
     MPESA_CALLBACK_SECRET: str | None = None
 
+    # Outbound webhook for successful payment events (Make/Zapier/automations).
+    # Example: https://hook.us.make.com/...
+    PAYMENT_SUCCESS_WEBHOOK_URL: str | None = None
+
     # Paystack: seller subscription billing only (checkout uses M-Pesa above).
     PAYSTACK_SECRET_KEY: str | None = None
     PAYSTACK_PUBLIC_KEY: str | None = None
@@ -51,6 +59,17 @@ class Settings(BaseSettings):
 
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "Ekshop <notifications@mail.ekshop.store>"
+    ADMIN_REPORT_EMAIL: str | None = None
+
+    ALERT_MIN_GROSS_MARGIN_PCT: float = 90.0
+    ALERT_MAX_MPESA_LATENCY_SECONDS: float = 2.0
+    ALERT_MAX_HOSTING_COST_PER_ORDER: float = 20.0
+    ALERT_MAX_ORDER_CANCELLATION_RATE: float = 10.0
+    ALERT_MIN_ON_TIME_DELIVERY_RATE: float = 80.0
+    ALERT_MAX_CART_ABANDONMENT_RATE: float = 70.0
+
+    ORS_API_KEY: str | None = None
+    ORS_BASE_URL: str = "https://api.openrouteservice.org"
 
     # Product image storage (AWS S3): foundation only until AWS account access
     # is available; upload calls will fail until these are set.

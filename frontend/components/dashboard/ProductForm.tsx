@@ -66,6 +66,7 @@ export default function ProductForm({
 }) {
   const router = useRouter();
   const [saving, setSaving] = useState<"active" | "draft" | "edit" | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
 
   const [name, setName] = useState(product?.name ?? "");
@@ -308,8 +309,40 @@ export default function ProductForm({
     }
   }
 
-  const busy = saving !== null;
+  const busy = saving !== null || deleting;
   const photoCount = existingImages.length + pendingImages.length;
+
+  async function onDelete() {
+    if (!product || mode !== "edit") return;
+    if (!confirm("Delete this product? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/dashboard/products/${product.slug}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error("Could not delete product");
+        return;
+      }
+      toast.success("Product deleted");
+      router.push("/dashboard/products");
+      router.refresh();
+    } catch {
+      toast.error("Something went wrong. Try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function onDeleteVariant(variantId: string) {
+    if (!product || mode !== "edit") return;
+    if (!confirm("Delete this variant?")) return;
+    const res = await fetch(`/api/dashboard/products/${product.id}/variants/${variantId}`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("Could not delete variant");
+      return;
+    }
+    toast.success("Variant deleted");
+    router.refresh();
+  }
 
   return (
     <form
@@ -500,8 +533,13 @@ export default function ProductForm({
           {mode === "edit" && product?.variants && product.variants.length > 0 && (
             <ul className="text-sm mb-3 space-y-1">
               {product.variants.map((v) => (
-                <li key={v.id} className="bg-surface rounded px-3 py-1.5">
-                  {v.name}: {v.value} {v.stock_qty ? `(${v.stock_qty} in stock)` : ""}
+                <li key={v.id} className="bg-surface rounded px-3 py-1.5 flex items-center justify-between">
+                  <span>
+                    {v.name}: {v.value} {v.stock_qty ? `(${v.stock_qty} in stock)` : ""}
+                  </span>
+                  <button type="button" onClick={() => onDeleteVariant(v.id)} className="text-danger text-xs ml-2">
+                    Delete
+                  </button>
                 </li>
               ))}
             </ul>
@@ -551,6 +589,17 @@ export default function ProductForm({
                     ? "Publish product"
                     : "Save changes"}
             </button>
+
+            {mode === "edit" && product && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onDelete}
+                className="shrink-0 text-xs text-danger underline underline-offset-2 disabled:opacity-50"
+              >
+                Delete product
+              </button>
+            )}
 
             {mode === "create" && (
               <button

@@ -22,6 +22,9 @@
     "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.22.0",
     "motion": "^12.42.2",
     "next": "16.2.9",
@@ -35,6 +38,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -42,5 +46,8 @@
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "sharp@0.34.5": true
   }
 }

@@ -34,11 +34,17 @@ export interface Shop {
   county?: string;
   town?: string;
   status?: "pending" | "active" | "suspended";
+  phone?: string;
+  exact_location?: string;
+  seller_id?: string;
   is_verified: boolean;
   is_featured: boolean;
   rating_avg: string;
   rating_count: number;
   total_sales: string;
+  lat?: number;
+  lng?: number;
+  distance_km?: number;
   created_at?: string;
 }
 
@@ -87,6 +93,7 @@ export interface SubscriptionPlan {
   price_yearly: string | null;
   max_products: number | null;
   commission_rate: string;
+  trial_days: number;
 }
 
 export interface Subscription {
@@ -185,6 +192,7 @@ export interface Order {
   total: string;
   items: OrderItem[];
   created_at: string;
+  buyer_id?: string;
   buyer_name?: string;
   delivery_address?: {
     first_name: string;
@@ -194,6 +202,9 @@ export interface Order {
     town: string;
     exact_location?: string;
     apartment?: string;
+    lat?: number;
+    lng?: number;
+    sublocation?: string;
   };
 }
 
@@ -223,6 +234,8 @@ export interface Delivery {
   tracking_number?: string;
   estimated_at?: string;
   delivered_at?: string;
+  distance_km?: number;
+  duration_min?: number;
   events: DeliveryEvent[];
   order?: Order;
 }
@@ -235,7 +248,29 @@ export interface DeliveryAgent {
   status: string;
   total_deliveries: number;
   rating_avg: string;
+  current_lat?: number;
+  current_lng?: number;
+  last_location_update?: string;
   created_at: string;
+}
+
+export interface RouteStop {
+  delivery_id: string;
+  tracking_number: string;
+  buyer_name: string;
+  address: string;
+  lat?: number;
+  lng?: number;
+  distance_from_previous_km?: number;
+  duration_from_previous_min?: number;
+}
+
+export interface RouteOptimizationResponse {
+  origin_lat?: number;
+  origin_lng?: number;
+  total_distance_km?: number;
+  total_duration_min?: number;
+  stops: RouteStop[];
 }
 
 // Notifications
@@ -250,32 +285,39 @@ export interface Notification {
 }
 
 // Messaging
+export type MessageSenderType = "customer" | "seller" | "agent" | "admin";
+
 export interface Message {
   id: string;
-  sender_id?: string;
+  conversation_id: string;
+  sender_id?: string | null;
+  sender_agent_id?: string | null;
+  sender_type: MessageSenderType;
+  sender_name?: string | null;
   body: string;
   is_read: boolean;
+  // Relative to the signed-in user or agent.
+  is_mine: boolean;
   created_at: string;
-}
-
-export interface Conversation {
-  id: string;
-  buyer_id: string;
-  shop_id: string;
-  shop_name?: string;
-  last_message_at: string;
-  messages: Message[];
 }
 
 export interface ConversationSummary {
   id: string;
-  buyer_id: string;
-  shop_id: string;
-  shop_name?: string;
-  buyer_name?: string;
-  last_message_at: string;
-  last_message_body?: string;
+  buyer_id?: string | null;
+  shop_id?: string | null;
+  order_id?: string | null;
+  // Who the conversation is with, from the viewer's side.
+  title: string;
+  shop_name?: string | null;
+  buyer_name?: string | null;
+  last_message_at?: string | null;
+  created_at: string;
+  last_message_body?: string | null;
   unread_count: number;
+}
+
+export interface Conversation extends ConversationSummary {
+  messages: Message[];
 }
 
 // Admin
@@ -313,6 +355,140 @@ export interface AdminTrendPoint {
   label: string;
   revenue: number;
   orders: number;
+}
+
+export interface CartAbandonedProduct {
+  product_id: string | null;
+  name: string;
+  slug: string | null;
+  units: number;
+  at_risk_revenue: string;
+}
+
+export interface TopPurchasedProduct {
+  product_id: string | null;
+  name: string;
+  slug: string | null;
+  units: number;
+  revenue: string;
+}
+
+export interface CartAbandonmentMetrics {
+  carts_touched: number;
+  converted_carts: number;
+  abandoned_carts: number;
+  cart_abandonment_rate: number;
+  abandoned_units: number;
+  at_risk_revenue: string;
+  abandoned_products: CartAbandonedProduct[];
+  top_products: TopPurchasedProduct[];
+}
+
+export interface MerchantMasterHealth {
+  merchant: string;
+  location: string;
+  category: string;
+  stage: string;
+  activity: number;
+  catalogue: number;
+  demand: number;
+  reliability: number;
+  growth: number;
+  health: number;
+  health_tier: string;
+  last_login: string | null;
+  orders_30d: number;
+  dispatch_hrs: number;
+  cancel_pct: number;
+  response_min: number;
+  next_action: string;
+  owner: string;
+}
+
+export interface OrderControlTowerRow {
+  order_id: string;
+  received: string;
+  merchant: string;
+  customer: string;
+  ack_time: string | null;
+  accepted: boolean;
+  ready_time: string | null;
+  rider_assigned: string | null;
+  pickup_time: string | null;
+  delivered_time: string | null;
+  dispatch_hrs: number;
+  delivery_hrs: number;
+  status: string;
+  exception_owner: string;
+}
+
+export interface CustomerRecoveryRow {
+  customer: string;
+  segment: string;
+  last_activity: string | null;
+  cart_value: string;
+  issue_trigger: string;
+  contact_date: string | null;
+  channel: string;
+  response: string;
+  recovered_order: boolean;
+  next_action: string;
+}
+
+export interface SupplyDemandRow {
+  category_area: string;
+  searches_views: number;
+  cart_adds: number;
+  orders: number;
+  active_shops: number;
+  products_live: number;
+  demand_score: number;
+  supply_score: number;
+  gap: number;
+  action: string;
+}
+
+export interface PriorityAcquisitionRow {
+  prospect: string;
+  category: string;
+  area: string;
+  demand_evidence: string;
+  reliability_potential: string;
+  strategic_value: string;
+  priority_score: number;
+  reason: string;
+}
+
+export interface AdminOverviewPeriodMetrics {
+  revenue: string;
+  orders: number;
+  average_order_value: string;
+  new_users: number;
+  new_buyers: number;
+  new_sellers: number;
+  new_shops: number;
+  new_products: number;
+  cart_abandonment_rate: number;
+}
+
+export interface AdminOverviewTotals {
+  total_users: number;
+  total_buyers: number;
+  total_sellers: number;
+  total_shops: number;
+  shops_pending_verification: number;
+  total_products: number;
+  total_orders: number;
+  revenue_total: string;
+}
+
+export interface AdminOverview {
+  period: string;
+  start: string;
+  metrics: AdminOverviewPeriodMetrics;
+  previous: AdminOverviewPeriodMetrics;
+  totals: AdminOverviewTotals;
+  trend: AdminTrendPoint[];
 }
 
 // Investor
@@ -495,12 +671,135 @@ export interface OperationsDeliveryMetrics {
   delivery_revenue: string;
 }
 
+export interface MarginLeakageTrendPoint {
+  label: string;
+  gmv: number;
+  platform_commission: number;
+  mpesa_fees: number;
+  net_profit: number;
+  gross_margin_pct: number;
+  aov: number;
+}
+
+export interface MarginLeakageMetrics {
+  period: string;
+  start: string;
+  end: string;
+  gmv: string;
+  orders: number;
+  average_order_value: string;
+  platform_commission: string;
+  mpesa_fees: string;
+  server_cost: string;
+  net_profit: string;
+  gross_margin_pct: number;
+  commission_rate_pct: number;
+  mpesa_rate_pct: number;
+  trend: MarginLeakageTrendPoint[];
+}
+
+export interface RealTimeMetrics {
+  active_sessions: number;
+  active_users: number;
+  recent_purchases: number;
+  active_carts: number;
+}
+
+export interface AcquisitionMetrics {
+  new_users: number;
+  returning_buyers: number;
+  new_user_rate: number;
+  returning_user_rate: number;
+  total_users_in_period: number;
+}
+
+export interface BehaviorMetrics {
+  views: number;
+  clicks: number;
+  add_to_carts: number;
+  purchases: number;
+  view_to_click_rate: number;
+  click_to_cart_rate: number;
+  cart_to_purchase_rate: number;
+  overall_conversion_rate: number;
+}
+
+export interface EcommerceMetrics {
+  transactions: number;
+  revenue: string;
+  average_order_value: string;
+  conversion_rate: number;
+  revenue_per_session: string;
+  top_products: TopPurchasedProduct[];
+}
+
+export interface TopMerchantInsight {
+  name: string;
+  orders: number;
+  revenue: string;
+}
+
+export interface ChurnRiskInsight {
+  first_name: string;
+  last_name: string;
+  email: string;
+  last_order_at: string | null;
+}
+
 export interface OrderNotificationRecipient {
   id: string;
   email: string;
   label?: string;
   is_active: boolean;
   created_at: string;
+}
+
+export interface AdminEmailStatus {
+  resend_configured: boolean;
+  from_address: string;
+  from_domain: string;
+  verified_domains: string[];
+  from_domain_verified: boolean;
+  domains_error?: string | null;
+  active_recipient_count: number;
+}
+
+export interface AdminEmailTestResult {
+  success: boolean;
+  detail: string;
+}
+
+export interface RecentOrderRow {
+  id: string;
+  short_id: string;
+  created_at: string;
+  buyer_name: string;
+  total: string;
+  item_count: number;
+  shop_count: number;
+}
+
+export interface RecentOrderListResponse {
+  total: number;
+  page: number;
+  limit: number;
+  results: RecentOrderRow[];
+}
+
+export interface AdminProductRow {
+  id: string;
+  name: string;
+  price: string;
+  status: string;
+  shop_name?: string | null;
+  created_at: string;
+}
+
+export interface AdminProductListResponse {
+  total: number;
+  page: number;
+  limit: number;
+  results: AdminProductRow[];
 }
 
 // Geography (Kenya county → subcounty → ward)
@@ -538,6 +837,50 @@ export interface UserAddress {
   exact_location?: string;
   apartment?: string;
   is_default: boolean;
+  lat?: number;
+  lng?: number;
+  sublocation?: string;
+}
+
+export interface ReverseGeocodeResult {
+  lat: number;
+  lng: number;
+  county: string;
+  subcounty: string;
+  ward: string;
+  location?: string | null;
+  sublocation?: string | null;
+  address_hint: string;
+  county_id?: string | null;
+  subcounty_id?: string | null;
+  ward_id?: string | null;
+}
+
+export interface GeoSearchResult {
+  type: "ward" | "location" | "subcounty" | "sublocation";
+  name: string;
+  subtitle: string;
+  lat: number;
+  lng: number;
+  county?: string | null;
+  subcounty?: string | null;
+  ward?: string | null;
+  location?: string | null;
+  sublocation?: string | null;
+}
+
+export interface GeoSelection {
+  lat: number;
+  lng: number;
+  county: string;
+  subcounty: string;
+  ward: string;
+  location?: string | null;
+  sublocation?: string | null;
+  addressHint: string;
+  countyId?: string | null;
+  subcountyId?: string | null;
+  wardId?: string | null;
 }
 
 // Seller dashboard

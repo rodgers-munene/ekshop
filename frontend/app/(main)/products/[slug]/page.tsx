@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { serverFetch } from "@/lib/server-api";
+import { SITE_URL as siteUrl } from "@/lib/site";
 import { Product } from "@/types/interface";
 import { formatKES, decodeHtml, resolveImageUrl } from "@/lib/utils";
 import AddToCart from "./AddToCart";
@@ -12,6 +13,7 @@ import ProductImageGallery from "./ProductImageGallery";
 import ProductReviews from "@/components/ProductReviews";
 import ProductRail from "@/components/ProductRail";
 import ViewTracker from "./ViewTracker";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -77,7 +79,6 @@ export default async function ProductDetailPage({ params }: Props) {
     : Promise.resolve([] as Product[]);
   const recommendations = (await personalised).filter((p) => p.id !== product.id).slice(0, 6);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   const productUrl = `${siteUrl}/products/${product.slug}`;
 
   const jsonLd = {
@@ -229,6 +230,13 @@ export default async function ProductDetailPage({ params }: Props) {
             <div className="border-t border-border pt-4">
               <AddToCart product={product} />
             </div>
+
+            {/* Message seller */}
+            {product.shop && (
+              <div className="border-t border-border pt-4">
+                <MessageSellerButton shopId={product.shop.id} />
+              </div>
+            )}
 
             {/* Tags */}
             {product.tags && product.tags.length > 0 && (

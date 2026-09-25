@@ -326,6 +326,9 @@ def checkout(
         "ward": address.ward.name if address.ward else None,
         "exact_location": address.exact_location,
         "apartment": address.apartment,
+        "lat": address.lat,
+        "lng": address.lng,
+        "sublocation": address.sublocation,
     }
 
     order_group = OrderGroup(

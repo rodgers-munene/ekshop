@@ -1,0 +1,27 @@
+name: Scheduled admin reports
+
+# Billing and M-Pesa reconciliation have their own workflows
+# (subscription-billing-cron.yml, mpesa-reconcile-cron.yml); running them
+# here too would process the same subscriptions twice.
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # 04:00 UTC daily = 07:00 Nairobi
+  workflow_dispatch: {}
+
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Send daily admin report
+        run: |
+          curl -sf -X POST "${{ secrets.BACKEND_BASE_URL }}/internal/cron/admin/daily-report" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
+
+      - name: Send weekly insight digest (Mondays, or on a manual run)
+        run: |
+          if [ "$(date -u +%u)" = "1" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            curl -sf -X POST "${{ secrets.BACKEND_BASE_URL }}/internal/cron/admin/weekly-insight-digest" \
+              -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
+          fi

@@ -8,9 +8,12 @@ import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { Crosshair, MapPin } from "lucide-react";
 import { getSellerPlan } from "@/lib/plans";
 import { isValidKenyanPhone, normalizeKenyanPhone } from "@/lib/phone";
-import type { County } from "@/types/interface";
+import type { County, GeoSelection } from "@/types/interface";
+import { reverseGeocode } from "@/lib/geo";
+import LocationPicker from "@/components/geo/LocationPicker";
 
 // These mirror app/core/validators.py. Letters, spaces, hyphens, apostrophes
 // and periods cover real names (Murang'a, Mary-Anne, initials) while keeping
@@ -78,6 +81,59 @@ function RegisterPageInner() {
 
   const [loading, setLoading] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [geoHint, setGeoHint] = useState("");
+  const [selectedLat, setSelectedLat] = useState<number | null>(null);
+  const [selectedLng, setSelectedLng] = useState<number | null>(null);
+
+  function applyCounty(sel: GeoSelection) {
+    setValue("county", sel.county, { shouldValidate: true });
+    setGeoHint(sel.addressHint);
+    setSelectedLat(sel.lat);
+    setSelectedLng(sel.lng);
+  }
+
+  function detectLocation() {
+    if (!navigator.geolocation) {
+      toast.error("Location isn't available on this device. Use the map instead.");
+      return;
+    }
+    setDetecting(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const data = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          if (!data) {
+            toast.error("We couldn't pinpoint your location — use the map instead.");
+            return;
+          }
+          applyCounty({
+            lat: data.lat,
+            lng: data.lng,
+            county: data.county,
+            subcounty: data.subcounty,
+            ward: data.ward,
+            location: data.location,
+            sublocation: data.sublocation,
+            addressHint: data.address_hint,
+            countyId: data.county_id,
+            subcountyId: data.subcounty_id,
+            wardId: data.ward_id,
+          });
+        } catch {
+          toast.error("Something went wrong while detecting your location. Use the map instead.");
+        } finally {
+          setDetecting(false);
+        }
+      },
+      () => {
+        setDetecting(false);
+        toast.error("Couldn't get your location. Check browser permission or use the map.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<RegisterForm>({
     resolver: zodResolver(schema),
@@ -118,6 +174,8 @@ function RegisterPageInner() {
           ...data,
           phone: normalizeKenyanPhone(data.phone) ?? data.phone,
           plan_code: data.role === "seller" ? selectedPlan?.code : undefined,
+          lat: selectedLat,
+          lng: selectedLng,
         }),
       });
       const json = await res.json();
@@ -252,6 +310,30 @@ function RegisterPageInner() {
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={detectLocation}
+                  disabled={detecting}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-amber disabled:opacity-50"
+                >
+                  <Crosshair size={14} className={detecting ? "animate-spin" : ""} />
+                  {detecting ? "Detecting…" : "Use my location"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapOpen(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-amber"
+                >
+                  <MapPin size={14} />
+                  Set on map
+                </button>
+                {geoHint && (
+                  <span className="text-xs text-ink/70">
+                    Detected: <strong>{geoHint}</strong>
+                  </span>
+                )}
+              </div>
               {errors.county && <p className="text-danger text-xs mt-1">{errors.county.message}</p>}
               {countiesFailed && (
                 <p className="text-danger text-xs mt-1">
@@ -288,6 +370,29 @@ function RegisterPageInner() {
         )}
         </div>
       </div>
+
+      {mapOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMapOpen(false)}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-2 text-center text-sm font-medium text-white">
+              Drop the pin where you live — switch between Satellite and Streets
+            </p>
+            <LocationPicker
+              initial={
+                selectedLat != null && selectedLng != null
+                  ? { lat: selectedLat, lng: selectedLng }
+                  : undefined
+              }
+              onCancel={() => setMapOpen(false)}
+              onConfirm={(sel) => {
+                applyCounty(sel);
+                setMapOpen(false);
+                toast.success("County set");
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

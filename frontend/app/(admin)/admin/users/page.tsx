@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PaginatedResponse, User } from "@/types/interface";
 import Pagination from "@/components/admin/Pagination";
+import MessageUserButton from "@/components/MessageUserButton";
 
 const LIMIT = 20;
 
@@ -93,7 +94,8 @@ export default function AdminUsersPage() {
                 </div>
                 <p className="text-xs text-muted truncate">{u.email}</p>
               </div>
-              <div className="shrink-0">
+              <div className="shrink-0 flex items-center gap-2">
+                <MessageUserButton userId={u.id} userName={`${u.first_name} ${u.last_name}`} />
                 {u.status === "suspended" ? (
                   <button onClick={() => reactivate(u.id)} className="btn-accent text-xs py-1.5 px-3">
                     Reactivate

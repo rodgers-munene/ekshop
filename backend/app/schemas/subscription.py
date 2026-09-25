@@ -28,6 +28,7 @@ class SubscriptionPlanRead(BaseModel):
     price_yearly: Optional[str]
     max_products: Optional[int]
     commission_rate: str
+    trial_days: int = 0
 
     model_config = {"from_attributes": True}
 

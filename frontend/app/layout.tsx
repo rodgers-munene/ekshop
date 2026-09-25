@@ -3,6 +3,7 @@ import { Fraunces, DM_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import QueryProvider from "@/lib/query-provider";
 import PwaHelper from "@/components/PwaHelper";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -18,7 +19,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL!),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Ekshop - Kenya's Marketplace",
     template: "%s | Ekshop",

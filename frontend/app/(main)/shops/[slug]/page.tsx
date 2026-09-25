@@ -6,7 +6,7 @@ import { serverFetch } from "@/lib/server-api";
 import { resolveImageUrl, decodeHtml } from "@/lib/utils";
 import { Shop, ProductListResponse } from "@/types/interface";
 import ProductCard from "@/components/ProductCard";
-import MessageSellerButton from "./MessageSellerButton";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 interface Props {
   params: Promise<{ slug: string }>;

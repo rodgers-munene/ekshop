@@ -41,6 +41,11 @@
 }
 
 /* Base styles */
+@keyframes slide-in {
+  from { transform: translateX(24px); opacity: 0.6; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
 body {
   background-color: var(--bg);
   color: var(--ink);

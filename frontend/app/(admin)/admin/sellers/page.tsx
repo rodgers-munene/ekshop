@@ -8,6 +8,7 @@ import { BadgeCheck, ChevronRight, Star } from "lucide-react";
 import { PaginatedResponse, Shop } from "@/types/interface";
 import Pagination from "@/components/admin/Pagination";
 import ActionButton from "@/components/admin/ActionButton";
+import MessageUserButton from "@/components/MessageUserButton";
 
 type Filter = "pending" | "active" | "suspended" | "all";
 const LIMIT = 20;
@@ -153,6 +154,7 @@ export default function AdminSellersPage() {
                   >
                     Suspend
                   </ActionButton>
+                  {shop.seller_id && <MessageUserButton userId={shop.seller_id} userName={shop.name} />}
                   <Link
                     href={`/admin/sellers/${shop.id}`}
                     className="hidden md:inline-flex items-center text-xs font-medium py-1.5 px-3 rounded-md text-amber hover:bg-amber/5"

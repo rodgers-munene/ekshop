@@ -12,6 +12,8 @@ class ShopCreate(BaseModel):
     description: Optional[str] = None
     county: Optional[str] = None
     town: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     ward_id: Optional[uuid.UUID] = None
     exact_location: Optional[str] = None
     phone: Optional[str] = None
@@ -27,6 +29,8 @@ class ShopRead(BaseModel):
     banner_url: Optional[str]
     county: Optional[str]
     town: Optional[str]
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     ward_id: Optional[uuid.UUID]
     ward: Optional[WardWithLocationRead] = None
     rating_avg: Optional[str]
@@ -47,6 +51,8 @@ class ShopUpdate(BaseModel):
     banner_url: Optional[str] = None
     county: Optional[str] = None
     town: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     ward_id: Optional[uuid.UUID] = None
     exact_location: Optional[str] = None
     phone: Optional[str] = None

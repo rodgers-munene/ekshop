@@ -20,6 +20,7 @@ export default function MessagesPage() {
       fetch("/api/conversations")
         .then((r) => r.json())
         .then((data) => (Array.isArray(data) ? (data as ConversationSummary[]) : [])),
+    refetchInterval: 15000,
   });
 
   async function openSupport() {
@@ -121,7 +122,7 @@ export default function MessagesPage() {
                 className="card flex items-center justify-between gap-3 p-4 hover:border-amber/50 transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{c.shop_name ?? "Shop"}</p>
+                  <p className="font-medium truncate">{c.title}</p>
                   <p className="text-sm text-muted truncate">{c.last_message_body ?? "No messages yet"}</p>
                 </div>
                 {c.unread_count > 0 && (

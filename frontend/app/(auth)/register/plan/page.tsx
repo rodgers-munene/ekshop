@@ -11,7 +11,7 @@ export default function ChoosePlanPage() {
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold mt-6 mb-3">Choose your seller plan</h1>
           <p className="text-muted">
-            Pick the package that fits your shop. You&apos;ll enter your details and pay next.
+            Pick the package that fits your shop. Both start with 14 days free — no payment until your trial ends.
           </p>
         </div>
 
@@ -44,7 +44,7 @@ export default function ChoosePlanPage() {
                 href={`/register?role=seller&plan=${plan.code}`}
                 className="btn-accent text-center"
               >
-                Get started
+                Start 14-day free trial
               </Link>
             </div>
           ))}

@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# psycopg (non-binary) and cryptography need a C toolchain + libpq headers to build
+# psycopg (non-binary) needs a C toolchain and libpq headers
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
@@ -23,6 +23,10 @@ USER appuser
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/ || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Gunicorn + Uvicorn workers. Each worker loads the Kenya boundary layers
+# (roughly 470 MB), so size WORKERS to the instance: docker run -e WORKERS=1 ...
+ENV WORKERS=2
+CMD exec gunicorn app.main:app --workers "$WORKERS" --worker-class uvicorn.workers.UvicornWorker \
+    --bind 0.0.0.0:8000 --timeout 120 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50

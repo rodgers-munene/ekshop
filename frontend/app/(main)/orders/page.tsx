@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { serverFetch, ServerFetchError } from "@/lib/server-api";
 import { OrderGroup } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 const STATUS_STYLE: Record<string, string> = {
   pending_payment: "bg-amber/15 text-amber",
@@ -50,7 +51,12 @@ export default async function OrdersPage() {
               </div>
               <div className="px-5 py-3 flex items-center justify-between">
                 <p className="text-sm text-muted">{group.orders.length} shop{group.orders.length !== 1 ? "s" : ""} · {group.orders.reduce((s, o) => s + o.items.length, 0)} items</p>
-                <p className="font-bold text-ink">{formatKES(group.total)}</p>
+                <div className="flex items-center gap-3">
+                  {group.orders[0]?.shop?.id && (
+                    <MessageSellerButton shopId={group.orders[0].shop.id} />
+                  )}
+                  <p className="font-bold text-ink">{formatKES(group.total)}</p>
+                </div>
               </div>
             </Link>
           ))}

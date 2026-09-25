@@ -48,10 +48,18 @@ export default async function BillingPage() {
   const needsRenewal = subscription.status !== "active";
   const remaining = daysLeft(subscription.current_period_end);
 
-  const buttonLabel = isGracePeriod ? "Activate now" : needsRenewal ? "Renew now" : "Renew early";
+  const buttonLabel = isGracePeriod
+    ? "Activate now"
+    : subscription.status === "trialing"
+      ? "Subscribe now"
+      : needsRenewal
+        ? "Renew now"
+        : "Renew early";
 
   let helpText: string;
-  if (isGracePeriod) {
+  if (subscription.status === "trialing") {
+    helpText = `You're on a free trial of ${subscription.plan.name} until ${formatDate(subscription.current_period_end)}. Subscribe before then to keep your shop live. Your paid period starts when the trial ends.`;
+  } else if (isGracePeriod) {
     helpText = `You have ${remaining} day${remaining === 1 ? "" : "s"} left to activate your ${subscription.plan.name} plan before it's enforced — activate now to lock it in, no need to wait.`;
   } else if (subscription.status === "cancelled") {
     helpText = "Your shop is suspended and hidden from Ekshop until you renew.";
@@ -84,7 +92,7 @@ export default async function BillingPage() {
         </div>
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted">
-            {isGracePeriod ? "Activate by" : needsRenewal ? "Was due" : "Renews on"}
+            {isGracePeriod ? "Activate by" : subscription.status === "trialing" ? "Trial ends" : needsRenewal ? "Was due" : "Renews on"}
           </span>
           <span className="font-semibold">{formatDate(subscription.current_period_end)}</span>
         </div>

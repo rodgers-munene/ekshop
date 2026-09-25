@@ -8,6 +8,18 @@ async function getToken() {
   return cookieStore.get("ekshop_token")?.value;
 }
 
+export async function GET() {
+  const token = await getToken();
+  if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+
+  const res = await fetch(`${BASE_URL}/users/me/addresses`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  return NextResponse.json(data, { status: res.status });
+}
+
 export async function POST(req: NextRequest) {
   const token = await getToken();
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });

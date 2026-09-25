@@ -4,6 +4,7 @@ import httpx
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from app.core.config import settings
+from app.core.circuit_breaker import mpesa_circuit
 
 # Kenya has a fixed UTC+3 offset with no DST, so this is always correct —
 # unlike datetime.now(), which is only right if the host's local timezone
@@ -19,16 +20,23 @@ def _build_password(timestamp: str) -> str:
     return base64.b64encode(raw_password.encode()).decode()
 
 
+DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+
+
 def get_access_token() -> str:
     credentials = f"{settings.MPESA_CONSUMER_KEY}:{settings.MPESA_CONSUMER_SECRET}"
     encoded = base64.b64encode(credentials.encode()).decode()
 
-    response = httpx.get(
-        f"{settings.MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials",
-        headers={"Authorization": f"Basic {encoded}"},
-    )
-    response.raise_for_status()
-    return response.json()["access_token"]
+    def _call() -> str:
+        response = httpx.get(
+            f"{settings.MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials",
+            headers={"Authorization": f"Basic {encoded}"},
+            timeout=DEFAULT_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()["access_token"]
+
+    return mpesa_circuit.call(_call)
 
 
 def normalize_phone(raw: str) -> str:
@@ -75,6 +83,7 @@ def initiate_stk_push(access_token: str, phone: str, amount: int, order_ref: str
         f"{settings.MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest",
         json=payload,
         headers={"Authorization": f"Bearer {access_token}"},
+        timeout=DEFAULT_TIMEOUT,
     )
     response.raise_for_status()
 
@@ -97,16 +106,20 @@ def query_stk_push_status(access_token: str, checkout_request_id: str) -> dict:
         "CheckoutRequestID": checkout_request_id,
     }
 
-    response = httpx.post(
-        f"{settings.MPESA_BASE_URL}/mpesa/stkpushquery/v1/query",
-        json=payload,
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
+    def _call() -> dict:
+        response = httpx.post(
+            f"{settings.MPESA_BASE_URL}/mpesa/stkpushquery/v1/query",
+            json=payload,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=DEFAULT_TIMEOUT,
+        )
 
-    if response.status_code == 500:
-        body = response.json()
-        if body.get("errorCode") == "500.001.1001":
-            return {"pending": True}
+        if response.status_code == 500:
+            body = response.json()
+            if body.get("errorCode") == "500.001.1001":
+                return {"pending": True}
 
-    response.raise_for_status()
-    return response.json()
+        response.raise_for_status()
+        return response.json()
+
+    return mpesa_circuit.call(_call, fallback=lambda: {"pending": True})

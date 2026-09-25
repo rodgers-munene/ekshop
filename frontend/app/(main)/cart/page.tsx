@@ -1,11 +1,56 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useCartStore } from "@/store/cartStore";
 import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
+import LocationPicker from "@/components/geo/LocationPicker";
+import { UserAddress } from "@/types/interface";
+import MessageSellerButton from "@/components/MessageSellerButton";
 
 export default function CartPage() {
   const { items, updateQuantity, removeItem, clearCart, totalPrice } = useCartStore();
+  const [addresses, setAddresses] = useState<UserAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [mapOpen, setMapOpen] = useState(false);
+  const [pinSaving, setPinSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/account/addresses")
+      .then((r) => r.json().catch(() => []))
+      .then((data) => {
+        const list: UserAddress[] = Array.isArray(data) ? data : [];
+        setAddresses(list);
+        const def = list.find((a) => a.is_default) ?? list[0];
+        if (def) setSelectedAddressId(def.id);
+      })
+      .catch(() => setAddresses([]));
+  }, []);
+
+  const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
+
+  async function updateAddressPin(sel: { lat: number; lng: number; sublocation?: string | null }) {
+    if (!selectedAddressId) return;
+    setPinSaving(true);
+    try {
+      const res = await fetch(`/api/account/addresses/${selectedAddressId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: sel.lat, lng: sel.lng, sublocation: sel.sublocation ?? "" }),
+      });
+      if (!res.ok) throw new Error();
+      setAddresses((prev) =>
+        prev.map((a) =>
+          a.id === selectedAddressId ? { ...a, lat: sel.lat, lng: sel.lng, sublocation: sel.sublocation ?? "" } : a
+        )
+      );
+      setMapOpen(false);
+    } catch {
+      // ignore
+    } finally {
+      setPinSaving(false);
+    }
+  }
 
   if (items.length === 0) {
     return (
@@ -64,7 +109,10 @@ export default function CartPage() {
               {/* Details */}
               <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>
-                  <p className="text-xs text-muted mb-0.5">{decodeHtml(item.shop_name)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-muted mb-0.5">{decodeHtml(item.shop_name)}</p>
+                    <MessageSellerButton shopId={item.shop_id} />
+                  </div>
                   <Link
                     href={`/products/${item.product_slug}`}
                     className="font-semibold text-sm leading-tight hover:text-amber transition-colors line-clamp-2"
@@ -139,7 +187,39 @@ export default function CartPage() {
               <span className="text-ink text-lg">{formatKES(totalPrice())}</span>
             </div>
 
-            <Link href="/checkout" className="btn-accent w-full mt-2">
+            {addresses.length > 0 && (
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-muted">Deliver to</label>
+                <select
+                  value={selectedAddressId}
+                  onChange={(e) => setSelectedAddressId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
+                >
+                  {addresses.map((addr) => (
+                    <option key={addr.id} value={addr.id}>
+                      {addr.first_name} {addr.last_name} — {addr.county}
+                    </option>
+                  ))}
+                </select>
+                {selectedAddress && !selectedAddress.lat && (
+                  <button
+                    type="button"
+                    onClick={() => setMapOpen(true)}
+                    className="flex items-center gap-2 text-xs text-amber hover:underline pt-1"
+                  >
+                    Pin delivery location on map
+                  </button>
+                )}
+                {selectedAddress?.lat && selectedAddress.sublocation && (
+                  <p className="text-xs text-green-600">Pinned: {selectedAddress.sublocation}</p>
+                )}
+              </div>
+            )}
+
+            <Link
+              href="/checkout"
+              className="btn-accent w-full mt-2"
+            >
               Proceed to Checkout →
             </Link>
 
@@ -153,6 +233,27 @@ export default function CartPage() {
         </div>
 
       </div>
+
+      {mapOpen && selectedAddressId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMapOpen(false)}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-2 text-center text-sm font-medium text-white">
+              Drop the pin where our rider should deliver — switch between Satellite and Streets
+            </p>
+            <LocationPicker
+              initial={
+                selectedAddress?.lat != null && selectedAddress.lng != null
+                  ? { lat: selectedAddress.lat, lng: selectedAddress.lng }
+                  : undefined
+              }
+              onCancel={() => setMapOpen(false)}
+              onConfirm={(sel) => {
+                if (!pinSaving) updateAddressPin(sel);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

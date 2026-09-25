@@ -5,8 +5,10 @@ from decimal import Decimal
 import httpx
 
 from app.core.config import settings
+from app.core.circuit_breaker import paystack_circuit
 
 PAYSTACK_BASE_URL = "https://api.paystack.co"
+DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
 def to_subunit(amount: str) -> int:
@@ -15,28 +17,36 @@ def to_subunit(amount: str) -> int:
 
 
 def initialize_transaction(email: str, amount: str, reference: str, callback_url: str) -> dict:
-    response = httpx.post(
-        f"{PAYSTACK_BASE_URL}/transaction/initialize",
-        json={
-            "email": email,
-            "amount": to_subunit(amount),
-            "currency": "KES",
-            "reference": reference,
-            "callback_url": callback_url,
-        },
-        headers={"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"},
-    )
-    response.raise_for_status()
-    return response.json()["data"]
+    def _call() -> dict:
+        response = httpx.post(
+            f"{PAYSTACK_BASE_URL}/transaction/initialize",
+            json={
+                "email": email,
+                "amount": to_subunit(amount),
+                "currency": "KES",
+                "reference": reference,
+                "callback_url": callback_url,
+            },
+            headers={"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"},
+            timeout=DEFAULT_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()["data"]
+
+    return paystack_circuit.call(_call)
 
 
 def verify_transaction(reference: str) -> dict:
-    response = httpx.get(
-        f"{PAYSTACK_BASE_URL}/transaction/verify/{reference}",
-        headers={"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"},
-    )
-    response.raise_for_status()
-    return response.json()["data"]
+    def _call() -> dict:
+        response = httpx.get(
+            f"{PAYSTACK_BASE_URL}/transaction/verify/{reference}",
+            headers={"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"},
+            timeout=DEFAULT_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()["data"]
+
+    return paystack_circuit.call(_call)
 
 
 def verify_webhook_signature(raw_body: bytes, signature: str | None) -> bool:
@@ -48,3 +58,23 @@ def verify_webhook_signature(raw_body: bytes, signature: str | None) -> bool:
         hashlib.sha512,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+def charge_authorization(authorization_code: str, email: str, amount: str, reference: str) -> dict:
+    def _call() -> dict:
+        response = httpx.post(
+            f"{PAYSTACK_BASE_URL}/transaction/charge_authorization",
+            json={
+                "authorization_code": authorization_code,
+                "email": email,
+                "amount": to_subunit(amount),
+                "currency": "KES",
+                "reference": reference,
+            },
+            headers={"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"},
+            timeout=DEFAULT_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()["data"]
+
+    return paystack_circuit.call(_call)

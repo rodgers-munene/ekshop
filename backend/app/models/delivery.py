@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text
+from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -44,6 +44,9 @@ class DeliveryAgent(Base):
     current_order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="SET NULL"))
     total_deliveries = Column(Integer, default=0)
     rating_avg = Column(String(5), default="5.00")
+    current_lat = Column(Float)
+    current_lng = Column(Float)
+    last_location_update = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     current_order = relationship("Order", foreign_keys=[current_order_id])
@@ -62,6 +65,8 @@ class Delivery(Base):
     picked_at = Column(DateTime(timezone=True))
     in_transit_at = Column(DateTime(timezone=True))
     delivered_at = Column(DateTime(timezone=True))
+    distance_km = Column(Float)
+    duration_min = Column(Float)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     order = relationship("Order", back_populates="delivery", foreign_keys=[order_id])
@@ -90,6 +95,18 @@ class PricingModel(str, enum.Enum):
     cart_total = "cart_total"
     # Distance bands + weight, one journey per cart. See delivery_pricing.py.
     cost_based = "cost_based"
+
+
+class DeliveryIssue(Base):
+    __tablename__ = "delivery_issues"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
+    reason = Column(String(100), nullable=False)
+    notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    delivery = relationship("Delivery")
 
 
 class DeliveryRateSettings(Base):

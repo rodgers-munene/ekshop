@@ -189,7 +189,7 @@ export default function DeliverySimulatorPage() {
         </div>
       )}
 
-      {data && (
+      {(data && Array.isArray(data.rows) && Array.isArray(data.buyer_counties) && data.buyer_regions) && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <p className="text-sm text-muted">

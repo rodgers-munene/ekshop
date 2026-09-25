@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Query
 import uuid
+from math import radians, cos, sin, asin, sqrt
 from typing import List, Optional
 
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import update, func
+from sqlalchemy import update, func, case, literal_column
 
 from app.dependencies.auth import (
     get_current_active_user,
@@ -48,6 +49,65 @@ def list_shops(
     skip = (page - 1) * limit
     results = q.order_by(Shop.rating_avg.desc()).offset(skip).limit(limit).all()
     return ShopListResponse(total=total, page=page, limit=limit, results=results)
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    r = 6371.0
+    dlat = radians(lat2 - lat1)
+    dlng = radians(lng2 - lng1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlng / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    return round(r * c, 2)
+
+
+@router.get(
+    "/nearby",
+    response_model=List[dict],
+    status_code=status.HTTP_200_OK,
+    summary="List active shops near a lat/lng within a radius",
+)
+def nearby_shops(
+    lat: float = Query(..., ge=-90, le=90),
+    lng: float = Query(..., ge=-180, le=180),
+    radius_km: float = Query(20, gt=0, le=200),
+    db: Session = Depends(get_db),
+):
+    shops = (
+        db.query(
+            Shop.id,
+            Shop.name,
+            Shop.slug,
+            Shop.is_verified,
+            Shop.rating_avg,
+            Shop.rating_count,
+            Shop.lat,
+            Shop.lng,
+        )
+        .filter(Shop.status == ShopStatus.active)
+        .filter(Shop.lat.is_not(None), Shop.lng.is_not(None))
+        .all()
+    )
+
+    results = []
+    for shop in shops:
+        distance = _haversine_km(lat, lng, float(shop.lat), float(shop.lng))
+        if distance <= radius_km:
+            results.append(
+                {
+                    "id": str(shop.id),
+                    "name": shop.name,
+                    "slug": shop.slug,
+                    "is_verified": shop.is_verified,
+                    "rating_avg": shop.rating_avg,
+                    "rating_count": shop.rating_count,
+                    "lat": shop.lat,
+                    "lng": shop.lng,
+                    "distance_km": distance,
+                }
+            )
+
+    results.sort(key=lambda item: item["distance_km"])
+    return results
 
 
 @router.post(

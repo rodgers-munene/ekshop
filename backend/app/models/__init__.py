@@ -9,6 +9,7 @@ from app.models.delivery import DeliveryAgent, Delivery, DeliveryEvent, Notifica
 from app.models.order_notifications import OrderNotificationRecipient
 from app.models.subscription import SubscriptionPlan, Subscription
 from app.models.messaging import Conversation, Message
+from app.models.automation import AutomationSettings
 from app.models.analytics import (
     UserEvent, ProductScore, UserPreference, SearchTerm,
     HeroSlide, Promotion, WeeklyAnalytics, IssueReport, ProductRequest,
@@ -26,6 +27,7 @@ __all__ = [
     "OrderNotificationRecipient",
     "SubscriptionPlan", "Subscription",
     "Conversation", "Message",
+    "AutomationSettings",
     "UserEvent", "ProductScore", "UserPreference", "SearchTerm",
     "HeroSlide", "Promotion", "WeeklyAnalytics", "IssueReport", "ProductRequest",
 ]

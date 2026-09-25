@@ -109,6 +109,9 @@ class ShopSummary(BaseModel):
     is_verified: bool
     rating_avg: str
     rating_count: int
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    distance_km: Optional[float] = None
 
     model_config = {"from_attributes": True}
 

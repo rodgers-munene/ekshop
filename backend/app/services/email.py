@@ -13,15 +13,48 @@ RESEND_API_URL = "https://api.resend.com/emails"
 
 def _send(to: str, subject: str, html: str) -> None:
     if not settings.RESEND_API_KEY:
-        logger.info("[DEV] Email to %s: %s\n%s", to, subject, html)
+        logger.warning(
+            "[EMAIL NOT CONFIGURED] RESEND_API_KEY is not set — email to %s skipped (subject: %r). "
+            "Set it and verify the sending domain in Resend for emails to actually go out.",
+            to, subject,
+        )
         return
 
     response = httpx.post(
         RESEND_API_URL,
         json={"from": settings.EMAIL_FROM, "to": [to], "subject": subject, "html": html},
         headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+        timeout=30,
+    )
+    if response.status_code >= 400:
+        # Surface Resend's reason (domain not verified, invalid recipient,
+        # rate limit, etc.) instead of a bare status so the admin can act on it.
+        detail = response.text[:500]
+        logger.error("Resend rejected email to %s (%s): %s", to, response.status_code, detail)
+        raise RuntimeError(f"Resend rejected email to {to} ({response.status_code}): {detail}")
+
+
+def resend_sending_domains() -> list[dict]:
+    """Verification status of the domains registered on the Resend account.
+    Resend only sends From addresses on verified domains — a domain with
+    pending DNS records silently rejects every send."""
+    if not settings.RESEND_API_KEY:
+        return []
+    response = httpx.get(
+        "https://api.resend.com/domains",
+        headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+        timeout=20,
     )
     response.raise_for_status()
+    return response.json().get("data", [])
+
+
+def send_test_email(to: str) -> None:
+    _send(
+        to=to,
+        subject="Ekshop test email",
+        html="<p>This is a test email from the Ekshop admin dashboard.</p><p>If you're reading this, the Resend integration is configured and the sending domain is verified.</p>",
+    )
 
 
 def send_verification_email(to: str, token: str, is_seller: bool = False) -> None:
@@ -203,6 +236,19 @@ def send_subscription_cancelled_email(to: str, shop) -> None:
     )
 
 
+def send_trial_expired_email(to: str, shop, plan_name: str) -> None:
+    e = html_lib.escape
+    link = f"{settings.FRONTEND_URL}/dashboard/billing"
+    _send(
+        to=to,
+        subject="Your Ekshop free trial has ended",
+        html=f"""
+            <p>Your <strong>{e(plan_name)}</strong> free trial for <strong>{e(shop.name)}</strong> has ended.</p>
+            <p>Your shop is now hidden from Ekshop. <a href="{link}">Subscribe now</a> to keep your shop live.</p>
+        """,
+    )
+
+
 def send_pos_provisioning_email(to_emails: Iterable[str], shop) -> None:
     """Notify the ops team that a new Duka Premium shop needs a Tara POS
     account created manually — there is no automated Tara integration yet."""
@@ -223,3 +269,74 @@ def send_pos_provisioning_email(to_emails: Iterable[str], shop) -> None:
     subject = f"Tara POS provisioning needed — {shop.name}"
     for to in to_emails:
         _send(to=to, subject=subject, html=body_html)
+
+
+def send_invoice_email(to: str, invoice: dict) -> None:
+    e = html_lib.escape
+    invoice_id = e(str(invoice.get("invoice_id") or invoice.get("order_id", "")))
+    created_at = invoice.get("created_at", "")
+    customer_name = e(str(invoice.get("customer_name", "")))
+    delivery_address = e(str(invoice.get("delivery_address", "")))
+    payment_reference = e(str(invoice.get("payment_reference") or ""))
+    payment_status = e(str(invoice.get("payment_status", "")))
+    currency = e(str(invoice.get("currency", "KES")))
+    subtotal = e(str(invoice.get("subtotal", "0")))
+    delivery_fee = e(str(invoice.get("delivery_fee", "0")))
+    total = e(str(invoice.get("total", "0")))
+    invoice_url = f"{settings.FRONTEND_URL}/invoices/{invoice.get('order_id', '')}"
+
+    items_rows = "".join(
+        f"""
+        <tr>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;">{e(str(item.get('name', 'Product')))}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">{e(str(item.get('qty', '')))}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">KES {e(str(item.get('unit_price', '0')))}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">KES {e(str(item.get('subtotal', '0')))}</td>
+        </tr>
+        """
+        for item in invoice.get("items", [])
+    )
+
+    body_html = f"""
+        <h2>Ekshop Kenya — Invoice {invoice_id}</h2>
+        <p>Date: {e(created_at)}</p>
+
+        <h3>Customer</h3>
+        <p>
+            {customer_name}<br>
+            {delivery_address}
+        </p>
+
+        <h3>Payment</h3>
+        <p>
+            Status: {payment_status}<br>
+            Reference: {payment_reference or '-'}
+        </p>
+
+        <h3>Items</h3>
+        <table style="border-collapse:collapse;width:100%;">
+            <thead>
+                <tr>
+                    <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #333;">Item</th>
+                    <th style="text-align:center;padding:6px 8px;border-bottom:2px solid #333;">Qty</th>
+                    <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #333;">Unit price</th>
+                    <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #333;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_rows}
+            </tbody>
+        </table>
+
+        <h3>Totals</h3>
+        <p>Subtotal: <strong>KES {subtotal}</strong></p>
+        <p>Delivery fee: <strong>KES {delivery_fee}</strong></p>
+        <p>Total paid: <strong>KES {total}</strong></p>
+
+        <p><a href="{invoice_url}">Download or print invoice</a></p>
+    """
+    _send(
+        to=to,
+        subject=f"Ekshop invoice {invoice_id}",
+        html=body_html,
+    )

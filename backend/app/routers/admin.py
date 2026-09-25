@@ -1,53 +1,93 @@
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import Numeric, cast, func
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.dependencies.auth import require_admin
 from app.dependencies.database import get_db
-from app.models.commerce import OrderGroup, OrderGroupStatus, Order, OrderStatus
+from app.models.commerce import (
+    Cart,
+    CartItem,
+    OrderGroup,
+    OrderGroupStatus,
+    Order,
+    OrderItem,
+    OrderStatus,
+)
 from app.models.catalog import Product, ProductStatus
 from app.models.delivery import Delivery
 from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
+from app.models.automation import AutomationSettings
 from app.schemas.admin import (
+    AcquisitionMetrics,
+    AdminEmailStatus,
+    AdminEmailTestRequest,
+    AdminEmailTestResult,
+    AdminOverviewPeriodMetrics,
+    AdminOverviewRead,
+    AdminOverviewTotals,
+    AdminProductListResponse,
+    AdminProductRow,
     AdminShopDetailRead,
     AdminShopOwnerRead,
     AdminShopSubscriptionRead,
     AdminStatsRead,
     AdminTrendPoint,
+    BehaviorMetrics,
+    CartAbandonmentMetrics,
+    CustomerRecoveryRow,
     CustomerRetentionMetrics,
+    EcommerceMetrics,
     HeroSlideCreate,
     HeroSlideRead,
     HeroSlideUpdate,
+    MarginLeakageMetrics,
+    MarginLeakageTrendPoint,
     MerchantActivityMetrics,
+    MerchantMasterHealth,
     OperationsDeliveryMetrics,
+    OrderControlTowerRow,
     OrderListResponse,
     OrderNotificationRecipientCreate,
     OrderNotificationRecipientRead,
     OrderNotificationRecipientUpdate,
     PeriodFigures,
     PeriodToDateMetrics,
+    PriorityAcquisitionRow,
     PromotionCreate,
     PromotionRead,
     PromotionUpdate,
+    RealTimeMetrics,
+    RecentOrderListResponse,
+    RecentOrderRow,
     SalesDemandMetrics,
     ShopListResponse,
+    SupplyDemandRow,
     UserListResponse,
 )
 from app.schemas.commerce import OrderRead
 from app.schemas.shop import ShopRead
 from app.schemas.user import UserRead
+from app.schemas.automation import AutomationSettingsRead, AutomationSettingsUpdate
 from app.services import storage
+from app.services import email as email_service
 from app.services import dashboard_metrics
+from app.services import automation as automation_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
+
+PERIOD_PATTERN = "^(today|yesterday|week|month)$"
 
 
 # ── Stats ────────────────────────────────────────────────────────────────────
@@ -155,6 +195,108 @@ def get_stats_trend(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    return _trend_points(db, days)
+
+
+def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOverviewPeriodMetrics:
+    figs = _period_figures(db, since, until)
+    new_buyers = (
+        db.query(func.count(User.id))
+        .filter(User.role == UserRole.buyer, User.created_at >= since, User.created_at < until)
+        .scalar() or 0
+    )
+    new_sellers = (
+        db.query(func.count(User.id))
+        .filter(User.role == UserRole.seller, User.created_at >= since, User.created_at < until)
+        .scalar() or 0
+    )
+    new_products = (
+        db.query(func.count(Product.id))
+        .filter(Product.created_at >= since, Product.created_at < until)
+        .scalar() or 0
+    )
+    sales = dashboard_metrics.get_sales_demand_metrics(db, since, until)
+    return AdminOverviewPeriodMetrics(
+        revenue=figs.revenue,
+        orders=figs.orders,
+        average_order_value=figs.average_order_value,
+        new_users=figs.new_users,
+        new_buyers=new_buyers,
+        new_sellers=new_sellers,
+        new_shops=figs.new_shops,
+        new_products=new_products,
+        cart_abandonment_rate=sales["cart_abandonment_rate"],
+    )
+
+
+@router.get("/stats/overview", response_model=AdminOverviewRead)
+def get_stats_overview(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(14, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    prev_since, prev_until = _previous_bounds(since, until)
+
+    metrics = _overview_period(db, since, until)
+    previous = _overview_period(db, prev_since, prev_until)
+
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    total_buyers = db.query(func.count(User.id)).filter(User.role == UserRole.buyer).scalar() or 0
+    total_sellers = db.query(func.count(User.id)).filter(User.role == UserRole.seller).scalar() or 0
+    total_shops = db.query(func.count(Shop.id)).scalar() or 0
+    shops_pending = db.query(func.count(Shop.id)).filter(Shop.status == ShopStatus.pending).scalar() or 0
+    total_products = db.query(func.count(Product.id)).scalar() or 0
+
+    paid_groups = db.query(OrderGroup).filter(OrderGroup.status == OrderGroupStatus.paid)
+    total_orders = paid_groups.count()
+    revenue_total = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
+
+    return AdminOverviewRead(
+        period=period or "days",
+        start=since,
+        metrics=metrics,
+        previous=previous,
+        totals=AdminOverviewTotals(
+            total_users=total_users,
+            total_buyers=total_buyers,
+            total_sellers=total_sellers,
+            total_shops=total_shops,
+            shops_pending_verification=shops_pending,
+            total_products=total_products,
+            total_orders=total_orders,
+            revenue_total=str(revenue_total),
+        ),
+        trend=_trend_points(db, 14),
+    )
+
+
+# ── Analytics ────────────────────────────────────────────────────────────────
+
+
+def _period_bounds(period: Optional[str], days: int) -> tuple[datetime, datetime]:
+    """Map a filter preset to a closed-open window [since, until) in Kenyan time."""
+    now = datetime.now(EAT)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period is None:
+        return now - timedelta(days=days), now
+    if period == "today":
+        return today_start, now
+    if period == "yesterday":
+        return today_start - timedelta(days=1), today_start
+    if period == "week":
+        return now - timedelta(days=7), now
+    return now - timedelta(days=30), now
+
+
+def _previous_bounds(since: datetime, until: datetime) -> tuple[datetime, datetime]:
+    """The like-for-like period immediately before [since, until)."""
+    span = until - since
+    return since - span, since
+
+
+def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
     since = datetime.now(timezone.utc) - timedelta(days=days - 1)
     day_col = func.date_trunc("day", OrderGroup.created_at)
 
@@ -185,46 +327,445 @@ def get_stats_trend(
     return points
 
 
-# ── Analytics ────────────────────────────────────────────────────────────────
-
-def _since(days: int) -> datetime:
-    return datetime.now(timezone.utc) - timedelta(days=days)
-
-
 @router.get("/metrics/merchants", response_model=MerchantActivityMetrics)
 def get_merchant_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(7, ge=1, le=365),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    return dashboard_metrics.get_merchant_activity_metrics(db, _since(days))
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_merchant_activity_metrics(db, since, until)
 
 
 @router.get("/metrics/sales", response_model=SalesDemandMetrics)
 def get_sales_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    return dashboard_metrics.get_sales_demand_metrics(db, _since(days))
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_sales_demand_metrics(db, since, until)
 
 
 @router.get("/metrics/retention", response_model=CustomerRetentionMetrics)
 def get_retention_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    return dashboard_metrics.get_customer_retention_metrics(db, _since(days))
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_customer_retention_metrics(db, since, until)
 
 
 @router.get("/metrics/operations", response_model=OperationsDeliveryMetrics)
 def get_operations_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    return dashboard_metrics.get_operations_delivery_metrics(db, _since(days))
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_operations_delivery_metrics(db, since, until)
+
+
+@router.get("/metrics/cart", response_model=CartAbandonmentMetrics)
+def get_cart_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_cart_abandonment_metrics(db, since, until)
+
+
+@router.get("/metrics/merchant-master-health", response_model=List[MerchantMasterHealth])
+def get_merchant_master_health(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_merchant_master_health(db, since, until)
+
+
+@router.get("/metrics/order-control-tower", response_model=List[OrderControlTowerRow])
+def get_order_control_tower(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_order_control_tower(db, since, until)
+
+
+@router.get("/metrics/customer-recovery", response_model=List[CustomerRecoveryRow])
+def get_customer_recovery(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_customer_recovery_engine(db, since, until)
+
+
+@router.get("/metrics/supply-demand", response_model=List[SupplyDemandRow])
+def get_supply_demand(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_supply_demand_matrix(db, since, until)
+
+
+@router.get("/metrics/margin-leakage", response_model=MarginLeakageMetrics)
+def get_margin_leakage(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_margin_leakage_metrics(db, since, until)
+
+
+@router.get("/reports/margin-leakage.csv")
+def export_margin_leakage_csv(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    metrics = dashboard_metrics.get_margin_leakage_metrics(db, since, until)
+    lines = [
+        "label,gmv,platform_commission,mpesa_fees,net_profit,gross_margin_pct,aov",
+    ]
+    for point in metrics.get("trend", []):
+        lines.append(
+            f"{point['label']},{point['gmv']:.2f},{point['platform_commission']:.2f},{point['mpesa_fees']:.2f},{point['net_profit']:.2f},{point['gross_margin_pct']:.2f},{point['aov']:.2f}"
+        )
+    csv_content = "\n".join(lines) + "\n"
+    return Response(content=csv_content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=margin-leakage.csv"})
+
+
+@router.get("/reports/margin-leakage.pdf")
+def export_margin_leakage_pdf(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    metrics = dashboard_metrics.get_margin_leakage_metrics(db, since, until)
+    try:
+        from fpdf import FPDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 8, "Ekshop Kenya - Margin Leakage Report", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(0, 6, f"Period: {metrics.get('period')} | Orders: {metrics.get('orders')} | AOV: KES {metrics.get('average_order_value')}", ln=True)
+        pdf.ln(2)
+        pdf.cell(0, 6, f"GMV: KES {metrics.get('gmv')} | Platform commission: KES {metrics.get('platform_commission')} | M-Pesa fees: KES {metrics.get('mpesa_fees')} | Net profit: KES {metrics.get('net_profit')} | Gross margin: {metrics.get('gross_margin_pct')}%", ln=True)
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(40, 8, "Day", border=1)
+        pdf.cell(35, 8, "GMV", border=1, align="R")
+        pdf.cell(35, 8, "Commission", border=1, align="R")
+        pdf.cell(35, 8, "M-Pesa", border=1, align="R")
+        pdf.cell(35, 8, "Net profit", border=1, align="R")
+        pdf.cell(0, 8, "Margin %", border=1, align="R", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        for point in metrics.get("trend", []):
+            pdf.cell(40, 8, str(point.get("label", "")), border=1)
+            pdf.cell(35, 8, f"KES {point.get('gmv', 0):.2f}", border=1, align="R")
+            pdf.cell(35, 8, f"KES {point.get('platform_commission', 0):.2f}", border=1, align="R")
+            pdf.cell(35, 8, f"KES {point.get('mpesa_fees', 0):.2f}", border=1, align="R")
+            pdf.cell(35, 8, f"KES {point.get('net_profit', 0):.2f}", border=1, align="R")
+            pdf.cell(0, 8, f"{point.get('gross_margin_pct', 0):.2f}%", border=1, align="R", ln=True)
+        pdf_bytes = bytes(pdf.output())
+        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=margin-leakage.pdf"})
+    except Exception:
+        html = f"""
+        <html>
+          <head><title>Ekshop Margin Leakage Report</title></head>
+          <body>
+            <h1>Ekshop Kenya - Margin Leakage Report</h1>
+            <p>Period: {metrics.get('period')} | Orders: {metrics.get('orders')} | AOV: KES {metrics.get('average_order_value')}</p>
+            <p>GMV: KES {metrics.get('gmv')} | Platform commission: KES {metrics.get('platform_commission')} | M-Pesa fees: KES {metrics.get('mpesa_fees')} | Net profit: KES {metrics.get('net_profit')} | Gross margin: {metrics.get('gross_margin_pct')}%</p>
+            <table border="1" cellpadding="4" cellspacing="0">
+              <tr><th>Day</th><th>GMV</th><th>Commission</th><th>M-Pesa</th><th>Net profit</th><th>Margin %</th></tr>
+              {"".join(f"<tr><td>{p.get('label','')}</td><td>KES {p.get('gmv',0):.2f}</td><td>KES {p.get('platform_commission',0):.2f}</td><td>KES {p.get('mpesa_fees',0):.2f}</td><td>KES {p.get('net_profit',0):.2f}</td><td>{p.get('gross_margin_pct',0):.2f}%</td></tr>" for p in metrics.get('trend', []))}
+            </table>
+          </body>
+        </html>
+        """
+        return Response(content=html, media_type="text/html", headers={"Content-Disposition": "attachment; filename=margin-leakage.html"})
+
+
+@router.post("/alerts/check-thresholds")
+def check_admin_thresholds(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    now = datetime.now(timezone.utc)
+    alerts = []
+
+    automation = automation_service.get_or_create_automation_settings(db)
+    min_margin = automation.alert_min_gross_margin_pct
+    max_cancel = automation.alert_max_order_cancellation_rate
+    max_abandon = automation.alert_max_cart_abandonment_rate
+    min_delivery = automation.alert_min_on_time_delivery_rate
+
+    margin = dashboard_metrics.get_margin_leakage_metrics(db, since)
+    margin_pct = float(margin.get("gross_margin_pct", 100))
+    # A day with no paid orders has no margin to judge, not a 0% margin.
+    if automation.alert_gross_margin_enabled and margin.get("orders") and margin_pct < min_margin:
+        alerts.append({
+            "level": "high",
+            "metric": "gross_margin_pct",
+            "message": f"Gross margin dropped to {margin_pct:.2f}% (threshold {min_margin}%)",
+        })
+
+    sales = dashboard_metrics.get_sales_demand_metrics(db, since, now)
+    cancellation_rate = float(sales.get("order_cancellation_rate", 0))
+    if automation.alert_order_cancellation_enabled and cancellation_rate > max_cancel:
+        alerts.append({
+            "level": "medium",
+            "metric": "order_cancellation_rate",
+            "message": f"Order cancellation rate is {cancellation_rate:.2f}% (threshold {max_cancel}%)",
+        })
+
+    cart = dashboard_metrics.get_cart_abandonment_metrics(db, since, now)
+    abandonment_rate = float(cart.get("cart_abandonment_rate", 0))
+    if automation.alert_cart_abandonment_enabled and abandonment_rate > max_abandon:
+        alerts.append({
+            "level": "medium",
+            "metric": "cart_abandonment_rate",
+            "message": f"Cart abandonment rate is {abandonment_rate:.2f}% (threshold {max_abandon}%)",
+        })
+
+    ops = dashboard_metrics.get_operations_delivery_metrics(db, since, now)
+    on_time = ops.get("on_time_delivery_rate")
+    if automation.alert_on_time_delivery_enabled and on_time is not None and float(on_time) < min_delivery:
+        alerts.append({
+            "level": "high",
+            "metric": "on_time_delivery_rate",
+            "message": f"On-time delivery rate is {float(on_time):.2f}% (threshold {min_delivery}%)",
+        })
+
+    return {"alerts": alerts, "checked_at": datetime.now(timezone.utc).isoformat(), "margin_pct": margin_pct}
+
+
+@router.get("/automation/settings", response_model=AutomationSettingsRead)
+def get_automation_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return automation_service.get_or_create_automation_settings(db)
+
+
+@router.put("/automation/settings", response_model=AutomationSettingsRead)
+def update_automation_settings(
+    payload: AutomationSettingsUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    settings = automation_service.get_or_create_automation_settings(db)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(settings, field, value)
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+@router.get("/metrics/priority-acquisition", response_model=List[PriorityAcquisitionRow])
+def get_priority_acquisition(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_priority_acquisition(db, since, until)
+
+
+@router.get("/metrics/real-time", response_model=RealTimeMetrics)
+def get_real_time_metrics(
+    minutes: int = Query(15, ge=1, le=60),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return dashboard_metrics.get_real_time_metrics(db, minutes)
+
+
+@router.get("/metrics/acquisition", response_model=AcquisitionMetrics)
+def get_acquisition_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_acquisition_metrics(db, since, until)
+
+
+@router.get("/metrics/behavior", response_model=BehaviorMetrics)
+def get_behavior_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_behavior_metrics(db, since, until)
+
+
+@router.get("/metrics/ecommerce", response_model=EcommerceMetrics)
+def get_ecommerce_metrics(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, days)
+    return dashboard_metrics.get_ecommerce_metrics(db, since, until)
+
+
+# ── Drill-down lists (click a stat card, see the rows behind it) ─────────────
+
+@router.get("/orders", response_model=RecentOrderListResponse)
+def list_recent_orders(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, 30)
+    query = (
+        db.query(OrderGroup)
+        .options(
+            selectinload(OrderGroup.buyer),
+            selectinload(OrderGroup.orders).selectinload(Order.items),
+        )
+        .filter(OrderGroup.status == OrderGroupStatus.paid)
+    )
+    if period is not None:
+        query = query.filter(OrderGroup.created_at >= since, OrderGroup.created_at < until)
+    total = query.count()
+    skip = (page - 1) * limit
+    rows = query.order_by(OrderGroup.created_at.desc()).offset(skip).limit(limit).all()
+    results = [
+        RecentOrderRow(
+            id=str(g.id),
+            short_id=str(g.id)[:8],
+            created_at=g.created_at,
+            buyer_name=f"{g.buyer.first_name} {g.buyer.last_name}",
+            total=g.total,
+            item_count=sum(len(o.items) for o in g.orders),
+            shop_count=len({o.shop_id for o in g.orders}),
+        )
+        for g in rows
+    ]
+    return RecentOrderListResponse(total=total, page=page, limit=limit, results=results)
+
+
+@router.get("/products", response_model=AdminProductListResponse)
+def list_admin_products(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    q = db.query(Product).options(selectinload(Product.shop))
+    total = q.count()
+    skip = (page - 1) * limit
+    rows = q.order_by(Product.created_at.desc()).offset(skip).limit(limit).all()
+    return AdminProductListResponse(
+        total=total,
+        page=page,
+        limit=limit,
+        results=[
+            AdminProductRow(
+                id=p.id,
+                name=p.name,
+                price=p.price,
+                status=p.status.value if hasattr(p.status, "value") else str(p.status),
+                shop_name=p.shop.name if p.shop else None,
+                created_at=p.created_at,
+            )
+            for p in rows
+        ],
+    )
+
+
+# ── Email delivery health ────────────────────────────────────────────────────
+
+def _from_domain(address: str) -> str:
+    at = address.rfind("@")
+    if at == -1:
+        return ""
+    return address[at + 1:].strip().rstrip(">").strip()
+
+
+@router.get("/email/status", response_model=AdminEmailStatus)
+def get_email_status(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    from_domain = _from_domain(settings.EMAIL_FROM)
+    verified: list = []
+    domains_error: Optional[str] = None
+    try:
+        verified = sorted(
+            d["name"]
+            for d in email_service.resend_sending_domains()
+            if d.get("status") == "verified"
+        )
+    except Exception as e:
+        domains_error = str(e)
+
+    active_recipients = (
+        db.query(func.count(OrderNotificationRecipient.id))
+        .filter(OrderNotificationRecipient.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+
+    return AdminEmailStatus(
+        resend_configured=bool(settings.RESEND_API_KEY),
+        from_address=settings.EMAIL_FROM,
+        from_domain=from_domain,
+        verified_domains=verified,
+        from_domain_verified=bool(from_domain) and from_domain in verified,
+        domains_error=domains_error,
+        active_recipient_count=active_recipients,
+    )
+
+
+@router.post("/email/test", response_model=AdminEmailTestResult)
+def send_admin_test_email(
+    payload: AdminEmailTestRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    try:
+        email_service.send_test_email(payload.to)
+    except Exception as e:
+        logger.warning("Admin email test to %s failed: %s", payload.to, e)
+        return AdminEmailTestResult(success=False, detail=str(e))
+    return AdminEmailTestResult(
+        success=True,
+        detail=f"Test email sent to {payload.to}. If it doesn't arrive, check spam and Resend's delivery log.",
+    )
 
 
 # ── Deliveries ───────────────────────────────────────────────────────────────
@@ -654,3 +1195,23 @@ def delete_deal(deal_id: uuid.UUID, db: Session = Depends(get_db), _: User = Dep
         raise HTTPException(404, "Deal not found")
     db.delete(deal)
     db.commit()
+
+
+@router.get("/metrics/top-merchants")
+def get_top_merchants_insight(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, 30)
+    return dashboard_metrics.get_top_merchants_insight(db, since, until)
+
+
+@router.get("/metrics/churn-risks")
+def get_churn_risks_insight(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, 30)
+    return dashboard_metrics.get_churn_risks_insight(db, since, until)

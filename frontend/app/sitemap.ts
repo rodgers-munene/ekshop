@@ -1,21 +1,37 @@
 import type { MetadataRoute } from "next";
 import { Product, ShopSummary, ProductListResponse, PaginatedResponse } from "@/types/interface";
+import { SITE_URL } from "@/lib/site";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL!;
+// The sitemap hits the products/shops API to enumerate slugs. Generating it at
+// build time makes deploys depend on the backend being reachable + fast from
+// the build runner (a cold or slow API pushes past Next's prerender budget and
+// fails the whole deploy), so the route is rendered on demand instead.
+export const dynamic = "force-dynamic";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const PAGE_SIZE = 100;
+const FETCH_TIMEOUT_MS = 15000;
+
+async function safeFetch<T>(url: string): Promise<T | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal, next: { revalidate: 3600 } });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function fetchAllProducts(): Promise<Product[]> {
   const all: Product[] = [];
   let page = 1;
 
   while (true) {
-    const res = await fetch(`${API_URL}/products/?page=${page}&limit=${PAGE_SIZE}`, {
-      next: { revalidate: 3600 },
-    })
-      .then((r) => (r.ok ? (r.json() as Promise<ProductListResponse>) : null))
-      .catch(() => null);
-
+    const res = await safeFetch<ProductListResponse>(`${API_URL}/products/?page=${page}&limit=${PAGE_SIZE}`);
     if (!res || res.results.length === 0) break;
     all.push(...res.results);
     if (page * PAGE_SIZE >= res.total) break;
@@ -30,12 +46,7 @@ async function fetchAllShops(): Promise<ShopSummary[]> {
   let page = 1;
 
   while (true) {
-    const res = await fetch(`${API_URL}/shops/?page=${page}&limit=${PAGE_SIZE}`, {
-      next: { revalidate: 3600 },
-    })
-      .then((r) => (r.ok ? (r.json() as Promise<PaginatedResponse<ShopSummary>>) : null))
-      .catch(() => null);
-
+    const res = await safeFetch<PaginatedResponse<ShopSummary>>(`${API_URL}/shops/?page=${page}&limit=${PAGE_SIZE}`);
     if (!res || res.results.length === 0) break;
     all.push(...res.results);
     if (page * PAGE_SIZE >= res.total) break;

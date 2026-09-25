@@ -4,7 +4,7 @@ import uuid
 from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import cast, Numeric, update, delete, func, desc
+from sqlalchemy import cast, Numeric, update, func, desc
 
 from app.models.user import User
 from app.dependencies.database import get_db
@@ -526,30 +526,25 @@ def update_product(slug: str, payload: ProductUpdate, db: Session= Depends(get_d
 # delete a product
 @products_router.delete(
     "/{slug}",
-    status_code=status.HTTP_204_NO_CONTENT
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a product",
 )
 def delete_product(slug: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    shop = db.query(Shop).filter(
-        Shop.seller_id == current_user.id
-    ).first()
-    
+    shop = db.query(Shop).filter(Shop.seller_id == current_user.id).first()
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
-    
+
     product = db.query(Product).filter(
         Product.slug == slug,
-        Product.shop_id == shop.id
+        Product.shop_id == shop.id,
     ).first()
-    
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    delete_stmt = delete(Product).where(
-        Product.slug == slug,
-        Product.shop_id == shop.id
-    )
-    
-    db.execute(delete_stmt)
+    for image in list(product.images):
+        storage.delete_product_image(image.url)
+
+    db.delete(product)
     db.commit()
 
 
@@ -712,6 +707,39 @@ def update_product_variant(
     db.refresh(variant)
 
     return variant
+
+
+@products_router.delete(
+    "/{product_id}/variants/{variant_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a product variant",
+)
+def delete_product_variant(
+    product_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    shop = db.query(Shop).filter(Shop.seller_id == current_user.id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.shop_id == shop.id,
+    ).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    variant = db.query(ProductVariant).filter(
+        ProductVariant.id == variant_id,
+        ProductVariant.product_id == product_id,
+    ).first()
+    if not variant:
+        raise HTTPException(status_code=404, detail="Variant not found")
+
+    db.delete(variant)
+    db.commit()
 
 
 #  Reviews 

@@ -29,8 +29,14 @@ class DeliveryAgentRead(BaseModel):
     email: str
     phone: str
     status: DeliveryAgentStatus
+    current_order_id: Optional[uuid.UUID]
     total_deliveries: int
+    weekly_earnings: str = "0.00"
+    monthly_earnings: str = "0.00"
     rating_avg: str
+    current_lat: Optional[float] = None
+    current_lng: Optional[float] = None
+    last_location_update: Optional[datetime] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -63,6 +69,8 @@ class DeliveryRead(BaseModel):
     picked_at: Optional[datetime]
     in_transit_at: Optional[datetime]
     delivered_at: Optional[datetime]
+    distance_km: Optional[float] = None
+    duration_min: Optional[float] = None
     created_at: datetime
     events: List[DeliveryEventRead] = []
     order: Optional[OrderRead] = None
@@ -134,3 +142,50 @@ class DeliverySimulationResponse(BaseModel):
     # cheaper same_ward/same_subcounty bands. Treat these as an upper bound.
     cost_based_resolution_note: str
     rows: List[DeliverySimulationRow]
+
+
+class AgentStatusUpdate(BaseModel):
+    status: DeliveryAgentStatus
+
+
+class AgentLocationUpdate(BaseModel):
+    lat: float
+    lng: float
+
+
+class DeliveryIssueCreate(BaseModel):
+    reason: str
+    notes: Optional[str] = None
+
+
+class DeliveryIssueRead(BaseModel):
+    id: uuid.UUID
+    delivery_id: uuid.UUID
+    reason: str
+    notes: Optional[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RouteOptimizationRequest(BaseModel):
+    delivery_ids: List[uuid.UUID]
+
+
+class RouteOptimizationStop(BaseModel):
+    delivery_id: uuid.UUID
+    tracking_number: str
+    buyer_name: str
+    address: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    distance_from_previous_km: Optional[float] = None
+    duration_from_previous_min: Optional[float] = None
+
+
+class RouteOptimizationResponse(BaseModel):
+    origin_lat: Optional[float] = None
+    origin_lng: Optional[float] = None
+    total_distance_km: Optional[float] = None
+    total_duration_min: Optional[float] = None
+    stops: List[RouteOptimizationStop]

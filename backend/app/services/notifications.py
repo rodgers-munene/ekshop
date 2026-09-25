@@ -46,6 +46,10 @@ def notify_admins_of_new_order(db: Session, order: Order) -> None:
         .all()
     ]
     if not emails:
+        logger.warning(
+            "New order %s confirmed but no active order-notification recipients configured — no admin email sent.",
+            order.id,
+        )
         return
     try:
         email_service.send_new_order_email(emails, order)
