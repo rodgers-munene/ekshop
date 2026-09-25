@@ -18,6 +18,12 @@ class ActorRole(str, enum.Enum):
     admin = "admin"
 
 
+def actor_role_for(role: str) -> ActorRole:
+    """Map a UserRole value (or "agent") to the sender role stored on messages;
+    buyers are recorded as customers."""
+    return ActorRole.customer if role == "buyer" else ActorRole(role)
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
@@ -29,6 +35,7 @@ class Conversation(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     order = relationship("Order")
+    shop = relationship("Shop", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
     participants = relationship("User", secondary="conversation_participants", back_populates="conversations")
 

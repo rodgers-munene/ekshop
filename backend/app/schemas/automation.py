@@ -1,9 +1,11 @@
-from pydantic import BaseModel
+import uuid
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class AutomationSettingsRead(BaseModel):
-    id: str
+    id: uuid.UUID
     webhook_url: str | None
     webhook_secret: str | None
     alert_min_gross_margin_pct: float

@@ -555,7 +555,7 @@ def get_order_control_tower(db: Session, since: datetime, until: Optional[dateti
                 "ack_time": order.created_at,
                 "accepted": order.status != OrderStatus.pending,
                 "ready_time": None,
-                "rider_assigned": delivery.agent_id if delivery else None,
+                "rider_assigned": str(delivery.agent_id) if delivery and delivery.agent_id else None,
                 "pickup_time": delivery.picked_at if delivery else None,
                 "delivered_time": delivery.delivered_at if delivery else None,
                 "dispatch_hrs": round(dispatch_hrs, 2),
@@ -949,13 +949,15 @@ def get_ecommerce_metrics(db: Session, since: datetime, until: datetime) -> dict
         .all()
     )
     products_map = {
-        p.id: p for p in db.query(Product).filter(Product.id.in_([r.product_id for r in top_products if r.product_id]).all())
+        p.id: p for p in db.query(Product).filter(Product.id.in_([r.product_id for r in top_products if r.product_id])).all()
     }
     top_products_data = []
     for r in top_products:
         product = products_map.get(r.product_id)
         top_products_data.append({
+            "product_id": r.product_id,
             "name": product.name if product else "Unknown",
+            "slug": product.slug if product else None,
             "units": int(r.units),
             "revenue": str(Decimal(r.revenue or 0).quantize(Decimal("0.01"))),
         })
@@ -972,7 +974,7 @@ def get_ecommerce_metrics(db: Session, since: datetime, until: datetime) -> dict
 def get_top_merchants_insight(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
     until = _bound(since, until)
     rows = (
-        db.query(Shop.name, func.count(Order.id).label("orders"), func.sum(Order.total).label("revenue"))
+        db.query(Shop.name, func.count(Order.id).label("orders"), func.sum(cast(Order.total, Numeric)).label("revenue"))
         .join(Order, Order.shop_id == Shop.id)
         .filter(Order.created_at >= since, Order.created_at <= until, Shop.status == ShopStatus.active)
         .group_by(Shop.name)

@@ -602,8 +602,7 @@ def get_real_time_metrics(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    return dashboard_metrics.get_real_time_metrics(db, since)
+    return dashboard_metrics.get_real_time_metrics(db, minutes)
 
 
 @router.get("/metrics/acquisition", response_model=AcquisitionMetrics)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
 from app.core.crypto import encrypt_message, decrypt_message
 from app.dependencies.database import get_db
-from app.models.messaging import Conversation, Message, ActorRole
+from app.models.messaging import Conversation, Message, actor_role_for
 from app.models.commerce import Order
 from app.models.user import User
 from app.models.delivery import DeliveryAgent
@@ -80,7 +80,7 @@ async def websocket_conversation(
             message = Message(
                 conversation_id=conv.id,
                 sender_id=identity["id"],
-                sender_type=ActorRole(identity["type"]),
+                sender_type=actor_role_for(identity["type"]),
                 body=encrypted,
             )
             db.add(message)

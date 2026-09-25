@@ -10,7 +10,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.security import decode_access_token
 from app.core.crypto import encrypt_message, decrypt_message
 from app.dependencies.database import get_db
-from app.models.messaging import Conversation, Message, ActorRole, conversation_participants
+from app.models.messaging import Conversation, Message, ActorRole, actor_role_for, conversation_participants
 from app.models.commerce import Order
 from app.models.user import User
 from app.models.delivery import DeliveryAgent
@@ -353,7 +353,7 @@ def create_message(
         raise HTTPException(403, "Not a participant in this conversation")
 
     if isinstance(identity, User):
-        sender_type = ActorRole(identity.role.value)
+        sender_type = actor_role_for(identity.role.value)
     else:
         sender_type = ActorRole.agent
 
