@@ -39,12 +39,13 @@ def get_customer_invoice(
     items = []
     for order in group.orders:
         for item in order.items:
-            product = item.product
+            # The name at time of purchase, not the product's current name.
+            snapshot = item.product_snapshot or {}
             items.append({
-                "name": product.name if product else "Product",
+                "name": snapshot.get("name") or (item.product.name if item.product else "Product"),
                 "qty": item.quantity,
                 "unit_price": str(item.unit_price),
-                "subtotal": str(item.quantity * item.unit_price),
+                "subtotal": str(item.line_total),
             })
 
     delivery_fee = Decimal("0.00")

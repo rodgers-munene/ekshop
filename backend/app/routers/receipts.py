@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.dependencies.database import get_db
 from app.dependencies.auth import get_current_active_user
 from app.models.user import User
-from app.models.commerce import OrderGroup, Order
+from app.models.commerce import OrderGroup
+from app.models.payment import PaymentIntent
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
 
@@ -44,15 +45,21 @@ def get_thermal_receipt(
         for item in order.items:
             name = (item.product_snapshot.get("name", "Product") if item.product_snapshot else "Product")[:22]
             qty = str(item.quantity)
-            amt = f"KES {item.line_total:.2f}"
+            amt = f"KES {Decimal(item.line_total):.2f}"  # stored as a string
             lines.append(f"{qty:<4} {name:<22} {amt}")
     lines.append("-" * 40)
-    lines.append(f"Subtotal:      KES {group.subtotal:.2f}")
-    lines.append(f"Delivery:      KES {group.delivery_fee:.2f}")
-    lines.append(f"TOTAL:         KES {group.total:.2f}")
+    lines.append(f"Subtotal:      KES {Decimal(str(group.subtotal or 0)):.2f}")
+    lines.append(f"Delivery:      KES {Decimal(str(group.delivery_fee or 0)):.2f}")
+    lines.append(f"TOTAL:         KES {Decimal(str(group.total or 0)):.2f}")
     lines.append("=" * 40)
-    lines.append("Payment: MPESA")
-    lines.append(f"Ref:   {group.id}")
+    payment = (
+        db.query(PaymentIntent)
+        .filter(PaymentIntent.order_group_id == group.id)
+        .order_by(PaymentIntent.created_at.desc())
+        .first()
+    )
+    lines.append(f"Payment: {payment.provider.upper() if payment else 'N/A'}")
+    lines.append(f"Ref:   {(payment.provider_ref if payment else None) or group.id}")
     lines.append("=" * 40)
     lines.append("Thank you for shopping local!")
     receipt_text = "\n".join(lines)
