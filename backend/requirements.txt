@@ -48,9 +48,6 @@ uvicorn==0.49.0
 wrapt==2.2.2
 fpdf2==2.8.3
 gunicorn==23.0.0
-python-json-logger==3.2.1
-prometheus-client==0.21.1
-circuitbreaker==2.0.0
 numpy==2.3.1
 pyproj==3.8.0
 shapely==2.1.2
