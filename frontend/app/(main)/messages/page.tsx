@@ -11,6 +11,7 @@ export default function MessagesPage() {
       fetch("/api/conversations")
         .then((r) => r.json())
         .then((data) => (Array.isArray(data) ? (data as ConversationSummary[]) : [])),
+    refetchInterval: 15000,
   });
 
   if (loading) {

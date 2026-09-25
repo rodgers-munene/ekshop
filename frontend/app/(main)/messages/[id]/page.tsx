@@ -21,9 +21,15 @@ export default function ConversationPage() {
       const res = await fetch(`/api/conversations/${params.id}`);
       if (!res.ok) return null;
       const data: Conversation = await res.json();
-      fetch(`/api/conversations/${params.id}/read`, { method: "PATCH" }).catch(() => {});
+      if (data.messages.some((m) => !m.is_mine && !m.is_read)) {
+        fetch(`/api/conversations/${params.id}/read`, { method: "PATCH" })
+          .then(() => queryClient.invalidateQueries({ queryKey: ["conversations"] }))
+          .catch(() => {});
+      }
       return data;
     },
+    // Pick up replies while the chat is open.
+    refetchInterval: 5000,
   });
 
   useEffect(() => {
