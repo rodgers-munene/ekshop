@@ -52,6 +52,16 @@ async function tryRefresh(refreshToken: string): Promise<{ access_token: string;
   }
 }
 
+// HTTP status of /users/me for this token, or null if the backend is unreachable.
+async function tokenStatus(token: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
+    return res.status;
+  } catch {
+    return null;
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -95,6 +105,23 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isAuthPage && accessToken) {
+    // Pages send users here when the backend rejects their token, e.g. after a
+    // SECRET_KEY rotation. The token can still look unexpired, so bouncing it
+    // home would loop forever; check it with the backend first.
+    if ((await tokenStatus(accessToken)) === 401) {
+      const refreshed = refreshToken ? await tryRefresh(refreshToken) : null;
+      if (!refreshed) {
+        response.cookies.delete("ekshop_token");
+        response.cookies.delete("ekshop_refresh");
+        return response;
+      }
+      const next = request.nextUrl.searchParams.get("next");
+      const target = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+      const redirect = NextResponse.redirect(new URL(target, request.url));
+      redirect.cookies.set("ekshop_token", refreshed.access_token, { ...COOKIE_OPTS, maxAge: 60 * 60 * 24 * 7 });
+      redirect.cookies.set("ekshop_refresh", refreshed.refresh_token, { ...COOKIE_OPTS, maxAge: 60 * 60 * 24 * 30 });
+      return redirect;
+    }
     const redirect = NextResponse.redirect(new URL("/", request.url));
     response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
     return redirect;
