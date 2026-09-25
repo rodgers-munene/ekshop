@@ -249,9 +249,16 @@ def get_stats_overview(
     shops_pending = db.query(func.count(Shop.id)).filter(Shop.status == ShopStatus.pending).scalar() or 0
     total_products = db.query(func.count(Product.id)).scalar() or 0
 
-    paid_groups = db.query(OrderGroup).filter(OrderGroup.status == OrderGroupStatus.paid)
-    total_orders = paid_groups.count()
-    revenue_total = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
+    total_orders, revenue_total, gmv_total, delivery_revenue_total = (
+        db.query(
+            func.count(OrderGroup.id),
+            func.coalesce(func.sum(cast(OrderGroup.total, Numeric)), 0),
+            func.coalesce(func.sum(cast(OrderGroup.subtotal, Numeric)), 0),
+            func.coalesce(func.sum(cast(func.coalesce(OrderGroup.delivery_fee, "0"), Numeric)), 0),
+        )
+        .filter(OrderGroup.status == OrderGroupStatus.paid)
+        .one()
+    )
 
     return AdminOverviewRead(
         period=period or "days",
@@ -267,6 +274,8 @@ def get_stats_overview(
             total_products=total_products,
             total_orders=total_orders,
             revenue_total=str(revenue_total),
+            gmv_total=str(gmv_total),
+            delivery_revenue_total=str(delivery_revenue_total),
         ),
         trend=_trend_points(db, 14),
     )

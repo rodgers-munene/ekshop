@@ -143,10 +143,16 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
             <StatCard label="Total products" value={data.totals.total_products} onClick={() => setDrill(productsSpec())} hint="Latest products" />
             <StatCard label="Paid orders" value={data.totals.total_orders} onClick={() => setDrill(ordersSpec())} hint="Paid orders, all time" />
             <StatCard
-              label="Revenue (all-time)"
-              value={formatKES(parseFloat(data.totals.revenue_total))}
+              label="Gross Merchandise Value"
+              value={formatKES(parseFloat(data.totals.gmv_total))}
               onClick={() => setDrill(ordersSpec())}
-              hint="All paid orders"
+              hint="Goods sold on paid orders, all time"
+            />
+            <StatCard
+              label="Delivery Service Revenue"
+              value={formatKES(parseFloat(data.totals.delivery_revenue_total))}
+              onClick={() => setDrill(ordersSpec())}
+              hint="Delivery fees on paid orders, all time"
             />
           </div>
 

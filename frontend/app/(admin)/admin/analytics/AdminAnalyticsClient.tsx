@@ -228,7 +228,8 @@ export default function AdminAnalyticsClient({
             <StatCard label="Pending verification" value={overview.totals.shops_pending_verification} />
             <StatCard label="Total products" value={overview.totals.total_products} />
             <StatCard label="Total orders" value={overview.totals.total_orders} />
-            <StatCard label="GMV" value={formatKES(overview.totals.revenue_total)} />
+            <StatCard label="GMV" value={formatKES(overview.totals.gmv_total)} />
+            <StatCard label="Delivery Service Revenue" value={formatKES(overview.totals.delivery_revenue_total)} />
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

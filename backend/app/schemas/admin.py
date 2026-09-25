@@ -340,6 +340,9 @@ class AdminOverviewTotals(BaseModel):
     total_products: int
     total_orders: int
     revenue_total: str
+    # Paid orders only: goods sold (GMV) and delivery fees, which add up to revenue_total.
+    gmv_total: str
+    delivery_revenue_total: str
 
 
 class AdminOverviewRead(BaseModel):

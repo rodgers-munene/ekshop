@@ -480,6 +480,8 @@ export interface AdminOverviewTotals {
   total_products: number;
   total_orders: number;
   revenue_total: string;
+  gmv_total: string;
+  delivery_revenue_total: string;
 }
 
 export interface AdminOverview {
