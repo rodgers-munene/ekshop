@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Delivery } from "@/types/interface";
@@ -22,7 +23,8 @@ const DELIVERY_TRANSITIONS: Record<string, string[]> = {
   in_transit: ["delivered", "cancelled"],
 };
 
-export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ deliveryId: string }> }) {
+export default function AgentDeliveryDetailPage() {
+  const { id: deliveryId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [showConfirm, setShowConfirm] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -34,10 +36,9 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
   const [reportReason, setReportReason] = useState("");
   const [reportText, setReportText] = useState("");
 
-  const { data: delivery, isLoading } = useQuery({
-    queryKey: ["agent-delivery"],
+  const { data: delivery, isLoading, isError } = useQuery({
+    queryKey: ["agent-delivery", deliveryId],
     queryFn: async () => {
-      const { deliveryId } = await params;
       const res = await fetch(`/api/agent/deliveries/${deliveryId}`);
       if (!res.ok) throw new Error();
       return res.json() as Promise<Delivery>;
@@ -47,19 +48,19 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
 
   const updateStatus = useMutation({
     mutationFn: async (status: string) => {
-      const { deliveryId } = await params;
       const res = await fetch(`/api/agent/deliveries/${deliveryId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, notes }),
       });
-      if (!res.ok) throw new Error();
-      return res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Failed to update delivery");
+      return data as Delivery;
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["agent-deliveries"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-delivery"] });
-      toast.success(`Marked as ${STATUS_LABELS[delivery?.status ?? ""] ?? "updated"}`);
+      queryClient.invalidateQueries({ queryKey: ["agent-delivery", deliveryId] });
+      toast.success(`Marked as ${STATUS_LABELS[updated.status] ?? "updated"}`);
       setShowConfirm(false);
       setRecipientName("");
       setOtp("");
@@ -67,13 +68,12 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
       setPhotoTaken(false);
       setSigTaken(false);
     },
-    onError: () => toast.error("Failed to update delivery"),
+    onError: (err) => toast.error(err.message),
   });
 
   const submitReport = useMutation({
     mutationFn: async () => {
-      const { deliveryId } = await params;
-      const res = await fetch(`/api/agent/deliveries/${deliveryId}/issue`, {
+      const res = await fetch(`/api/agent/deliveries/${deliveryId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: reportReason, notes: reportText }),
@@ -89,6 +89,15 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
     },
     onError: () => toast.error("Failed to send report"),
   });
+
+  if (isError) {
+    return (
+      <div className="card flex flex-col items-center justify-center py-20 text-center">
+        <p className="font-bold mb-1">Delivery not found</p>
+        <p className="text-sm text-muted">It may have been reassigned to another rider.</p>
+      </div>
+    );
+  }
 
   if (isLoading || !delivery) {
     return (

@@ -1,5 +1,4 @@
 import logging
-from decimal import Decimal
 
 import httpx
 
@@ -45,17 +44,19 @@ async def get_route_eta_distance(lat1: float, lng1: float, lat2: float, lng2: fl
         return {"distance_km": None, "duration_min": None}
 
 
-async def get_route_matrix(coords: list[tuple[float, float]]) -> list[dict]:
-    """Call ORS matrix API for multiple origins/destinations.
+async def get_route_matrix(coords: list[tuple[float, float]]) -> list[list[dict]] | None:
+    """Driving distance and time between every pair of points, via the ORS matrix API.
 
     coords: list of (lat, lng)
-    Returns list of {distance_km, duration_min} per pair.
+    Returns an N x N matrix where [i][j] is {distance_km, duration_min} from i
+    to j, or None when ORS isn't configured or the request fails, so callers
+    can fall back to straight-line distances.
     """
     if not settings.ORS_API_KEY or len(coords) < 2:
-        return [{"distance_km": None, "duration_min": None}] * len(coords)
+        return None
 
     body = {
-        "coordinates": [[lng, lat] for lat, lng in coords],
+        "locations": [[lng, lat] for lat, lng in coords],
         "metrics": ["distance", "duration"],
     }
     headers = {"Authorization": settings.ORS_API_KEY}
@@ -65,20 +66,18 @@ async def get_route_matrix(coords: list[tuple[float, float]]) -> list[dict]:
             r = await client.post(ORS_MATRIX_URL, json=body, headers=headers)
             r.raise_for_status()
             data = r.json()
+        distances = data["distances"]
+        durations = data["durations"]
+        return [
+            [
+                {
+                    "distance_km": distances[i][j] / 1000 if distances[i][j] is not None else None,
+                    "duration_min": durations[i][j] / 60 if durations[i][j] is not None else None,
+                }
+                for j in range(len(coords))
+            ]
+            for i in range(len(coords))
+        ]
     except Exception as exc:
         logger.warning("ORS matrix request failed: %s", exc)
-        return [{"distance_km": None, "duration_min": None}] * len(coords)
-
-    distances = data.get("distances", [])
-    durations = data.get("durations", [])
-    results = []
-    for i in range(len(coords)):
-        d_m = distances[i] if i < len(distances) else None
-        d_s = durations[i] if i < len(durations) else None
-        results.append(
-            {
-                "distance_km": round(d_m / 1000, 2) if d_m is not None else None,
-                "duration_min": round(d_s / 60, 0) if d_s is not None else None,
-            }
-        )
-    return results
+        return None

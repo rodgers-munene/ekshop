@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Delivery } from "@/types/interface";
+import { Delivery, DeliveryAgent } from "@/types/interface";
 import MessageAdminButton from "@/components/MessageAdminButton";
 
 type AgentStatus = "available" | "busy" | "offline";
@@ -15,9 +15,31 @@ const STATUS_LABELS: Record<AgentStatus, string> = {
   offline: "Offline",
 };
 
+// Backend statuses: active (taking jobs), busy (set on assignment), inactive (offline).
+const FROM_AGENT_STATUS: Record<string, AgentStatus> = {
+  active: "available",
+  busy: "busy",
+  inactive: "offline",
+};
+
+// Send at most one GPS fix this often, so an open tab doesn't write every second.
+const LOCATION_INTERVAL_MS = 30_000;
+
 export default function AgentHomePage() {
-  const [status, setStatus] = useState<AgentStatus>("available");
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
+  const lastLocationSent = useRef(0);
+
+  const { data: agent } = useQuery({
+    queryKey: ["agent-profile"],
+    queryFn: async () => {
+      const res = await fetch("/api/agent/auth/status");
+      if (!res.ok) throw new Error();
+      return res.json() as Promise<DeliveryAgent>;
+    },
+    refetchInterval: 30000,
+  });
+  const status: AgentStatus = (agent && FROM_AGENT_STATUS[agent.status]) || "available";
   const [locationError, setLocationError] = useState<string | null>(null);
 
   const { data: deliveries = [] } = useQuery({
@@ -33,6 +55,9 @@ export default function AgentHomePage() {
     }
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
+        const now = Date.now();
+        if (now - lastLocationSent.current < LOCATION_INTERVAL_MS) return;
+        lastLocationSent.current = now;
         fetch("/api/agent/location", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -45,18 +70,6 @@ export default function AgentHomePage() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/agent/deliveries")
-      .then((r) => r.json())
-      .then((data: Delivery[]) => {
-        const active = data.filter((d) => d.status !== "delivered" && d.status !== "cancelled");
-        if (active.length > 0) {
-          setStatus("busy");
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   const active = deliveries.filter((d) => d.status !== "delivered" && d.status !== "cancelled");
   const completed = deliveries.filter((d) => d.status === "delivered");
   const next = active[0];
@@ -64,17 +77,18 @@ export default function AgentHomePage() {
   async function toggleStatus() {
     setLoading(true);
     try {
-      const newStatus = status === "available" ? "offline" : "available";
-      const res = await fetch("/api/agent/auth", {
-        method: "POST",
+      const goOffline = status !== "offline";
+      const res = await fetch("/api/agent/auth/status", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "status", status: newStatus }),
+        body: JSON.stringify({ status: goOffline ? "inactive" : "active" }),
       });
-      if (!res.ok) throw new Error();
-      setStatus(newStatus);
-      toast.success(newStatus === "available" ? "You're now available" : "You're now offline");
-    } catch {
-      toast.error("Could not update status");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Could not update status");
+      queryClient.setQueryData(["agent-profile"], data);
+      toast.success(goOffline ? "You're now offline" : "You're now available");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update status");
     } finally {
       setLoading(false);
     }

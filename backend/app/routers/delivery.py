@@ -29,7 +29,6 @@ from app.schemas.delivery import (
     DeliverySimulationRow, DeliverySimulationResponse,
     RouteOptimizationRequest, RouteOptimizationResponse, RouteOptimizationStop,
 )
-from pydantic import BaseModel
 from app.services.notifications import create_notification
 from app.services.webhooks import emit_delivery_status_webhook
 from app.services.delivery_pricing import (
@@ -38,7 +37,7 @@ from app.services.delivery_pricing import (
     calculate_delivery_fee_from_cart_total,
     get_region,
 )
-from app.services.routing import get_route_eta_distance
+from app.services.routing import get_route_eta_distance, get_route_matrix
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -49,6 +48,12 @@ _agent_credentials_error = HTTPException(
     detail="Invalid or expired agent token",
     headers={"WWW-Authenticate": "Bearer"},
 )
+
+# How old a rider's last GPS fix can be and still be used for the delivered check.
+LOCATION_FRESHNESS = timedelta(minutes=10)
+
+# Earnings shown to riders until per-delivery pay is stored with each delivery.
+RIDER_PAY_PER_DELIVERY = 150
 
 DELIVERY_TRANSITIONS = {
     "assigned":   ["picked", "cancelled"],
@@ -184,9 +189,11 @@ async def assign_delivery(
 
     if delivery.distance_km is None and order.shop and order.delivery_address:
         shop = order.shop
-        address = order.delivery_address
-        if shop.lat and shop.lng and address.lat and address.lng:
-            route = await get_route_eta_distance(shop.lat, shop.lng, address.lat, address.lng)
+        # delivery_address is the JSON snapshot taken at checkout, not an Address row.
+        buyer_lat = order.delivery_address.get("lat")
+        buyer_lng = order.delivery_address.get("lng")
+        if shop.lat and shop.lng and buyer_lat and buyer_lng:
+            route = await get_route_eta_distance(shop.lat, shop.lng, float(buyer_lat), float(buyer_lng))
             if route["distance_km"] is not None:
                 delivery.distance_km = route["distance_km"]
                 delivery.duration_min = route["duration_min"]
@@ -250,7 +257,12 @@ async def update_delivery_status(
         address = delivery.order.delivery_address or {}
         buyer_lat = address.get("lat")
         buyer_lng = address.get("lng")
-        if buyer_lat and buyer_lng and agent.current_lat and agent.current_lng:
+        # Only a recent fix counts: a position from hours ago would wrongly block the rider.
+        location_is_fresh = (
+            agent.last_location_update is not None
+            and now - agent.last_location_update <= LOCATION_FRESHNESS
+        )
+        if buyer_lat and buyer_lng and agent.current_lat is not None and agent.current_lng is not None and location_is_fresh:
             distance = _haversine(agent.current_lat, agent.current_lng, float(buyer_lat), float(buyer_lng))
             if distance > 0.5:
                 raise HTTPException(
@@ -317,7 +329,21 @@ def update_my_status(
     db: Session = Depends(get_db),
     agent: DeliveryAgent = Depends(get_current_agent),
 ):
-    agent.status = payload.status
+    """Riders go online (active) or offline (inactive). Busy is set by assignment."""
+    if payload.status == DeliveryAgentStatus.busy:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Busy is set automatically when a delivery is assigned")
+    has_open_delivery = (
+        db.query(Delivery.id)
+        .filter(
+            Delivery.agent_id == agent.id,
+            Delivery.status.in_([DeliveryStatus.assigned, DeliveryStatus.picked, DeliveryStatus.in_transit]),
+        )
+        .first()
+        is not None
+    )
+    if payload.status == DeliveryAgentStatus.inactive and has_open_delivery:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Finish or hand back your open deliveries before going offline")
+    agent.status = DeliveryAgentStatus.busy if has_open_delivery else payload.status
     db.commit()
     db.refresh(agent)
     return agent
@@ -391,8 +417,8 @@ def my_earnings(
         or 0
     )
 
-    weekly_earnings = weekly * 150
-    monthly_earnings = monthly * 150
+    weekly_earnings = weekly * RIDER_PAY_PER_DELIVERY
+    monthly_earnings = monthly * RIDER_PAY_PER_DELIVERY
 
     return {
         "total_deliveries": agent.total_deliveries,
@@ -403,117 +429,88 @@ def my_earnings(
     }
 
 
-@router.get("/{delivery_id}", response_model=DeliveryRead)
-def get_delivery_detail(
-    delivery_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    agent: DeliveryAgent = Depends(get_current_agent),
-):
-    delivery = (
-        db.query(Delivery)
-        .options(
-            selectinload(Delivery.order).selectinload(Order.buyer),
-            selectinload(Delivery.order).selectinload(Order.items),
-            selectinload(Delivery.order).selectinload(Order.shop),
-        )
-        .filter(Delivery.id == delivery_id, Delivery.agent_id == agent.id)
-        .first()
-    )
-    if not delivery:
-        raise HTTPException(404, "Delivery not found")
-    return delivery
-
-
-@router.post("/{delivery_id}/issue", response_model=DeliveryIssueRead, status_code=status.HTTP_201_CREATED)
-def report_delivery_issue(
-    delivery_id: uuid.UUID,
-    payload: DeliveryIssueCreate,
-    db: Session = Depends(get_db),
-    agent: DeliveryAgent = Depends(get_current_agent),
-):
-    delivery = db.query(Delivery).filter(Delivery.id == delivery_id, Delivery.agent_id == agent.id).first()
-    if not delivery:
-        raise HTTPException(404, "Delivery not found")
-
-    issue = DeliveryIssue(
-        delivery_id=delivery_id,
-        reason=payload.reason,
-        notes=payload.notes,
-    )
-    db.add(issue)
-    db.commit()
-    db.refresh(issue)
-    return issue
-
-
 @router.post("/optimize-route", response_model=RouteOptimizationResponse)
-def optimize_route(
+async def optimize_route(
     payload: RouteOptimizationRequest,
     db: Session = Depends(get_db),
     agent: DeliveryAgent = Depends(get_current_agent),
 ):
+    """Suggest a stop order: nearest next stop, starting from the rider's
+    position when known. Stops without coordinates go last, unordered."""
     deliveries = (
         db.query(Delivery)
-        .options(selectinload(Delivery.order).selectinload(Order.shop))
+        .options(selectinload(Delivery.order).selectinload(Order.buyer))
         .filter(Delivery.id.in_(payload.delivery_ids), Delivery.agent_id == agent.id)
         .all()
     )
     if not deliveries:
         raise HTTPException(404, "No deliveries found")
 
-    stops: List[RouteOptimizationStop] = []
-    coords: List[tuple[float, float]] = []
+    located: List[RouteOptimizationStop] = []
+    unlocated: List[RouteOptimizationStop] = []
     for d in deliveries:
         addr = d.order.delivery_address or {}
-        lat = addr.get("lat")
-        lng = addr.get("lng")
+        lat, lng = addr.get("lat"), addr.get("lng")
+        buyer = d.order.buyer
         stop = RouteOptimizationStop(
             delivery_id=d.id,
             tracking_number=d.tracking_number or "",
-            buyer_name=d.order.buyer.name if d.order and d.order.buyer else "Customer",
-            address=f"{addr.get('exact_location') or addr.get('town') or ''}, {addr.get('county') or ''}".strip(", "),
+            buyer_name=f"{buyer.first_name} {buyer.last_name}".strip() if buyer else "Customer",
+            address=", ".join(p.strip() for p in (addr.get("exact_location") or addr.get("town"), addr.get("county")) if p and p.strip()),
             lat=float(lat) if lat else None,
             lng=float(lng) if lng else None,
         )
-        stops.append(stop)
-        if lat and lng:
-            coords.append((float(lat), float(lng)))
+        (located if stop.lat is not None and stop.lng is not None else unlocated).append(stop)
 
-    if len(coords) < 2:
-        return RouteOptimizationResponse(stops=stops)
+    if not located:
+        return RouteOptimizationResponse(stops=unlocated)
 
-    try:
-        matrix = get_route_matrix(coords)
-    except Exception:
-        matrix = [[0.0 if i == j else _haversine(*coords[i], *coords[j]) for j in range(len(coords))] for i in range(len(coords))]
+    # Point 0 is where the rider starts: their current position, or the first stop.
+    has_origin = agent.current_lat is not None and agent.current_lng is not None
+    coords = [(s.lat, s.lng) for s in located]
+    if has_origin:
+        coords.insert(0, (agent.current_lat, agent.current_lng))
 
-    unvisited = set(range(len(coords)))
+    matrix = await get_route_matrix(coords)
+    if matrix is None:
+        matrix = [
+            [{"distance_km": _haversine(*a, *b), "duration_min": None} for b in coords]
+            for a in coords
+        ]
+
+    def leg_km(i: int, j: int) -> float:
+        km = matrix[i][j]["distance_km"]
+        return km if km is not None else _haversine(*coords[i], *coords[j])
+
+    offset = 1 if has_origin else 0
     path = [0]
-    unvisited.discard(0)
+    unvisited = set(range(1, len(coords)))
     total_dist = 0.0
     total_dur = 0.0
-
+    has_durations = True
     while unvisited:
         last = path[-1]
-        next_idx = min(unvisited, key=lambda i: matrix[last][i]["distance_km"] if isinstance(matrix[last][i], dict) else matrix[last][i])
-        leg = matrix[last][next_idx]
-        dist = float(leg["distance_km"]) if isinstance(leg, dict) else float(leg)
-        dur = float(leg["duration_min"]) if isinstance(leg, dict) else None
+        nxt = min(unvisited, key=lambda j: leg_km(last, j))
+        dist = leg_km(last, nxt)
+        dur = matrix[last][nxt]["duration_min"]
+        stop = located[nxt - offset]
+        stop.distance_from_previous_km = round(dist, 2)
+        stop.duration_from_previous_min = round(dur, 1) if dur is not None else None
         total_dist += dist
-        if dur is not None:
+        if dur is None:
+            has_durations = False
+        else:
             total_dur += dur
-        stops[next_idx].distance_from_previous_km = round(dist, 2)
-        stops[next_idx].duration_from_previous_min = round(dur, 2) if dur is not None else None
-        path.append(next_idx)
-        unvisited.discard(next_idx)
+        path.append(nxt)
+        unvisited.discard(nxt)
 
-    ordered = [stops[i] for i in path]
+    ordered = [located[i - offset] for i in path if i - offset >= 0]
     return RouteOptimizationResponse(
-        origin_lat=coords[0][0] if coords else None,
-        origin_lng=coords[0][1] if coords else None,
+        origin_lat=coords[0][0],
+        origin_lng=coords[0][1],
         total_distance_km=round(total_dist, 2),
-        total_duration_min=round(total_dur, 2) if total_dur else None,
-        stops=ordered,
+        total_duration_min=round(total_dur, 1) if has_durations else None,
+        stops=ordered + unlocated,
     )
 
 
@@ -593,6 +590,52 @@ def simulate_delivery_fees(
 
 
 # ── Buyer: track order ────────────────────────────────────────────────────────
+
+# ── Agent: one delivery ─────────────────────────────────────────────────────────
+# Declared after /rates and /simulate so those paths aren't read as a delivery id.
+
+@router.get("/{delivery_id}", response_model=DeliveryRead)
+def get_delivery_detail(
+    delivery_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    delivery = (
+        db.query(Delivery)
+        .options(
+            selectinload(Delivery.order).selectinload(Order.buyer),
+            selectinload(Delivery.order).selectinload(Order.items),
+            selectinload(Delivery.order).selectinload(Order.shop),
+        )
+        .filter(Delivery.id == delivery_id, Delivery.agent_id == agent.id)
+        .first()
+    )
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    return delivery
+
+
+@router.post("/{delivery_id}/issue", response_model=DeliveryIssueRead, status_code=status.HTTP_201_CREATED)
+def report_delivery_issue(
+    delivery_id: uuid.UUID,
+    payload: DeliveryIssueCreate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    delivery = db.query(Delivery).filter(Delivery.id == delivery_id, Delivery.agent_id == agent.id).first()
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+
+    issue = DeliveryIssue(
+        delivery_id=delivery_id,
+        reason=payload.reason,
+        notes=payload.notes,
+    )
+    db.add(issue)
+    db.commit()
+    db.refresh(issue)
+    return issue
+
 
 @router.get("/{order_id}/track", response_model=DeliveryRead)
 def track_delivery(

@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.crypto import decrypt_message, encrypt_message
 from app.core.security import decode_access_token
 from app.models.commerce import Order
-from app.models.delivery import Delivery, DeliveryAgent, DeliveryAgentStatus
+from app.models.delivery import Delivery, DeliveryAgent
 from app.models.messaging import ActorRole, Conversation, Message, actor_role_for, conversation_participants as cp
 from app.models.shop import Shop
 from app.models.user import User, UserRole, UserStatus
@@ -63,8 +63,9 @@ def resolve_actor(token: str, db: Session) -> Optional[Actor]:
         return None
 
     if token_type == "agent":
+        # inactive just means offline (riders toggle it), so they can still chat.
         agent = db.query(DeliveryAgent).filter(DeliveryAgent.id == subject_id).first()
-        if not agent or agent.status == DeliveryAgentStatus.inactive:
+        if not agent:
             return None
         return Actor(agent=agent)
     if token_type == "access":

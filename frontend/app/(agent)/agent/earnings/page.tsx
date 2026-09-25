@@ -3,10 +3,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatKES } from "@/lib/utils";
 
+type AgentEarnings = {
+  total_deliveries: number;
+  weekly_deliveries: number;
+  monthly_deliveries: number;
+  weekly_earnings: string;
+  monthly_earnings: string;
+};
+
 export default function AgentEarningsPage() {
   const { data: agent, isLoading } = useQuery({
-    queryKey: ["agent-profile"],
-    queryFn: () => fetch("/api/agent/auth").then((r) => r.json()).then((d) => d.agent),
+    queryKey: ["agent-earnings"],
+    queryFn: async () => {
+      const res = await fetch("/api/agent/earnings");
+      if (!res.ok) return null;
+      return res.json() as Promise<AgentEarnings>;
+    },
     refetchInterval: 30000,
   });
 
@@ -21,7 +33,7 @@ export default function AgentEarningsPage() {
   if (!agent) {
     return (
       <div className="card flex flex-col items-center justify-center py-20 text-center">
-        <p className="font-bold mb-1">Could not load profile</p>
+        <p className="font-bold mb-1">Could not load earnings</p>
         <p className="text-sm text-muted">Please try signing in again.</p>
       </div>
     );
@@ -41,14 +53,14 @@ export default function AgentEarningsPage() {
         <div className="card p-5">
           <p className="text-xs text-muted mb-1">This week</p>
           <p className="text-3xl font-bold">
-            {formatKES((agent.weekly_earnings ?? 0).toString())}
+            {formatKES(agent.weekly_earnings)}
           </p>
         </div>
 
         <div className="card p-5">
           <p className="text-xs text-muted mb-1">This month</p>
           <p className="text-3xl font-bold">
-            {formatKES((agent.monthly_earnings ?? 0).toString())}
+            {formatKES(agent.monthly_earnings)}
           </p>
         </div>
       </div>
