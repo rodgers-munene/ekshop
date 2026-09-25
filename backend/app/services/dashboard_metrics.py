@@ -694,8 +694,11 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
     platform_commission = (gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
     mpesa_fees = (gmv * MPESA_RATE).quantize(Decimal("0.01"))
     server_cost = (Decimal(order_count) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
-    net_profit = (gmv - platform_commission - mpesa_fees - server_cost).quantize(Decimal("0.01"))
-    gross_margin_pct = float((net_profit / gmv * 100).quantize(Decimal("0.01"))) if gmv else 0.0
+    # Ekshop's revenue is the commission; the rest of GMV is paid out to sellers.
+    net_profit = (platform_commission - mpesa_fees - server_cost).quantize(Decimal("0.01"))
+    gross_margin_pct = (
+        float((net_profit / platform_commission * 100).quantize(Decimal("0.01"))) if platform_commission else 0.0
+    )
     average_order_value = (gmv / Decimal(order_count)).quantize(Decimal("0.01")) if order_count else Decimal("0")
 
     day_col = func.date_trunc("day", OrderGroup.created_at)
@@ -722,8 +725,8 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
         day_commission = (day_gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
         day_mpesa = (day_gmv * MPESA_RATE).quantize(Decimal("0.01"))
         day_server = (Decimal(day_orders) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
-        day_profit = (day_gmv - day_commission - day_mpesa - day_server).quantize(Decimal("0.01"))
-        day_margin = float((day_profit / day_gmv * 100).quantize(Decimal("0.01"))) if day_gmv else 0.0
+        day_profit = (day_commission - day_mpesa - day_server).quantize(Decimal("0.01"))
+        day_margin = float((day_profit / day_commission * 100).quantize(Decimal("0.01"))) if day_commission else 0.0
         day_aov = float((day_gmv / Decimal(day_orders)).quantize(Decimal("0.01"))) if day_orders else 0.0
         trend.append(
             {

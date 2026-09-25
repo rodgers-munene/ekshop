@@ -526,7 +526,8 @@ def check_admin_thresholds(
 
     margin = dashboard_metrics.get_margin_leakage_metrics(db, since)
     margin_pct = float(margin.get("gross_margin_pct", 100))
-    if automation.alert_gross_margin_enabled and margin_pct < min_margin:
+    # A day with no paid orders has no margin to judge, not a 0% margin.
+    if automation.alert_gross_margin_enabled and margin.get("orders") and margin_pct < min_margin:
         alerts.append({
             "level": "high",
             "metric": "gross_margin_pct",
