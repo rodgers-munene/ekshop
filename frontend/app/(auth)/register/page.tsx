@@ -105,7 +105,7 @@ function RegisterPageInner() {
         try {
           const data = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
           if (!data) {
-            toast.error("We couldn't pinpoint your location — use the map instead.");
+            toast.error("We couldn't pinpoint your location. Use the map instead.");
             return;
           }
           applyCounty({
@@ -257,8 +257,8 @@ function RegisterPageInner() {
 
           {role === "seller" && selectedPlan && (
             <p className="text-xs text-muted mb-6">
-              Plan: <strong>{selectedPlan.name}</strong> (KES {selectedPlan.price.toLocaleString()}/month) —{" "}
-              <Link href="/register/plan" className="text-amber underline underline-offset-2">change plan</Link>
+              Plan: <strong>{selectedPlan.name}</strong> (KES {selectedPlan.price.toLocaleString()}/month).{" "}
+              <Link href="/register/plan" className="text-amber underline underline-offset-2">Change plan</Link>
             </p>
           )}
 
@@ -375,7 +375,7 @@ function RegisterPageInner() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setMapOpen(false)}>
           <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 text-center text-sm font-medium text-white">
-              Drop the pin where you live — switch between Satellite and Streets
+              Drop the pin where you live. Switch between Satellite and Streets to find it.
             </p>
             <LocationPicker
               initial={
