@@ -183,8 +183,7 @@ export default function LocationPicker({
     );
   }
 
-  async function runSearch(e: React.FormEvent) {
-    e.preventDefault();
+  async function runSearch() {
     const q = query.trim();
     if (q.length < 2) return;
     setSearching(true);
@@ -211,7 +210,9 @@ export default function LocationPicker({
       <div className="relative">
         <div ref={containerRef} className="h-72 md:h-80 w-full bg-surface" />
 
-        <form onSubmit={runSearch} className="absolute left-3 top-3 right-24 md:right-28 z-[500]">
+        {/* Not a <form>: the picker is used inside other forms (shop settings),
+            and a nested form's submit would also submit the outer one. */}
+        <div className="absolute left-3 top-3 right-24 md:right-28 z-[500]">
           <div className="relative">
             <input
               value={query}
@@ -219,10 +220,16 @@ export default function LocationPicker({
                 setQuery(e.target.value);
                 if (results.length) setResults([]);
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  runSearch();
+                }
+              }}
               placeholder="Search e.g. Kawangware, Kabarnet…"
               className="w-full rounded-lg border border-border bg-white/95 px-3 py-2 pr-8 text-sm shadow-sm outline-none focus:border-amber"
             />
-            <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted" aria-label="Search">
+            <button type="button" onClick={runSearch} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted" aria-label="Search">
               <Search size={15} />
             </button>
           </div>
@@ -242,7 +249,7 @@ export default function LocationPicker({
               ))}
             </ul>
           )}
-        </form>
+        </div>
 
         <div className="absolute right-3 top-3 z-[500] flex flex-col gap-1.5">
           {BASEMAPS.map((b) => (

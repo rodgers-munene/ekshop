@@ -1,4 +1,6 @@
 import logging
+import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,8 +28,17 @@ from app.routers.geography import router as geography_router
 from app.routers.messaging_ws import router as messaging_ws_router
 from app.routers.invoices import router as invoices_router
 from app.routers.receipts import router as receipts_router
+from app.services import spatial
 
-app = FastAPI(title="Ekshop API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Loads in the background so the worker starts serving (and passes its
+    # health check) straight away.
+    threading.Thread(target=spatial.warm_up, name="geojson-warm-up", daemon=True).start()
+    yield
+
+app = FastAPI(title="Ekshop API", version="1.0.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

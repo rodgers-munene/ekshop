@@ -13,6 +13,7 @@ Coordinate order everywhere is GeoJSON's (lng, lat).
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 from pathlib import Path
@@ -20,6 +21,8 @@ from typing import Any, Optional
 
 from shapely.geometry import Point, shape
 from shapely.prepared import prep
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "Data" / "geojson"
 
@@ -168,17 +171,35 @@ def _search_index() -> list[dict[str, Any]]:
 _search_index_cache: Optional[list[dict[str, Any]]] = None
 
 
-def search(query: str, limit: int = 8) -> list[dict[str, Any]]:
-    """Case-insensitive name search across ward, location and sublocation."""
+def _get_search_index() -> list[dict[str, Any]]:
+    # Load the layers before taking the lock: _layers() takes it too, and
+    # threading.Lock isn't reentrant, so building the index under it deadlocked.
     global _search_index_cache
-    q = _clean(query)
-    if not q:
-        return []
+    if _search_index_cache is not None:
+        return _search_index_cache
+    _layers()
     with _lock:
         if _search_index_cache is None:
             _search_index_cache = _search_index()
+        return _search_index_cache
+
+
+def warm_up() -> None:
+    """Load the boundaries and search index ahead of the first request (about
+    20s and a few hundred MB), so the first address lookup doesn't wait."""
+    try:
+        _get_search_index()
+    except Exception:
+        logger.exception("Loading geojson boundaries failed")
+
+
+def search(query: str, limit: int = 8) -> list[dict[str, Any]]:
+    """Case-insensitive name search across ward, location and sublocation."""
+    q = _clean(query)
+    if not q:
+        return []
     results = []
-    for entry in _search_index_cache:
+    for entry in _get_search_index():
         haystack = " ".join(filter(None, (entry[k] for k in ("name", "subcounty", "county", "ward"))))
         if q in _clean(haystack):
             parts = [entry.get("name")]
