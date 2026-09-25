@@ -3,7 +3,7 @@ import Link from "next/link";
 import { serverFetch } from "@/lib/server-api";
 import { Category, ProductListResponse, Shop } from "@/types/interface";
 import ProductCard from "@/components/ProductCard";
-import { Crosshair } from "lucide-react";
+import NearMeButton from "@/components/geo/NearMeButton";
 
 interface Props {
   searchParams: Promise<{
@@ -71,36 +71,6 @@ function NearbyShops({ shops }: { shops: Shop[] }) {
         </Link>
       ))}
     </div>
-  );
-}
-
-function NearMeButton() {
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        if (!navigator.geolocation) {
-          alert("Geolocation is not supported by your browser");
-          return;
-        }
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const params = new URLSearchParams(window.location.search);
-            params.set("lat", String(pos.coords.latitude));
-            params.set("lng", String(pos.coords.longitude));
-            window.location.search = params.toString();
-          },
-          () => {
-            alert("Couldn't get your location. Check browser permissions.");
-          },
-          { enableHighAccuracy: true, timeout: 10000 }
-        );
-      }}
-      className="w-full flex items-center justify-center gap-2 text-xs py-2 px-3 rounded-md border border-border hover:border-amber transition-colors"
-    >
-      <Crosshair size={14} />
-      Use my location
-    </button>
   );
 }
 
