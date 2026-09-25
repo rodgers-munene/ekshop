@@ -213,8 +213,8 @@ async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
 
     _mark_order_paid(db, intent.order_group_id)
 
-    await emit_order_paid_webhook(None, str(intent.order_group_id))
     db.commit()
+    await emit_order_paid_webhook(None, str(intent.order_group_id))
 
     try:
         group = db.query(OrderGroup).filter(OrderGroup.id == intent.order_group_id).first()
@@ -504,8 +504,8 @@ async def paystack_callback(request: Request, db: Session = Depends(get_db)):
 
     _mark_order_paid(db, intent.order_group_id)
 
-    await emit_order_paid_webhook(None, str(intent.order_group_id))
     db.commit()
+    await emit_order_paid_webhook(None, str(intent.order_group_id))
     return {"status": "recorded"}
 
 
