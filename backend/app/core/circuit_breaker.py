@@ -2,7 +2,18 @@ import time
 from collections import deque
 from typing import Callable, TypeVar
 
+import httpx
+
 T = TypeVar("T")
+
+
+def _is_outage(exc: Exception) -> bool:
+    """Network errors and 5xx responses mean the provider is struggling. A 4xx
+    is about one request (bad reference, invalid phone), so it must not open
+    the circuit for everyone else."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)
 
 
 class CircuitBreaker:
@@ -56,6 +67,8 @@ class CircuitBreaker:
             self.record_success()
             return result
         except Exception as exc:
+            if not _is_outage(exc):
+                raise
             self.record_failure(exc)
             if fallback is not None:
                 return fallback()
