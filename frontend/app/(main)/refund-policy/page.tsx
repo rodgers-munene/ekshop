@@ -68,7 +68,7 @@ export default function RefundPolicyPage() {
         <section>
           <h2 className="font-semibold text-base mb-2">6. Contact</h2>
           <p>
-            For help with a return or refund, contact <span className="text-muted">support@ekshop.co.ke</span> with
+            For help with a return or refund, contact <span className="text-muted">supportteam@ekshop.store</span> with
             your order number.
           </p>
         </section>

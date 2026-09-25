@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Headset, MessageCircle, Loader2 } from "lucide-react";
 import { ConversationSummary } from "@/types/interface";
 
-const SUPPORT_EMAIL = "support@ekshop.co.ke";
+const SUPPORT_EMAIL = "supportteam@ekshop.store";
 
 export default function MessagesPage() {
   const router = useRouter();

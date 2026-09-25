@@ -194,7 +194,7 @@ def open_support_conversation(db: Session = Depends(get_db), actor: Actor = Depe
     if not support_shop:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Support chat is not available right now. Email support@ekshop.co.ke instead.",
+            "Support chat is not available right now. Email supportteam@ekshop.store instead.",
         )
     if support_shop.seller_id == actor.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You can't support-chat with your own shop")

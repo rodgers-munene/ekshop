@@ -111,7 +111,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="font-semibold text-base mb-2">12. Contact</h2>
-          <p>Questions about these Terms can be sent to <span className="text-muted">support@ekshop.co.ke</span>.</p>
+          <p>Questions about these Terms can be sent to <span className="text-muted">supportteam@ekshop.store</span>.</p>
         </section>
       </div>
     </div>
