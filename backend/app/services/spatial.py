@@ -50,14 +50,36 @@ def _as_code(value: Any) -> Optional[int]:
         return None
 
 
+_decoder = json.JSONDecoder()
+
+
+def _iter_features(text: str):
+    """Yield a FeatureCollection's features one at a time.
+
+    json.loads on the whole file builds millions of coordinate objects at
+    once, and the memory they leave behind is never returned to the OS: the
+    wards file alone kept each worker about 300 MB larger. Decoding feature by
+    feature lets each one's coordinates be freed and reused by the next.
+    """
+    i = text.index("[", text.index('"features"')) + 1
+    n = len(text)
+    while True:
+        while i < n and text[i] in " \t\r\n,":
+            i += 1
+        if i >= n or text[i] == "]":
+            return
+        feature, i = _decoder.raw_decode(text, i)
+        yield feature
+
+
 def _build_entries(filename: str, props_fields: tuple[str, ...]) -> list[dict[str, Any]]:
     path = DATA_DIR / filename
     entries = []
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return []
-    for feature in data.get("features", []):
+    for feature in _iter_features(text):
         geometry = feature.get("geometry")
         if not geometry:
             continue
