@@ -6,9 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# psycopg (non-binary) + spatial packages (fiona) need a C toolchain, libpq and GDAL headers
+# psycopg (non-binary) needs a C toolchain and libpq headers
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libpq-dev curl gdal-bin libgdal-dev \
+    && apt-get install -y --no-install-recommends build-essential libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
