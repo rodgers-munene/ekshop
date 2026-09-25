@@ -58,7 +58,7 @@ export default async function BillingPage() {
 
   let helpText: string;
   if (subscription.status === "trialing") {
-    helpText = `You're on a free trial of ${subscription.plan.name} until ${formatDate(subscription.current_period_end)}. Subscribe before then to keep your shop live — your paid period starts when the trial ends.`;
+    helpText = `You're on a free trial of ${subscription.plan.name} until ${formatDate(subscription.current_period_end)}. Subscribe before then to keep your shop live. Your paid period starts when the trial ends.`;
   } else if (isGracePeriod) {
     helpText = `You have ${remaining} day${remaining === 1 ? "" : "s"} left to activate your ${subscription.plan.name} plan before it's enforced — activate now to lock it in, no need to wait.`;
   } else if (subscription.status === "cancelled") {
