@@ -18,11 +18,13 @@ export default function CartPage() {
   useEffect(() => {
     fetch("/api/account/addresses")
       .then((r) => r.json().catch(() => []))
-      .then((data: UserAddress[]) => {
-        setAddresses(data ?? []);
-        const def = data.find((a) => a.is_default) ?? data[0];
+      .then((data) => {
+        const list: UserAddress[] = Array.isArray(data) ? data : [];
+        setAddresses(list);
+        const def = list.find((a) => a.is_default) ?? list[0];
         if (def) setSelectedAddressId(def.id);
-      });
+      })
+      .catch(() => setAddresses([]));
   }, []);
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
