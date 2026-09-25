@@ -9,14 +9,14 @@ intentionally left out — see the implementation plan for why.
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from typing import Optional
+from typing import List, Optional
 
-from sqlalchemy import Numeric, cast, desc, func
+from sqlalchemy import Numeric, cast, desc, distinct, func
 from sqlalchemy.orm import Session
 
 from app.models.analytics import UserEvent, EventType, IssueReport
 from app.models.catalog import Product
-from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus
+from app.models.commerce import Cart, CartItem, Order, OrderGroup, OrderGroupStatus, OrderItem, OrderStatus
 from app.models.delivery import Delivery, DeliveryAgent, DeliveryAgentStatus, DeliveryStatus
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole

@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -28,19 +29,28 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
 from app.models.automation import AutomationSettings
 from app.schemas.admin import (
+    AcquisitionMetrics,
     AdminEmailStatus,
     AdminEmailTestRequest,
     AdminEmailTestResult,
+    AdminOverviewPeriodMetrics,
     AdminOverviewRead,
+    AdminOverviewTotals,
     AdminProductListResponse,
     AdminProductRow,
     AdminStatsRead,
     AdminTrendPoint,
+    BehaviorMetrics,
     CartAbandonmentMetrics,
     CustomerRecoveryRow,
     CustomerRetentionMetrics,
+    EcommerceMetrics,
+    HeroSlideCreate,
+    HeroSlideRead,
+    HeroSlideUpdate,
     MarginLeakageMetrics,
     MarginLeakageTrendPoint,
+    MerchantActivityMetrics,
     MerchantMasterHealth,
     OperationsDeliveryMetrics,
     OrderControlTowerRow,
@@ -54,6 +64,7 @@ from app.schemas.admin import (
     PromotionCreate,
     PromotionRead,
     PromotionUpdate,
+    RealTimeMetrics,
     RecentOrderListResponse,
     RecentOrderRow,
     SalesDemandMetrics,
@@ -71,6 +82,9 @@ from app.services import dashboard_metrics
 from app.services import automation as automation_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
+
+PERIOD_PATTERN = "^(today|yesterday|week|month)$"
 
 
 # ── Stats ────────────────────────────────────────────────────────────────────
@@ -256,8 +270,6 @@ def get_stats_overview(
 
 
 # ── Analytics ────────────────────────────────────────────────────────────────
-
-PERIOD_PATTERN = "^(today|yesterday|week|month)$"
 
 
 def _period_bounds(period: Optional[str], days: int) -> tuple[datetime, datetime]:
@@ -512,7 +524,7 @@ def check_admin_thresholds(
     max_abandon = automation.alert_max_cart_abandonment_rate
     min_delivery = automation.alert_min_on_time_delivery_rate
 
-    margin = get_margin_leakage_metrics(db, since)
+    margin = dashboard_metrics.get_margin_leakage_metrics(db, since)
     margin_pct = float(margin.get("gross_margin_pct", 100))
     if automation.alert_gross_margin_enabled and margin_pct < min_margin:
         alerts.append({
@@ -521,7 +533,7 @@ def check_admin_thresholds(
             "message": f"Gross margin dropped to {margin_pct:.2f}% (threshold {min_margin}%)",
         })
 
-    sales = get_sales_demand_metrics(db, since, now)
+    sales = dashboard_metrics.get_sales_demand_metrics(db, since, now)
     cancellation_rate = float(sales.get("order_cancellation_rate", 0))
     if automation.alert_order_cancellation_enabled and cancellation_rate > max_cancel:
         alerts.append({
@@ -530,7 +542,7 @@ def check_admin_thresholds(
             "message": f"Order cancellation rate is {cancellation_rate:.2f}% (threshold {max_cancel}%)",
         })
 
-    cart = get_cart_abandonment_metrics(db, since, now)
+    cart = dashboard_metrics.get_cart_abandonment_metrics(db, since, now)
     abandonment_rate = float(cart.get("cart_abandonment_rate", 0))
     if automation.alert_cart_abandonment_enabled and abandonment_rate > max_abandon:
         alerts.append({
@@ -539,7 +551,7 @@ def check_admin_thresholds(
             "message": f"Cart abandonment rate is {abandonment_rate:.2f}% (threshold {max_abandon}%)",
         })
 
-    ops = get_operations_delivery_metrics(db, since, now)
+    ops = dashboard_metrics.get_operations_delivery_metrics(db, since, now)
     on_time = ops.get("on_time_delivery_rate")
     if automation.alert_on_time_delivery_enabled and on_time is not None and float(on_time) < min_delivery:
         alerts.append({
