@@ -45,14 +45,16 @@ async def get_route_eta_distance(lat1: float, lng1: float, lat2: float, lng2: fl
         return {"distance_km": None, "duration_min": None}
 
 
-async def get_route_matrix(coords: list[tuple[float, float]]) -> list[dict]:
+async def get_route_matrix(coords: list[tuple[float, float]]) -> list[list[dict]]:
     """Call ORS matrix API for multiple origins/destinations.
 
     coords: list of (lat, lng)
-    Returns list of {distance_km, duration_min} per pair.
+    Returns a 2D matrix where matrix[i][j] is {distance_km, duration_min}.
     """
-    if not settings.ORS_API_KEY or len(coords) < 2:
-        return [{"distance_km": None, "duration_min": None}] * len(coords)
+    n = len(coords)
+    empty = {"distance_km": None, "duration_min": None}
+    if not settings.ORS_API_KEY or n < 2:
+        return [[dict(empty) for _ in range(n)] for _ in range(n)]
 
     body = {
         "coordinates": [[lng, lat] for lat, lng in coords],
@@ -67,18 +69,19 @@ async def get_route_matrix(coords: list[tuple[float, float]]) -> list[dict]:
             data = r.json()
     except Exception as exc:
         logger.warning("ORS matrix request failed: %s", exc)
-        return [{"distance_km": None, "duration_min": None}] * len(coords)
+        return [[dict(empty) for _ in range(n)] for _ in range(n)]
 
-    distances = data.get("distances", [])
-    durations = data.get("durations", [])
-    results = []
-    for i in range(len(coords)):
-        d_m = distances[i] if i < len(distances) else None
-        d_s = durations[i] if i < len(durations) else None
-        results.append(
-            {
-                "distance_km": round(d_m / 1000, 2) if d_m is not None else None,
-                "duration_min": round(d_s / 60, 0) if d_s is not None else None,
-            }
-        )
-    return results
+    distances = data.get("distances") or []
+    durations = data.get("durations") or []
+
+    def cell(row: int, col: int) -> dict:
+        d_m = distances[row][col] if row < len(distances) and col < len(distances[row]) else None
+        d_s = durations[row][col] if row < len(durations) and col < len(durations[row]) else None
+        if d_m is None:
+            return dict(empty)
+        return {
+            "distance_km": round(d_m / 1000, 2),
+            "duration_min": round(d_s / 60, 0) if d_s is not None else None,
+        }
+
+    return [[cell(i, j) for j in range(n)] for i in range(n)]

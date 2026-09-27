@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import uuid
 
 from sqlalchemy.orm import Session
 
@@ -7,7 +8,8 @@ from app.models.shop import ShopStatus
 from app.models.subscription import BillingInterval, Subscription, SubscriptionStatus
 from app.models.user import UserStatus
 from app.services import email as email_service
-from app.services.notifications import notify_admins_of_pos_provisioning, _notify_seller
+from app.services.notifications import notify_admins_of_pos_provisioning
+from app.services import paystack
 import logging
 
 logger = logging.getLogger(__name__)

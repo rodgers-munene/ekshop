@@ -447,7 +447,7 @@ def report_delivery_issue(
 
 
 @router.post("/optimize-route", response_model=RouteOptimizationResponse)
-def optimize_route(
+async def optimize_route(
     payload: RouteOptimizationRequest,
     db: Session = Depends(get_db),
     agent: DeliveryAgent = Depends(get_current_agent),
@@ -483,9 +483,20 @@ def optimize_route(
         return RouteOptimizationResponse(stops=stops)
 
     try:
-        matrix = get_route_matrix(coords)
+        matrix = await get_route_matrix(coords)
     except Exception:
+        logger.warning("Route matrix unavailable, falling back to haversine", exc_info=True)
         matrix = [[0.0 if i == j else _haversine(*coords[i], *coords[j]) for j in range(len(coords))] for i in range(len(coords))]
+
+    def leg_values(i: int, j: int) -> tuple[float, float | None]:
+        leg = matrix[i][j]
+        if isinstance(leg, dict):
+            dist = leg.get("distance_km")
+            dur = leg.get("duration_min")
+            if dist is None:
+                dist = _haversine(*coords[i], *coords[j])
+            return float(dist), (float(dur) if dur is not None else None)
+        return float(leg), None
 
     unvisited = set(range(len(coords)))
     path = [0]
@@ -495,10 +506,8 @@ def optimize_route(
 
     while unvisited:
         last = path[-1]
-        next_idx = min(unvisited, key=lambda i: matrix[last][i]["distance_km"] if isinstance(matrix[last][i], dict) else matrix[last][i])
-        leg = matrix[last][next_idx]
-        dist = float(leg["distance_km"]) if isinstance(leg, dict) else float(leg)
-        dur = float(leg["duration_min"]) if isinstance(leg, dict) else None
+        next_idx = min(unvisited, key=lambda i: leg_values(last, i)[0])
+        dist, dur = leg_values(last, next_idx)
         total_dist += dist
         if dur is not None:
             total_dur += dur

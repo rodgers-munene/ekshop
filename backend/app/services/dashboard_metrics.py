@@ -9,14 +9,15 @@ intentionally left out — see the implementation plan for why.
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import Numeric, cast, desc, func
 from sqlalchemy.orm import Session
 
 from app.models.analytics import UserEvent, EventType, IssueReport
 from app.models.catalog import Product
-from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus
+from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus, OrderItem
+from app.models.commerce import Cart, CartItem
 from app.models.delivery import Delivery, DeliveryAgent, DeliveryAgentStatus, DeliveryStatus
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole
@@ -819,7 +820,7 @@ def get_acquisition_metrics(db: Session, since: datetime, until: datetime) -> di
     )
     # Returning buyers: had previous orders before this period but also ordered in this period
     buyers_with_previous = (
-        db.query(func.count(distinct(OrderGroup.buyer_id)))
+        db.query(func.count(OrderGroup.buyer_id.distinct()))
         .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at < since)
         .scalar()
         or 0

@@ -31,7 +31,9 @@ from app.schemas.admin import (
     AdminEmailStatus,
     AdminEmailTestRequest,
     AdminEmailTestResult,
+    AdminOverviewPeriodMetrics,
     AdminOverviewRead,
+    AdminOverviewTotals,
     AdminProductListResponse,
     AdminProductRow,
     AdminStatsRead,
@@ -39,6 +41,14 @@ from app.schemas.admin import (
     CartAbandonmentMetrics,
     CustomerRecoveryRow,
     CustomerRetentionMetrics,
+    EcommerceMetrics,
+    AcquisitionMetrics,
+    BehaviorMetrics,
+    RealTimeMetrics,
+    HeroSlideCreate,
+    HeroSlideRead,
+    HeroSlideUpdate,
+    MerchantActivityMetrics,
     MarginLeakageMetrics,
     MarginLeakageTrendPoint,
     MerchantMasterHealth,
@@ -69,6 +79,17 @@ from app.services import storage
 from app.services import email as email_service
 from app.services import dashboard_metrics
 from app.services import automation as automation_service
+from app.services.dashboard_metrics import (
+    get_cart_abandonment_metrics,
+    get_margin_leakage_metrics,
+    get_operations_delivery_metrics,
+    get_sales_demand_metrics,
+)
+import logging
+
+logger = logging.getLogger(__name__)
+
+PERIOD_PATTERN = "^(today|yesterday|week|month)$"
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -256,8 +277,6 @@ def get_stats_overview(
 
 
 # ── Analytics ────────────────────────────────────────────────────────────────
-
-PERIOD_PATTERN = "^(today|yesterday|week|month)$"
 
 
 def _period_bounds(period: Optional[str], days: int) -> tuple[datetime, datetime]:

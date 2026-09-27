@@ -9,6 +9,9 @@ from app.routers.payments import reconcile_stale_mpesa_intents
 from app.services.subscriptions import run_billing_cycle
 from app.services.email import _send
 from app.services.dashboard_metrics import get_margin_leakage_metrics
+from app.models.commerce import Order
+from app.models.shop import Shop
+from app.models.user import User
 
 router = APIRouter(prefix="/internal/cron", tags=["internal"])
 

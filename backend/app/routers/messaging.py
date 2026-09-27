@@ -4,6 +4,7 @@ from typing import List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import select, or_
 from jose import JWTError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -13,7 +14,7 @@ from app.dependencies.database import get_db
 from app.models.messaging import Conversation, Message, ActorRole, conversation_participants
 from app.models.commerce import Order
 from app.models.user import User
-from app.models.delivery import DeliveryAgent
+from app.models.delivery import DeliveryAgent, Delivery
 from app.schemas.messaging import MessageCreate, MessageRead, ConversationRead, ConversationCreate
 from app.schemas.user import UserRead
 from app.models.shop import Shop
@@ -48,26 +49,40 @@ def _get_user_from_token(credentials: HTTPAuthorizationCredentials, db: Session)
     return user
 
 
+def _is_explicit_agent_participant(conversation_id: uuid.UUID, agent_id: uuid.UUID, db: Session) -> bool:
+    participant = db.execute(
+        conversation_participants.select().where(
+            conversation_participants.c.conversation_id == conversation_id,
+            conversation_participants.c.agent_id == agent_id,
+        )
+    ).first()
+    return participant is not None
+
+
+def _agent_delivers_order(order_id: uuid.UUID, agent_id: uuid.UUID, db: Session) -> bool:
+    delivery = (
+        db.query(Delivery.id)
+        .filter(Delivery.order_id == order_id, Delivery.agent_id == agent_id)
+        .first()
+    )
+    return delivery is not None
+
+
 def _is_participant(identity: Union[User, AuthenticatedIdentity], conversation: Conversation, db: Session) -> bool:
-    if conversation.order_id is None:
-        user_ids = {p.id for p in conversation.participants}
-        if identity.id in user_ids:
+    if isinstance(identity, AuthenticatedIdentity):
+        if _is_explicit_agent_participant(conversation.id, identity.id, db):
             return True
-        if isinstance(identity, AuthenticatedIdentity):
-            participant = db.execute(
-                conversation_participants.select().where(
-                    conversation_participants.c.conversation_id == conversation.id,
-                    conversation_participants.c.agent_id == identity.id,
-                )
-            ).first()
-            return participant is not None
-        return False
+        if conversation.order_id is None:
+            return False
+        return _agent_delivers_order(conversation.order_id, identity.id, db)
+
+    if conversation.order_id is None:
+        return identity.id in {p.id for p in conversation.participants}
+
     order = db.query(Order).filter(Order.id == conversation.order_id).first()
     if not order:
         return False
-    if isinstance(identity, User):
-        return order.buyer_id == identity.id or (order.shop and order.shop.seller_id == identity.id)
-    return False
+    return order.buyer_id == identity.id or (order.shop and order.shop.seller_id == identity.id)
 
 
 @router.get("", response_model=List[ConversationRead])
@@ -96,8 +111,25 @@ def list_conversations(
             .all()
         )
     else:
+        agent_participant = (
+            select(Conversation.id)
+            .select_from(conversation_participants)
+            .where(
+                conversation_participants.c.conversation_id == Conversation.id,
+                conversation_participants.c.agent_id == identity.id,
+            )
+            .exists()
+        )
+        agent_delivery = (
+            select(Delivery.id)
+            .where(
+                Delivery.order_id == Conversation.order_id,
+                Delivery.agent_id == identity.id,
+            )
+            .exists()
+        )
         conversations = (
-            base_query.filter(Conversation.order_id.is_(None) & Conversation.participants.any(id=identity.id))
+            base_query.filter(or_(agent_participant, agent_delivery))
             .order_by(Conversation.created_at.desc())
             .all()
         )
@@ -111,7 +143,18 @@ def create_conversation(
     db: Session = Depends(get_db),
 ):
     identity = _get_user_from_token(credentials, db)
-    if not identity or not isinstance(identity, User):
+    if not identity:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Delivery agents may only open support conversations. The remaining branches
+    # write the caller's id into a users.id foreign key, which an agent id is not.
+    if isinstance(identity, AuthenticatedIdentity):
+        if not payload.admin_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Agents can only start conversations with support",
+            )
+    elif not isinstance(identity, User):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     if payload.shop_id:
@@ -232,10 +275,12 @@ def create_conversation(
         db.add(conversation)
         db.flush()
 
+        caller_is_agent = isinstance(identity, AuthenticatedIdentity)
         db.execute(
             conversation_participants.insert().values(
                 conversation_id=conversation.id,
-                agent_id=identity.id,
+                agent_id=identity.id if caller_is_agent else None,
+                user_id=None if caller_is_agent else identity.id,
                 joined_at=datetime.now(timezone.utc),
             )
         )
@@ -250,8 +295,8 @@ def create_conversation(
         if payload.initial_message:
             message = Message(
                 conversation_id=conversation.id,
-                sender_id=identity.id,
-                sender_type=ActorRole.agent,
+                sender_id=None if caller_is_agent else identity.id,
+                sender_type=ActorRole.agent if caller_is_agent else ActorRole.customer,
                 body=encrypt_message(payload.initial_message),
             )
             db.add(message)
@@ -357,9 +402,13 @@ def create_message(
     else:
         sender_type = ActorRole.agent
 
+    # messages.sender_id is a users.id foreign key; agents are not users, so their
+    # messages are stored with a null sender_id and identified by sender_type.
+    sender_id = identity.id if isinstance(identity, User) else None
+
     message = Message(
         conversation_id=conversation_id,
-        sender_id=identity.id,
+        sender_id=sender_id,
         sender_type=sender_type,
         body=encrypt_message(payload.body),
     )
