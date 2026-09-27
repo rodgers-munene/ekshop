@@ -9,7 +9,7 @@ from app.dependencies.database import get_db
 from app.dependencies.auth import get_current_active_user
 from app.models.user import User
 from app.models.commerce import OrderGroup, Order
-from app.models.payments import PaymentIntent
+from app.models.payment import PaymentIntent
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
