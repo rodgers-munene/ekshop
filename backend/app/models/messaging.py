@@ -29,6 +29,7 @@ class Conversation(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     order = relationship("Order")
+    shop = relationship("Shop", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
     participants = relationship("User", secondary="conversation_participants", back_populates="conversations")
 

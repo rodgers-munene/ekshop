@@ -1,25 +1,24 @@
 import uuid
 import json
-from datetime import datetime, timezone
+import logging
 from typing import Dict, Set
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
 from app.core.crypto import encrypt_message, decrypt_message
 from app.dependencies.database import get_db
-from app.models.messaging import Conversation, Message, ActorRole
+from app.models.messaging import Conversation, Message, ActorRole, conversation_participants
 from app.models.commerce import Order
 from app.models.user import User
-from app.models.delivery import DeliveryAgent
-from app.schemas.messaging import MessageCreate, MessageRead
+from app.models.delivery import DeliveryAgent, Delivery
+from app.schemas.messaging import MessageRead
 
 router = APIRouter(tags=["messaging-ws"])
 
-bearer_scheme = HTTPBearer()
+logger = logging.getLogger(__name__)
 
 active_connections: Dict[str, Set[WebSocket]] = {}
 
@@ -44,6 +43,35 @@ def _authenticate(token: str, db: Session):
         raise HTTPException(401, "Invalid token")
 
 
+def _is_ws_participant(identity: dict, conversation: Conversation, db: Session) -> bool:
+    """Authorization for the websocket: mirrors the REST participant check."""
+    agent_id = conversation_participants.c.agent_id == identity["id"] if identity["type"] == "agent" else None
+    if agent_id is not None:
+        row = db.execute(
+            conversation_participants.select().where(
+                conversation_participants.c.conversation_id == conversation.id,
+                conversation_participants.c.agent_id == identity["id"],
+            )
+        ).first()
+        if row is not None:
+            return True
+
+    if conversation.order_id is None:
+        return identity["id"] in {p.id for p in conversation.participants}
+
+    order = db.query(Order).filter(Order.id == conversation.order_id).first()
+    if not order:
+        return False
+    if identity["type"] == "agent":
+        delivery = (
+            db.query(Delivery.id)
+            .filter(Delivery.order_id == conversation.order_id, Delivery.agent_id == identity["id"])
+            .first()
+        )
+        return delivery is not None
+    return order.buyer_id == identity["id"] or (order.shop and order.shop.seller_id == identity["id"])
+
+
 @router.websocket("/ws/conversations/{conversation_id}")
 async def websocket_conversation(
     websocket: WebSocket,
@@ -63,6 +91,10 @@ async def websocket_conversation(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    if not _is_ws_participant(identity, conv, db):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     room_key = str(conv.id)
     if room_key not in active_connections:
         active_connections[room_key] = set()
@@ -77,13 +109,20 @@ async def websocket_conversation(
                 continue
 
             encrypted = encrypt_message(body)
+            # messages.sender_id is a users.id foreign key; agents are not users.
+            sender_id = None if identity["type"] == "agent" else identity["id"]
             message = Message(
                 conversation_id=conv.id,
-                sender_id=identity["id"],
-                sender_type=ActorRole(identity["type"]),
+                sender_id=sender_id,
+                sender_type=(
+                    ActorRole.agent
+                    if identity["type"] == "agent"
+                    else (ActorRole.admin if identity["type"] == "admin" else ActorRole.customer)
+                ),
                 body=encrypted,
             )
             db.add(message)
+            conv.last_message_at = message.created_at
             db.commit()
             db.refresh(message)
 
