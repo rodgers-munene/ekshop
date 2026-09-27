@@ -1,6 +1,7 @@
 import uuid
 import secrets
 import math
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import List
 
@@ -38,9 +39,11 @@ from app.services.delivery_pricing import (
     calculate_delivery_fee_from_cart_total,
     get_region,
 )
-from app.services.routing import get_route_eta_distance
+from app.services.routing import get_route_eta_distance, get_route_matrix
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
+
+logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer()
 
