@@ -2,6 +2,7 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dependencies.database import get_db
@@ -20,7 +21,7 @@ def list_counties(db: Session = Depends(get_db)):
 
 @router.get("/counties/{county_name}/subcounties", response_model=List[SubCountyRead])
 def list_subcounties(county_name: str, db: Session = Depends(get_db)):
-    county = db.query(County).filter(County.name == county_name).first()
+    county = db.query(County).filter(func.lower(County.name) == county_name.strip().lower()).first()
     if not county:
         raise HTTPException(404, "County not found")
     return (
