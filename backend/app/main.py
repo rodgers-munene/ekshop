@@ -1,4 +1,3 @@
-import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -86,7 +85,6 @@ def health(db: Session = Depends(get_db)):
 
 # Graceful shutdown: stop accepting new requests and finish in-flight work.
 try:
-    from uvicorn.signals import get_signals
     import signal
 
     def _graceful_shutdown(*args: object) -> None:

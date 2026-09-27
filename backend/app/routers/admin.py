@@ -12,12 +12,9 @@ from app.core.config import settings
 from app.dependencies.auth import require_admin
 from app.dependencies.database import get_db
 from app.models.commerce import (
-    Cart,
-    CartItem,
     OrderGroup,
     OrderGroupStatus,
     Order,
-    OrderItem,
     OrderStatus,
 )
 from app.models.catalog import Product
@@ -26,7 +23,6 @@ from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
-from app.models.automation import AutomationSettings
 from app.schemas.admin import (
     AdminEmailStatus,
     AdminEmailTestRequest,
@@ -50,7 +46,6 @@ from app.schemas.admin import (
     HeroSlideUpdate,
     MerchantActivityMetrics,
     MarginLeakageMetrics,
-    MarginLeakageTrendPoint,
     MerchantMasterHealth,
     OperationsDeliveryMetrics,
     OrderControlTowerRow,
@@ -71,7 +66,6 @@ from app.schemas.admin import (
     SupplyDemandRow,
     UserListResponse,
 )
-from app.schemas.commerce import OrderRead
 from app.schemas.shop import ShopRead
 from app.schemas.user import UserRead
 from app.schemas.automation import AutomationSettingsRead, AutomationSettingsUpdate

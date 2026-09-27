@@ -1,7 +1,5 @@
-import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 import httpx
-from fastapi import HTTPException
 from app.core.config import settings
 
 

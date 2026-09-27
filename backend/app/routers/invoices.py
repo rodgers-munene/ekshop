@@ -1,14 +1,12 @@
 """Customer invoice data endpoint."""
 import uuid
-from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.dependencies.database import get_db
 from app.dependencies.auth import get_current_active_user
 from app.models.user import User
-from app.models.commerce import OrderGroup, Order
+from app.models.commerce import OrderGroup
 from app.models.payment import PaymentIntent
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])

@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.dependencies.auth import get_current_active_user
 from app.dependencies.database import get_db
 from app.models.user import User
-from app.models.commerce import OrderGroup, OrderGroupStatus, OrderStatus, Order
+from app.models.commerce import OrderGroup, OrderGroupStatus, OrderStatus
 from app.models.payment import PaymentIntent, Payment, PaymentStatus
 from app.models.analytics import EventType
 from app.models.subscription import Subscription

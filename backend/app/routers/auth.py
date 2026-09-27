@@ -1,6 +1,5 @@
 import logging
 import re
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -18,7 +17,7 @@ from app.core.security import (
     hash_refresh_token,
     verify_password,
 )
-from app.dependencies.auth import bearer_scheme, get_current_user
+from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
 from app.services import email as email_service
 from app.services import paystack
@@ -40,7 +39,7 @@ from app.models.user import (
     UserRole,
     UserStatus,
 )
-from app.schemas.user import LoginRequest, RegisterResponse, ResetPasswordRequest, TokenResponse, UserCreate, UserRead
+from app.schemas.user import LoginRequest, RegisterResponse, ResetPasswordRequest, TokenResponse, UserCreate
 from app.schemas.subscription import (
     ResumePaymentRequest,
     ResumePaymentResponse,

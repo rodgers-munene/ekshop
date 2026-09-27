@@ -30,7 +30,6 @@ from app.schemas.delivery import (
     DeliverySimulationRow, DeliverySimulationResponse,
     RouteOptimizationRequest, RouteOptimizationResponse, RouteOptimizationStop,
 )
-from pydantic import BaseModel
 from app.services.notifications import create_notification
 from app.services.webhooks import emit_delivery_status_webhook
 from app.services.delivery_pricing import (

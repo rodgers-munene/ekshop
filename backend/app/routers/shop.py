@@ -4,7 +4,7 @@ from math import radians, cos, sin, asin, sqrt
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
-from sqlalchemy import update, func, case, literal_column
+from sqlalchemy import update, func
 
 from app.dependencies.auth import (
     get_current_active_user,
@@ -22,10 +22,10 @@ from app.schemas.shop import (
 )
 from app.models.shop import Shop, ShopPaymentMethod, ShopStatus
 from app.models.user import User
-from app.models.commerce import Order, OrderGroup
+from app.models.commerce import Order
 from app.models.catalog import Product
 from app.schemas.commerce import OrderRead
-from app.schemas.catalog import ProductListResponse, ProductStatus, ShopSummary, ShopListResponse
+from app.schemas.catalog import ProductListResponse, ProductStatus, ShopListResponse
 
 router = APIRouter(prefix="/shops", tags=["shops"])
 
