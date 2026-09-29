@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import Numeric, cast, func
+from sqlalchemy import Numeric, cast, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -18,7 +18,7 @@ from app.models.commerce import (
     OrderStatus,
 )
 from app.models.catalog import Product
-from app.models.delivery import Delivery
+from app.models.delivery import Delivery, DeliveryStatus
 from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus
@@ -775,12 +775,18 @@ def list_orders_needing_delivery(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    # Orders with no delivery row yet, PLUS those whose delivery is still
+    # pending (auto-dispatch tried on payment but no rider accepted). Orders a
+    # rider already claimed (assigned+) stop being listed here.
     query = (
         db.query(Order)
         .outerjoin(Delivery, Delivery.order_id == Order.id)
         .filter(
             Order.status.in_([OrderStatus.confirmed, OrderStatus.processing]),
-            Delivery.id.is_(None),
+            or_(
+                Delivery.id.is_(None),
+                Delivery.status == DeliveryStatus.pending,
+            ),
         )
     )
     total = query.count()

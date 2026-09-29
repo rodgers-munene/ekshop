@@ -10,6 +10,7 @@ revenue side).
 """
 
 import math
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -254,6 +255,65 @@ def expire_stale_offers(db: Session) -> int:
     if expired:
         db.flush()
     return expired
+
+
+def _generate_tracking_number() -> str:
+    return "EKS-" + secrets.token_hex(4).upper()
+
+
+def cancel_open_offers(db: Session, delivery_id: uuid.UUID):
+    """Closes any still-open ping window for a delivery (manual admin assign or
+    rider already claimed it) so no rider can accept or extend the wait chain."""
+    for offer in (
+        db.query(DeliveryOffer)
+        .filter(DeliveryOffer.delivery_id == delivery_id)
+        .filter(DeliveryOffer.status.in_([OfferStatus.pending, OfferStatus.queued]))
+        .all()
+    ):
+        offer.status = OfferStatus.cancelled
+        offer.responded_at = utcnow()
+    db.flush()
+
+
+def auto_dispatch_group(db: Session, order_group) -> int:
+    """Opens ping windows for every paid order that actually carries a delivery
+    charge, so a confirmed order moves toward the rider without an admin action.
+
+    Creates the pending Delivery row if missing (same shape manual assign
+    creates), skipping orders with no charge or no shop coordinates to run a
+    radius scan from. If no eligible rider exists this is a harmless no-op and
+    the order keeps appearing in the admin 'orders needing delivery' queue for
+    manual handling — auto-dispatch never strands an order."""
+    dispatched = 0
+    for order in order_group.orders:
+        fee = Decimal(order.delivery_fee or "0.00")
+        if fee <= 0:
+            group_fee = Decimal(order.group.delivery_fee or "0.00") if order.group else Decimal("0.00")
+            if group_fee > 0:
+                fee = group_fee / max(len(order.group.orders), 1)
+        if fee <= 0:
+            continue
+
+        shop = order.shop
+        if shop is None or shop.lat is None or shop.lng is None:
+            continue
+
+        delivery = db.query(Delivery).filter(Delivery.order_id == order.id).first()
+        if delivery is None:
+            delivery = Delivery(
+                order_id=order.id,
+                status=DeliveryStatus.pending,
+                tracking_number=_generate_tracking_number(),
+            )
+            db.add(delivery)
+            db.flush()
+        elif delivery.status != DeliveryStatus.pending:
+            continue
+
+        offers = dispatch(db, delivery)
+        dispatched += len(offers)
+    db.flush()
+    return dispatched
 
 
 # ──────────────────────────────────────────────────────────────────────────

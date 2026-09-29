@@ -70,6 +70,9 @@ def _mark_order_paid(db: Session, order_group_id: uuid.UUID) -> None:
         data={"order_group_id": str(order_group.id)},
     )
 
+    # Confirmed order -> open delivery ping windows for riders, no admin needed.
+    fleet_service.auto_dispatch_group(db, order_group)
+
 @router.post("/mpesa/stk-push", response_model=StkPushResponse, status_code=201)
 def mpesa_stk_push(
     payload: StkPushRequest,

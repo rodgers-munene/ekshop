@@ -194,11 +194,23 @@ async def assign_delivery(
     if delivery.status not in (DeliveryStatus.pending, DeliveryStatus.assigned):
         raise HTTPException(400, f"Delivery already in '{delivery.status}' status")
 
+    # Reassigning: free the earlier rider, who must not stay silently busy on a
+    # delivery they no longer carry.
+    if delivery.agent_id is not None and delivery.agent_id != agent_id:
+        prev_agent = db.get(DeliveryAgent, delivery.agent_id)
+        if prev_agent is not None and prev_agent.current_order_id == order_id:
+            prev_agent.current_order_id = None
+            prev_agent.status = DeliveryAgentStatus.active
+
     delivery.agent_id = agent_id
     delivery.status = DeliveryStatus.assigned
     if not delivery.estimated_at:
         sla_hours = get_or_create_rate_settings(db).standard_delivery_hours
         delivery.estimated_at = datetime.now(timezone.utc) + timedelta(hours=sla_hours)
+
+    # Manual assign wins over any open ping window: close sibling offers so no
+    # rider can accept or extend the wait chain for an already-claimed delivery.
+    fleet.cancel_open_offers(db, delivery.id)
 
     if delivery.distance_km is None and order.shop and order.delivery_address:
         shop = order.shop
