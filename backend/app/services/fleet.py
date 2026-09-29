@@ -9,12 +9,14 @@ without a formal offsetting row (delivery fees already touch the order
 revenue side).
 """
 
+import logging
 import math
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -34,6 +36,8 @@ from app.models.delivery import (
 )
 
 EAST_AFRICA_TZ = timezone(timedelta(hours=3))
+
+logger = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -515,3 +519,38 @@ def _is_peak_hour(now: datetime) -> bool:
     if now.weekday() == 6:
         return False
     return 17 <= now.hour < 20
+
+
+async def fetch_raining(lat: float, lng: float) -> bool | None:
+    """Report whether rain is falling at (lat, lng) via OpenWeather so the
+    metered quote can apply the rule's rain surge.
+
+    Returns None (callers fall back to no-rain) when no API key is configured
+    or the lookup fails — weather must never block a quote, only inflate it."""
+    api_key = getattr(settings, "OPENWEATHER_API_KEY", None)
+    if not api_key:
+        return None
+
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    params = {
+        "lat": lat,
+        "lon": lng,
+        "appid": api_key,
+        "units": "metric",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(url, params=params)
+            r.raise_for_status()
+            data = r.json()
+    except Exception as exc:
+        logger.warning("OpenWeather current-weather request failed: %s", exc)
+        return None
+
+    try:
+        condition_id = data["weather"][0]["id"]
+        # Condition codes 200–599 = thunderstorm/drizzle/rain; ≥600 is snow.
+        return 200 <= condition_id < 700
+    except Exception as exc:
+        logger.warning("OpenWeather response parsing failed: %s", exc)
+        return None

@@ -985,7 +985,7 @@ def upsert_pricing_rule(
 
 
 @router.post("/quote", response_model=MeteredQuoteResponse)
-def metered_quote(
+async def metered_quote(
     payload: MeteredQuoteRequest,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
@@ -1014,12 +1014,20 @@ def metered_quote(
             },
         )
 
+    raining = payload.raining
+    if raining is None:
+        raining = False
+        if payload.origin_lat is not None and payload.origin_lng is not None:
+            detected = await fleet.fetch_raining(payload.origin_lat, payload.origin_lng)
+            if detected is not None:
+                raining = detected
+
     total, breakdown = fleet.calculate_metered_fee(
         distance_km=payload.distance_km,
         duration_min=payload.duration_min,
         vehicle_type=payload.vehicle_type,
         rule=rule,
-        raining=payload.raining,
+        raining=raining,
     )
     return MeteredQuoteResponse(total=str(total), currency=breakdown["currency"], breakdown=breakdown)
 

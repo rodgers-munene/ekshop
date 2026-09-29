@@ -331,7 +331,12 @@ class MeteredQuoteRequest(BaseModel):
     distance_km: float
     duration_min: float = 0.0
     vehicle_type: VehicleType
-    raining: bool = False
+    # `raining=None` asks the API to live-check OpenWeather at the pickup
+    # point; pass True/False to force the multiplier instead. Optional pickup
+    # coordinates enable that auto-detection.
+    raining: bool | None = None
+    origin_lat: float | None = None
+    origin_lng: float | None = None
 
 
 class MeteredQuoteResponse(BaseModel):
