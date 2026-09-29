@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Store, Users, FolderTree, Truck, GalleryHorizontal, Tag, Banknote, FlaskConical, Bell, BarChart3, ClipboardList, Package, IdCard, Wallet } from "lucide-react";
+import { LayoutDashboard, Store, Users, FolderTree, Truck, GalleryHorizontal, Tag, Banknote, FlaskConical, Bell, BarChart3, ClipboardList, Package, IdCard, Wallet, SlidersHorizontal } from "lucide-react";
 
 const LINKS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/admin/deliveries", label: "Deliveries", icon: Truck },
   { href: "/admin/kyc", label: "Rider KYC", icon: IdCard },
   { href: "/admin/ledger", label: "Rider Ledger", icon: Wallet },
+  { href: "/admin/pricing-rules", label: "Pricing Rules", icon: SlidersHorizontal },
   { href: "/admin/delivery-rates", label: "Delivery Rates", icon: Banknote, exact: true },
   { href: "/admin/delivery-rates/simulate", label: "Delivery Simulator", icon: FlaskConical },
   { href: "/admin/orders", label: "Orders", icon: ClipboardList },
