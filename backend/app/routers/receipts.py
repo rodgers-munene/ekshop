@@ -5,6 +5,7 @@ from app.dependencies.database import get_db
 from app.dependencies.auth import get_current_active_user
 from app.models.user import User
 from app.models.commerce import OrderGroup
+from app.utils.money import format_kes_plain as kes
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
 
@@ -40,12 +41,12 @@ def get_thermal_receipt(
         for item in order.items:
             name = (item.product_snapshot.get("name", "Product") if item.product_snapshot else "Product")[:22]
             qty = str(item.quantity)
-            amt = f"KES {item.line_total:.2f}"
+            amt = kes(item.line_total)
             lines.append(f"{qty:<4} {name:<22} {amt}")
     lines.append("-" * 40)
-    lines.append(f"Subtotal:      KES {group.subtotal:.2f}")
-    lines.append(f"Delivery:      KES {group.delivery_fee:.2f}")
-    lines.append(f"TOTAL:         KES {group.total:.2f}")
+    lines.append(f"Subtotal:      {kes(group.subtotal)}")
+    lines.append(f"Delivery:      {kes(group.delivery_fee)}")
+    lines.append(f"TOTAL:         {kes(group.total)}")
     lines.append("=" * 40)
     lines.append("Payment: MPESA")
     lines.append(f"Ref:   {group.id}")

@@ -1,6 +1,5 @@
 """Customer invoice data endpoint."""
 import uuid
-from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.dependencies.database import get_db
@@ -8,6 +7,7 @@ from app.dependencies.auth import get_current_active_user
 from app.models.user import User
 from app.models.commerce import OrderGroup
 from app.models.payment import PaymentIntent
+from app.utils.money import multiply, quantize
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -41,18 +41,14 @@ def get_customer_invoice(
             items.append({
                 "name": product.name if product else "Product",
                 "qty": item.quantity,
-                "unit_price": str(item.unit_price),
-                "subtotal": str(item.quantity * item.unit_price),
+                "unit_price": str(quantize(item.unit_price)),
+                "subtotal": str(multiply(item.unit_price, item.quantity)),
             })
 
-    delivery_fee = Decimal("0.00")
-    try:
-        delivery_fee = Decimal(group.delivery_fee or "0.00")
-    except Exception:
-        delivery_fee = Decimal("0.00")
+    delivery_fee = quantize(group.delivery_fee)
 
-    subtotal = Decimal(group.subtotal or "0.00")
-    total = Decimal(group.total or "0.00")
+    subtotal = quantize(group.subtotal)
+    total = quantize(group.total)
 
     return {
         "invoice_id": f"INV-{group.id}",
