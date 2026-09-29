@@ -125,6 +125,17 @@ def query_stk_push_status(access_token: str, checkout_request_id: str) -> dict:
     return mpesa_circuit.call(_call, fallback=lambda: {"pending": True})
 
 
+def _b2c_callback_url(path: str) -> str:
+    """Fallback Result/Timeout URL for a B2C request. When a callback secret is
+    configured we sign the URL with ?token= (Daraja callbacks carry whatever
+    URL we pass, so our webhook can authenticate the request the same way the
+    STK callback does)."""
+    base = f"{settings.MPESA_CALLBACK_URL}/payments/b2c/{path}"
+    if settings.MPESA_CALLBACK_SECRET:
+        base += f"?token={settings.MPESA_CALLBACK_SECRET}"
+    return base
+
+
 def initiate_b2c_payment(access_token: str, phone: str, amount: int, remarks: str, transaction_id: str) -> dict:
     """Fires a Daraja B2C payment to a rider's M-Pesa wallet (rider payout).
 
@@ -145,9 +156,9 @@ def initiate_b2c_payment(access_token: str, phone: str, amount: int, remarks: st
         "PartyA": settings.MPESA_B2C_SHORTCODE or settings.MPESA_SHORTCODE,
         "PartyB": phone,
         "Remarks": remarks,
-        "QueueTimeOutURL": settings.MPESA_TIMEOUT_URL or f"{settings.MPESA_CALLBACK_URL}/payments/b2c/timeout",
-        "ResultURL": settings.MPESA_RESULT_URL or f"{settings.MPESA_CALLBACK_URL}/payments/b2c/callback",
-        "Occasion": "Rider payout",
+        "QueueTimeOutURL": settings.MPESA_TIMEOUT_URL or _b2c_callback_url("timeout"),
+        "ResultURL": settings.MPESA_RESULT_URL or _b2c_callback_url("callback"),
+        "Occasion": f"Rider payout {transaction_id}",  # ledger entry id, for correlation
     }
 
     def _call() -> dict:
@@ -178,8 +189,8 @@ def initiate_b2c_reversal(access_token: str, transaction_id: str, amount: int) -
         "TransactionID": transaction_id,
         "Amount": amount,
         "ReceiverParty": settings.MPESA_SHORTCODE,
-        "ResultURL": settings.MPESA_RESULT_URL or f"{settings.MPESA_CALLBACK_URL}/payments/b2c/callback",
-        "QueueTimeOutURL": settings.MPESA_TIMEOUT_URL or f"{settings.MPESA_CALLBACK_URL}/payments/b2c/timeout",
+        "ResultURL": settings.MPESA_RESULT_URL or _b2c_callback_url("callback"),
+        "QueueTimeOutURL": settings.MPESA_TIMEOUT_URL or _b2c_callback_url("timeout"),
         "Remarks": "Rider payout reversal",
         "Occasion": "Reversal",
     }

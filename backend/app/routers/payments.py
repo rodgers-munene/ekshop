@@ -10,9 +10,9 @@ from app.dependencies.database import get_db
 from app.models.user import User
 from app.models.commerce import OrderGroup, OrderGroupStatus, OrderStatus
 from app.models.payment import PaymentIntent, Payment, PaymentStatus
+from app.models.delivery import DeliveryLedgerEntry
 from app.models.analytics import EventType
 from app.models.subscription import Subscription
-from app.services.subscriptions import activate_subscription
 from app.schemas.payment import (
     StkPushRequest,
     StkPushResponse,
@@ -21,7 +21,9 @@ from app.schemas.payment import (
     PaystackInitResponse,
     PaystackVerifyResponse,
 )
+from app.services.subscriptions import activate_subscription
 from app.services import mpesa, paystack
+from app.services import fleet as fleet_service
 from app.services import recommendations as rec_service
 from app.services.notifications import create_notification, notify_admins_of_new_order
 from app.services.webhooks import emit_payment_success_webhook, emit_order_paid_webhook
@@ -585,4 +587,67 @@ def paystack_verify_order(
 
     status_ = _reconcile_paystack_intent(db, intent)
     return PaystackVerifyResponse(status=status_, order_group_id=intent.order_group_id)
+
+
+# ── B2C (rider payout) result reconciliation ─────────────────────────────────
+#
+# The payout initiation endpoint posts a PENDING debit and hands the rider
+# ledger entry's id to Daraja inside the B2C payload. Daraja then calls back
+# on ResultURL (accepted/queued => this /b2c/callback) or QueueTimeOutURL
+# (queue timeout => /b2c/timeout). These two endpoints are the ONLY place a
+# payout is finalized: a pending entry is marked succeeded here with the real
+# M-Pesa TransactionID, or failed here with the ResultDesc (walking the
+# balance back via an offsetting reversal entry).
+
+def _b2c_entry_from_result(db: Session, result: dict) -> DeliveryLedgerEntry | None:
+    originator = result.get("OriginatorConversationID")
+    if not originator:
+        return None
+    return fleet_service.find_pending_payout(db, originator)
+
+
+@router.post("/b2c/callback", dependencies=[Depends(verify_mpesa_callback_token)])
+async def b2c_callback(request: Request, db: Session = Depends(get_db)):
+    try:
+        data = await request.json()
+        result = data.get("Result") or data
+    except Exception:
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+    entry = _b2c_entry_from_result(db, result)
+    if entry is None:
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+    code = result.get("ResultCode")
+    desc = result.get("ResultDesc") or "Unknown Daraja result"
+    succeeded = str(code) == "0"
+    fleet_service.mark_payout_result(
+        db,
+        entry,
+        reference=result.get("TransactionID") or result.get("OriginatorConversationID"),
+        succeeded=succeeded,
+        failure_reason=None if succeeded else f"{desc} (ResultCode {code})",
+    )
+    db.commit()
+    return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+
+@router.post("/b2c/timeout", dependencies=[Depends(verify_mpesa_callback_token)])
+async def b2c_timeout(request: Request, db: Session = Depends(get_db)):
+    try:
+        data = await request.json()
+        result = data.get("Result") or data
+    except Exception:
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+    entry = _b2c_entry_from_result(db, result)
+    if entry is None:
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+    desc = result.get("ResultDesc") or "M-Pesa B2C queue timed out"
+    fleet_service.mark_payout_result(
+        db, entry, reference=None, succeeded=False, failure_reason=f"Timeout: {desc}"
+    )
+    db.commit()
+    return {"ResultCode": 0, "ResultDesc": "Accepted"}
 

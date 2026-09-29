@@ -330,6 +330,33 @@ def create_manual_payout(db: Session, agent: DeliveryAgent, amount: Decimal) -> 
     )
 
 
+def mark_payout_queued(db: Session, entry: DeliveryLedgerEntry, reference: str) -> DeliveryLedgerEntry:
+    """Records that Daraja accepted (but not yet settled) a B2C disbursement.
+    ResponseCode 0 from the initiation means QUEUED, not final: the entry stays
+    pending and `reference` stores the OriginatorConversationID so the Result
+    callback (/payments/b2c/callback) can reconcile it later."""
+    if entry.status != LedgerStatus.pending:
+        return entry
+    entry.reference = reference
+    db.flush()
+    return entry
+
+
+def find_pending_payout(db: Session, originator_conversation_id: str) -> DeliveryLedgerEntry | None:
+    """Looks up a rider payout that is mid-flight pending its Daraja Result
+    callback, matched by the OriginatorConversationID echoed back to us."""
+    if not originator_conversation_id:
+        return None
+    return (
+        db.query(DeliveryLedgerEntry)
+        .filter(DeliveryLedgerEntry.entry_type == LedgerEntryType.b2c_payout)
+        .filter(DeliveryLedgerEntry.status == LedgerStatus.pending)
+        .filter(DeliveryLedgerEntry.reference == originator_conversation_id)
+        .order_by(DeliveryLedgerEntry.created_at.desc())
+        .first()
+    )
+
+
 def mark_payout_result(
     db: Session,
     entry: DeliveryLedgerEntry,

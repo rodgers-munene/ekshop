@@ -864,8 +864,9 @@ async def trigger_b2c_payout(
     _: User = Depends(require_admin),
 ):
     """Admin-triggered B2C payout of part of a rider's wallet balance to their
-    M-Pesa number. The wallet debit is provisional (pending) until Daraja
-    returns a response; on failure the reversal restores the balance."""
+    M-Pesa number. The wallet debit is provisional (pending) until Daraja's
+    Result callback (/payments/b2c/callback) settles it — ResponseCode 0 at
+    initiation only means the request was QUEUED, not that the money moved."""
     agent = db.get(DeliveryAgent, agent_id)
     if not agent:
         raise HTTPException(404, "Agent not found")
@@ -895,13 +896,19 @@ async def trigger_b2c_payout(
             transaction_id=str(entry.id),
         )
         response_code = response.get("ResponseCode")
-        succeeded = response_code in ("0", 0)
-        reference = response.get("OriginatorConversationID") or str(entry.id)
-        fleet.mark_payout_result(
-            db, entry, reference=reference, succeeded=succeeded,
-            failure_reason=None if succeeded else f"M-Pesa ResponseCode {response_code}",
-        )
-        db.commit()
+        queued = response_code in ("0", 0)
+        originator = response.get("OriginatorConversationID") or str(entry.id)
+        if queued:
+            # Accepted and queued — keep the entry PENDING and record the
+            # OriginatorConversationID so the Result callback can reconcile it.
+            fleet.mark_payout_queued(db, entry, reference=originator)
+            db.commit()
+        else:
+            fleet.mark_payout_result(
+                db, entry, reference=originator, succeeded=False,
+                failure_reason=f"M-Pesa ResponseCode {response_code}",
+            )
+            db.commit()
     except Exception as exc:
         logger.warning("B2C payout initiation failed for %s", agent.id, exc_info=True)
         fleet.mark_payout_result(
