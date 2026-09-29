@@ -206,6 +206,70 @@ export interface DeliveryAgent {
   created_at: string;
 }
 
+export interface KYCAgent {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  kyc_status: string;
+  vehicle_type?: string;
+  equipment_verified: boolean;
+  wallet_balance: string;
+}
+
+export interface KYCAgentList {
+  total: number;
+  pending: number;
+  results: KYCAgent[];
+}
+
+export interface LedgerEntry {
+  id: string;
+  delivery_id?: string;
+  entry_type: string;
+  amount: string;
+  balance_after: string;
+  reference?: string;
+  status: string;
+  failure_reason?: string;
+  created_at: string;
+}
+
+export interface LedgerList {
+  agent_id: string;
+  wallet_balance: string;
+  entries: LedgerEntry[];
+}
+
+export interface DeliveryPricingRule {
+  id: string;
+  vehicle_type: string;
+  base_fare: string;
+  per_km_rate: string;
+  per_minute_rate: string;
+  rain_multiplier: string;
+  peak_hours_multiplier: string;
+  supply_demand_multiplier: string;
+  max_surge_cap: string;
+  currency: string;
+  is_active: boolean;
+}
+
+export interface PingDispatchResponse {
+  delivery_id: string;
+  offers_created: number;
+  offers: PingOffer[];
+}
+
+export interface PingOffer {
+  id: string;
+  delivery_id: string;
+  status: string;
+  queue_position: number;
+  expires_at?: string;
+  created_at: string;
+}
+
 export interface RouteStop {
   delivery_id: string;
   tracking_number: string;
