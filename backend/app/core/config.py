@@ -81,10 +81,10 @@ class Settings(BaseSettings):
     PING_EXPIRY_SECONDS: int = 30
     # M-Pesa B2C (Business-to-Customer) payout credentials + result callback.
     # PartyA for B2C must be a utility/storage M-Pesa shortcode (B2C is not
-    # supported on buy-goods tills). SecurityCredential is derived by
-    # base64-encrypting initiator password with the API certificate.
+    # supported on buy-goods tills). SecurityCredential is the base64-encrypted
+    # initiator password (generated via lipaAPI) and is the only secret the
+    # API actually reads.
     MPESA_B2C_INITIATOR_NAME: str | None = None
-    MPESA_B2C_INITIATOR_PASSWORD: str | None = None
     MPESA_B2C_SECURITY_CREDENTIAL: str | None = None
     MPESA_B2C_SHORTCODE: str | None = None
     MPESA_RESULT_URL: str | None = None
