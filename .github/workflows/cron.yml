@@ -1,9 +1,14 @@
-name: Scheduled cron jobs
+name: Scheduled admin reports cron jobs
 
+# Billing-cycle and mpesa-reconcile are owned by their own workflows
+# (subscription-billing-cron.yml, mpesa-reconcile-cron.yml). This workflow
+# covers only the two admin reports that have no dedicated trigger, because
+# invoking billing-cycle from here as well ran it twice at 03:00 UTC and sent
+# sellers duplicate renewal reminders.
 on:
   schedule:
-    - cron: "0 3 * * *"
-    - cron: "0 4 * * 1"
+    - cron: "0 3 * * *" # daily admin report
+    - cron: "0 4 * * 1" # weekly insight digest
   workflow_dispatch:
 
 jobs:
@@ -11,23 +16,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BACKEND_URL: ${{ secrets.BACKEND_URL }}
+      # Must be BACKEND_BASE_URL: that is the secret name the terraform
+      # module and the other cron workflows use. The previous BACKEND_URL
+      # name matched no secret, so it expanded to an empty string and every
+      # curl below hit a relative path and failed.
+      BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
     steps:
-      - name: Run billing cycle
+      - name: Guard against a missing backend URL
         run: |
-          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/billing-cycle" -H "x-cron-secret: $CRON_SECRET"
-
-      - name: Reconcile M-Pesa payments
-        run: |
-          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/mpesa-reconcile" -H "x-cron-secret: $CRON_SECRET"
+          if [ -z "$BACKEND_BASE_URL" ]; then
+            echo "::error::BACKEND_BASE_URL secret is not set"
+            exit 1
+          fi
 
       - name: Send daily admin report
         run: |
-          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/admin/daily-report" -H "x-cron-secret: $CRON_SECRET"
+          curl -sf -X POST "$BACKEND_BASE_URL/internal/cron/admin/daily-report" \
+            -H "X-Cron-Secret: $CRON_SECRET"
 
       - name: Send weekly insight digest
         if: ${{ github.event.schedule == '0 4 * * 1' || github.event_name == 'workflow_dispatch' }}
         run: |
-          curl -s -o /dev/null -w "%{http_code}" -X POST "$BACKEND_URL/internal/cron/admin/weekly-insight-digest" -H "x-cron-secret: $CRON_SECRET"
+          curl -sf -X POST "$BACKEND_BASE_URL/internal/cron/admin/weekly-insight-digest" \
+            -H "X-Cron-Secret: $CRON_SECRET"

@@ -3,7 +3,19 @@ import type { NextRequest } from "next/server";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-const PROTECTED_PAGES = ["/dashboard", "/account", "/checkout", "/orders", "/wishlist", "/messages", "/admin"];
+const PROTECTED_PAGES = [
+  "/dashboard",
+  "/account",
+  "/checkout",
+  "/orders",
+  "/wishlist",
+  "/messages",
+  "/admin",
+  // Platform financials. The backend now requires an admin token for
+  // /investor/*, so this page must be guarded here too or an anonymous
+  // visit lands on an empty "could not load" shell.
+  "/ir-f1c04c9098",
+];
 const AUTH_PAGES = ["/login", "/register"];
 const PROTECTED_API_PREFIXES = [
   "/api/dashboard",
@@ -112,6 +124,7 @@ export const config = {
     "/wishlist/:path*",
     "/messages/:path*",
     "/admin/:path*",
+    "/ir-f1c04c9098",
     "/login",
     "/register",
     "/api/dashboard/:path*",

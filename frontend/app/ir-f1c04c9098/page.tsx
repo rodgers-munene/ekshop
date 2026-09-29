@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { serverFetch } from "@/lib/server-api";
+import { redirect } from "next/navigation";
+import { ServerFetchError, serverFetch } from "@/lib/server-api";
 import { InvestorDailyRevenueResponse, InvestorOverview, InvestorTrendPoint } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import StatCard from "@/components/dashboard/StatCard";
@@ -37,11 +38,21 @@ export default async function InvestorBriefingPage({ searchParams }: Props) {
   dailyParams.set("page", String(page));
   dailyParams.set("limit", "15");
 
+  // /investor/* is admin-only server-side. Distinguish "you are not an admin"
+  // from "the query failed" — sending an unauthorised visitor to the login
+  // page is correct, showing them an empty dashboard is not.
+  function rethrowIfAuthzError(error: unknown): null {
+    if (error instanceof ServerFetchError && (error.status === 401 || error.status === 403)) {
+      redirect("/login?next=/ir-f1c04c9098");
+    }
+    return null;
+  }
+
   const [overview, trend, dailyRevenue] = await Promise.all([
-    serverFetch<InvestorOverview>("/investor/overview").catch(() => null),
-    serverFetch<InvestorTrendPoint[]>(`/investor/trend?${trendParams}`).catch(() => [] as InvestorTrendPoint[]),
+    serverFetch<InvestorOverview>("/investor/overview").catch(rethrowIfAuthzError),
+    serverFetch<InvestorTrendPoint[]>(`/investor/trend?${trendParams}`).catch((e) => rethrowIfAuthzError(e) ?? ([] as InvestorTrendPoint[])),
     serverFetch<InvestorDailyRevenueResponse>(`/investor/daily-revenue?${dailyParams}`).catch(
-      () => ({ total: 0, page: 1, limit: 15, results: [] }) as InvestorDailyRevenueResponse
+      (e) => rethrowIfAuthzError(e) ?? ({ total: 0, page: 1, limit: 15, results: [] } as InvestorDailyRevenueResponse)
     ),
   ]);
 

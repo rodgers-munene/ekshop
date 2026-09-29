@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Numeric, cast, func
 from sqlalchemy.orm import Session
 
+from app.dependencies.auth import require_admin
 from app.dependencies.database import get_db
 from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus
 from app.models.catalog import Product
@@ -21,7 +22,15 @@ from app.schemas.investor import (
     TopSellerRead,
 )
 
-router = APIRouter(prefix="/investor", tags=["investor"])
+# Platform-wide financials: GMV, top sellers, top buyers, refund totals.
+# Router-level dependency so every current and future endpoint in this module
+# inherits the admin check. `require_admin` composes get_current_active_user,
+# so this also rejects suspended admins.
+router = APIRouter(
+    prefix="/investor",
+    tags=["investor"],
+    dependencies=[Depends(require_admin)],
+)
 
 LOSS_STATUSES = (OrderStatus.cancelled, OrderStatus.refunded)
 

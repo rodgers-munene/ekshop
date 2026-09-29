@@ -7,7 +7,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_DAYS: int = 15
+    # Short-lived access tokens. The public sessions (buyer/seller/admin web
+    # and the rider PWA) hold the JWT in a cookie with no refresh endpoint, so
+    # this value is the real session lifetime. 15 minutes matches what
+    # docs/auth_pipeline.md documents.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Comma-separated list of allowed frontend origins

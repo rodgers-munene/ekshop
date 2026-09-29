@@ -73,13 +73,20 @@ Open `.env` and fill in the values:
 ```env
 DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname
 SECRET_KEY=<generate below>
-ACCESS_TOKEN_EXPIRE_DAYS=15
+ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
+MESSAGE_ENCRYPTION_KEY=<generate below>
 ```
 
 Generate a secure `SECRET_KEY`:
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Generate `MESSAGE_ENCRYPTION_KEY` (required — message sending and reading will
+raise without it, by design):
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
 > **Supabase users:** The direct connection (`db.xxx.supabase.co:5432`) may only
@@ -161,8 +168,10 @@ cd frontend && npm run dev
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string (`postgresql+psycopg://...`) |
 | `SECRET_KEY` | Yes | JWT signing secret — must be random and kept private |
-| `ACCESS_TOKEN_EXPIRE_DAYS` | No | Access token TTL in days (default: 15) |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Access token TTL in minutes (default: 15); the web app refreshes transparently |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | No | Refresh token TTL in days (default: 7) |
+| `MESSAGE_ENCRYPTION_KEY` | Yes | Fernet key for message encryption at rest. Fails closed — messaging raises without it |
+| `CRON_SECRET` | Yes in production | Shared secret for `/internal/cron/*`; unset means every cron call is rejected |
 | `CORS_ORIGINS` | Yes | Comma-separated list of allowed frontend origins |
 | `PAYSTACK_SECRET_KEY` / `PAYSTACK_PUBLIC_KEY` | Yes | Live payment provider |
 | `MPESA_*` (consumer key/secret, shortcode, passkey, environment, callback URL) | No | M-Pesa Daraja STK Push — built but not linked into checkout until the Daraja app is approved for production |

@@ -19,7 +19,7 @@ backend_ami_id    = "ami-xxxxxxxxxxxxxxxxx"
 # injection channel the way App Runner did.
 plain_env = {
   ALGORITHM                 = "HS256"
-  ACCESS_TOKEN_EXPIRE_DAYS  = "15"
+  ACCESS_TOKEN_EXPIRE_MINUTES = "15"
   REFRESH_TOKEN_EXPIRE_DAYS = "7"
   CORS_ORIGINS              = "https://ekshop.co.ke,https://www.ekshop.co.ke"
   FRONTEND_URL               = "https://ekshop.co.ke"

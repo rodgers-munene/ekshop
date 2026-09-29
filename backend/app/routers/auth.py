@@ -397,7 +397,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
     access_token = create_access_token(
         data={"sub": str(user.id), "role": user.role.value},
-        expires_delta=timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS),
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
 
     raw_refresh = generate_refresh_token()
@@ -449,7 +449,7 @@ def refresh(raw_token: str, db: Session = Depends(get_db)):
 
     new_access = create_access_token(
         data={"sub": str(user.id), "role": user.role.value},
-        expires_delta=timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS),
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     new_raw_refresh = generate_refresh_token()
     db.add(RefreshToken(
