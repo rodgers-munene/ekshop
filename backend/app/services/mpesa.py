@@ -123,3 +123,75 @@ def query_stk_push_status(access_token: str, checkout_request_id: str) -> dict:
         return response.json()
 
     return mpesa_circuit.call(_call, fallback=lambda: {"pending": True})
+
+
+def initiate_b2c_payment(access_token: str, phone: str, amount: int, remarks: str, transaction_id: str) -> dict:
+    """Fires a Daraja B2C payment to a rider's M-Pesa wallet (rider payout).
+
+    Result/Timeout callbacks are delivered to the URLs configured in the
+    Daraja sandbox/portal — MPESA_RESULT_URL/MPESA_TIMEOUT_URL are recorded
+    here only for the webhook endpoint /payments/b2c/callback to reconcile
+    against. Follows the standard three-legged flow:
+      ResponseCode 0 + OriginatorConversationID -> queued, wait for callback.
+    """
+    if not settings.MPESA_B2C_INITIATOR_NAME or not settings.MPESA_B2C_SECURITY_CREDENTIAL:
+        raise RuntimeError("MPESA_B2C initiator credentials are not configured")
+
+    payload = {
+        "InitiatorName": settings.MPESA_B2C_INITIATOR_NAME,
+        "SecurityCredential": settings.MPESA_B2C_SECURITY_CREDENTIAL,
+        "CommandID": "BusinessPayment",  # normal disbursement to a registered user
+        "Amount": amount,
+        "PartyA": settings.MPESA_B2C_SHORTCODE or settings.MPESA_SHORTCODE,
+        "PartyB": phone,
+        "Remarks": remarks,
+        "QueueTimeOutURL": settings.MPESA_TIMEOUT_URL or f"{settings.MPESA_CALLBACK_URL}/payments/b2c/timeout",
+        "ResultURL": settings.MPESA_RESULT_URL or f"{settings.MPESA_CALLBACK_URL}/payments/b2c/callback",
+        "Occasion": "Rider payout",
+    }
+
+    def _call() -> dict:
+        response = httpx.post(
+            f"{settings.MPESA_BASE_URL}/mpesa/b2c/v1/paymentrequest",
+            json=payload,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=DEFAULT_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    return mpesa_circuit.call(_call)
+
+
+def initiate_b2c_reversal(access_token: str, transaction_id: str, amount: int) -> dict:
+    """Reverses a previously-sent B2C payout. `transaction_id` is the
+    Result Conversation / M-Pesa transaction ID from the successful B2C
+    result callback (LedgerEntry.reference).
+    """
+    if not settings.MPESA_B2C_INITIATOR_NAME or not settings.MPESA_B2C_SECURITY_CREDENTIAL:
+        raise RuntimeError("MPESA_B2C initiator credentials are not configured")
+
+    payload = {
+        "InitiatorName": settings.MPESA_B2C_INITIATOR_NAME,
+        "SecurityCredential": settings.MPESA_B2C_SECURITY_CREDENTIAL,
+        "CommandID": "Reversal",
+        "TransactionID": transaction_id,
+        "Amount": amount,
+        "ReceiverParty": settings.MPESA_SHORTCODE,
+        "ResultURL": settings.MPESA_RESULT_URL or f"{settings.MPESA_CALLBACK_URL}/payments/b2c/callback",
+        "QueueTimeOutURL": settings.MPESA_TIMEOUT_URL or f"{settings.MPESA_CALLBACK_URL}/payments/b2c/timeout",
+        "Remarks": "Rider payout reversal",
+        "Occasion": "Reversal",
+    }
+
+    def _call() -> dict:
+        response = httpx.post(
+            f"{settings.MPESA_BASE_URL}/mpesa/reversal/v1/request",
+            json=payload,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=DEFAULT_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    return mpesa_circuit.call(_call)

@@ -71,6 +71,32 @@ class Settings(BaseSettings):
     ORS_API_KEY: str | None = None
     ORS_BASE_URL: str = "https://api.openrouteservice.org"
 
+    # ── Rider fleet ─────────────────────────────────────────────────────────
+    # Radius (km) around the pickup point used by the automated ping engine to
+    # find eligible riders for a delivery. Kept in sync with the app's own
+    # 3–5 km design guidance; tune per market.
+    PING_RADIUS_KM: float = 5.0
+    # How long an individual rider has to accept a ping before the offer
+    # expires and the ping engine promotes the next rider in the queue.
+    PING_EXPIRY_SECONDS: int = 30
+    # M-Pesa B2C (Business-to-Customer) payout credentials + result callback.
+    # PartyA for B2C must be a utility/storage M-Pesa shortcode (B2C is not
+    # supported on buy-goods tills). SecurityCredential is derived by
+    # base64-encrypting initiator password with the API certificate.
+    MPESA_B2C_INITIATOR_NAME: str | None = None
+    MPESA_B2C_INITIATOR_PASSWORD: str | None = None
+    MPESA_B2C_SECURITY_CREDENTIAL: str | None = None
+    MPESA_B2C_SHORTCODE: str | None = None
+    MPESA_RESULT_URL: str | None = None
+    MPESA_TIMEOUT_URL: str | None = None
+    # Default rider payout split: share of the order's delivery fee credited to
+    # the rider's ledger on delivery (0.80 = 80/20 rider/platform). Admin can
+    # override per-order via the ledger API.
+    RIDER_PAYOUT_SHARE: float = 0.80
+    # OpenWeather key enabling rain/surge multiplier lookups for metered
+    # pricing. Leave unset to run with surge disabled (multipliers = 1.00).
+    OPENWEATHER_API_KEY: str | None = None
+
     # Product image storage (AWS S3): foundation only until AWS account access
     # is available; upload calls will fail until these are set.
     AWS_ACCESS_KEY_ID: str | None = None

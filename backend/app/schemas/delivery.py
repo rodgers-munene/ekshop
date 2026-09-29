@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, Dict
 from pydantic import BaseModel
-from app.models.delivery import DeliveryStatus, DeliveryAgentStatus, ActorRole
+from app.models.delivery import (
+    DeliveryStatus,
+    DeliveryAgentStatus,
+    ActorRole,
+    VehicleType,
+    KYCStatus,
+    OfferStatus,
+    LedgerEntryType,
+    LedgerStatus,
+)
 from app.schemas.commerce import OrderRead
 
 
@@ -167,3 +176,165 @@ class RouteOptimizationResponse(BaseModel):
     total_distance_km: Optional[float] = None
     total_duration_min: Optional[float] = None
     stops: List[RouteOptimizationStop]
+
+
+class KYCDocument(BaseModel):
+    type: str
+    url: str
+
+
+class KYCSummaryBase(BaseModel):
+    vehicle_type: Optional[VehicleType] = None
+    national_id_number: Optional[str] = None
+    license_number: Optional[str] = None
+
+
+class KYCSummaryRead(KYCSummaryBase):
+    id: uuid.UUID
+    name: str
+    email: str
+    phone: str
+    kyc_status: KYCStatus
+    equipment_verified: bool
+    kyc_review_notes: Optional[str] = None
+    kyc_submitted_at: Optional[datetime] = None
+    kyc_reviewed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class KYCDetailRead(KYCSummaryRead):
+    kyc_documents: Optional[List[KYCDocument]] = None
+    equipment_photo_url: Optional[str] = None
+    wallet_balance: str = "0.00"
+    current_lat: Optional[float] = None
+    current_lng: Optional[float] = None
+    last_location_update: Optional[datetime] = None
+
+
+class KYCSubmitRequest(BaseModel):
+    vehicle_type: VehicleType
+    national_id_number: str
+    license_number: Optional[str] = None
+    kyc_documents: Optional[List[KYCDocument]] = None
+    equipment_photo_url: Optional[str] = None
+
+
+class KYCReviewRequest(BaseModel):
+    approve: bool
+    notes: Optional[str] = None
+
+
+class KYCAgentRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: str
+    phone: str
+    kyc_status: KYCStatus
+    vehicle_type: Optional[VehicleType] = None
+    equipment_verified: bool
+    current_lat: Optional[float] = None
+    current_lng: Optional[float] = None
+    wallet_balance: str = "0.00"
+
+    model_config = {"from_attributes": True}
+
+
+class KYCAgentListResponse(BaseModel):
+    total: int
+    pending: int
+    results: List[KYCAgentRead]
+
+
+class OfferRead(BaseModel):
+    id: uuid.UUID
+    delivery_id: uuid.UUID
+    status: OfferStatus
+    queue_position: int
+    expires_at: Optional[datetime] = None
+    created_at: datetime
+    delivery: Optional[DeliveryRead] = None
+
+    model_config = {"from_attributes": True}
+
+
+class OfferListResponse(BaseModel):
+    offers: List[OfferRead]
+    stale_expired: int = 0
+
+
+class PingDispatchResponse(BaseModel):
+    delivery_id: uuid.UUID
+    offers_created: int
+    offers: List[OfferRead]
+
+
+class LedgerEntryRead(BaseModel):
+    id: uuid.UUID
+    delivery_id: Optional[uuid.UUID] = None
+    entry_type: LedgerEntryType
+    amount: str
+    balance_after: str
+    reference: Optional[str] = None
+    status: LedgerStatus
+    failure_reason: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LedgerListResponse(BaseModel):
+    agent_id: uuid.UUID
+    wallet_balance: str
+    entries: List[LedgerEntryRead]
+
+
+class WalletTransactionRequest(BaseModel):
+    amount: str
+    note: Optional[str] = None
+
+
+class PricingRuleUpsert(BaseModel):
+    vehicle_type: VehicleType
+    base_fare: str
+    per_km_rate: str
+    per_minute_rate: str = "0.00"
+    rain_multiplier: str = "1.00"
+    peak_hours_multiplier: str = "1.00"
+    supply_demand_multiplier: str = "1.00"
+    max_surge_cap: str = "2.00"
+    currency: str = "KES"
+    is_active: bool = True
+
+
+class PricingRuleRead(BaseModel):
+    id: uuid.UUID
+    vehicle_type: VehicleType
+    base_fare: str
+    per_km_rate: str
+    per_minute_rate: str
+    rain_multiplier: str
+    peak_hours_multiplier: str
+    supply_demand_multiplier: str
+    max_surge_cap: str
+    currency: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PricingRuleListResponse(BaseModel):
+    results: List[PricingRuleRead]
+
+
+class MeteredQuoteRequest(BaseModel):
+    distance_km: float
+    duration_min: float = 0.0
+    vehicle_type: VehicleType
+    raining: bool = False
+
+
+class MeteredQuoteResponse(BaseModel):
+    total: str
+    currency: str
+    breakdown: Dict[str, str | bool | float]

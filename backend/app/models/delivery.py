@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text, Float
+from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text, Float, Numeric
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -32,6 +32,40 @@ class ActorRole(str, enum.Enum):
     admin = "admin"
 
 
+class VehicleType(str, enum.Enum):
+    bicycle = "bicycle"
+    motorcycle = "motorcycle"
+    pickup_van = "pickup_van"
+
+
+class KYCStatus(str, enum.Enum):
+    pending_review = "pending_review"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class OfferStatus(str, enum.Enum):
+    queued = "queued"
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+    expired = "expired"
+    cancelled = "cancelled"
+
+
+class LedgerEntryType(str, enum.Enum):
+    earning = "earning"
+    b2c_payout = "b2c_payout"
+    reversal = "reversal"
+    adjustment = "adjustment"
+
+
+class LedgerStatus(str, enum.Enum):
+    pending = "pending"
+    succeeded = "succeeded"
+    failed = "failed"
+
+
 class DeliveryAgent(Base):
     __tablename__ = "delivery_agents"
 
@@ -47,10 +81,25 @@ class DeliveryAgent(Base):
     current_lat = Column(Float)
     current_lng = Column(Float)
     last_location_update = Column(DateTime(timezone=True))
+    # Fleet-onboarding / KYC state
+    vehicle_type = Column(Enum(VehicleType, native_enum=False))
+    national_id_number = Column(String(50))
+    license_number = Column(String(50))
+    kyc_status = Column(Enum(KYCStatus, native_enum=False), default=KYCStatus.pending_review, nullable=False)
+    kyc_documents = Column(JSONB)  # list of {type, url} KYC proof artifacts
+    equipment_verified = Column(Boolean, default=False, nullable=False)
+    equipment_photo_url = Column(String(500))
+    kyc_submitted_at = Column(DateTime(timezone=True))
+    kyc_reviewed_at = Column(DateTime(timezone=True))
+    kyc_review_notes = Column(Text)
+    # Wallet / payout ledger running balance. Writes happen ONLY through the
+    # ledger service (credit/debit), never by direct column assignment.
+    wallet_balance = Column(Numeric(14, 2), default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     current_order = relationship("Order", foreign_keys=[current_order_id])
     deliveries = relationship("Delivery", back_populates="agent")
+    ledger_entries = relationship("DeliveryLedgerEntry", back_populates="agent", cascade="all, delete-orphan")
 
 
 class Delivery(Base):
@@ -132,3 +181,53 @@ class Notification(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     user = relationship("User", back_populates="notifications")
+
+
+class DeliveryOffer(Base):
+    __tablename__ = "delivery_offers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="CASCADE"), nullable=False)
+    status = Column(Enum(OfferStatus, native_enum=False), default=OfferStatus.queued, nullable=False)
+    queue_position = Column(Integer, default=0, nullable=False)
+    expires_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    responded_at = Column(DateTime(timezone=True))
+
+    delivery = relationship("Delivery")
+    agent = relationship("DeliveryAgent")
+
+
+class DeliveryPricingRule(Base):
+    __tablename__ = "delivery_pricing_rules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    vehicle_type = Column(Enum(VehicleType, native_enum=False), unique=True, nullable=False)
+    base_fare = Column(Numeric(10, 2), nullable=False)
+    per_km_rate = Column(Numeric(10, 2), nullable=False)
+    per_minute_rate = Column(Numeric(10, 2), default=0, nullable=False)
+    rain_multiplier = Column(Numeric(4, 2), default=1.00, nullable=False)
+    peak_hours_multiplier = Column(Numeric(4, 2), default=1.00, nullable=False)
+    supply_demand_multiplier = Column(Numeric(4, 2), default=1.00, nullable=False)
+    max_surge_cap = Column(Numeric(4, 2), default=2.00, nullable=False)
+    currency = Column(String(3), default="KES", nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+
+class DeliveryLedgerEntry(Base):
+    __tablename__ = "delivery_ledger_entries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="CASCADE"), nullable=False)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="SET NULL"))
+    entry_type = Column(Enum(LedgerEntryType, native_enum=False), nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)  # signed: +credit, -debit
+    balance_after = Column(Numeric(14, 2), nullable=False)
+    reference = Column(String(100))
+    status = Column(Enum(LedgerStatus, native_enum=False), default=LedgerStatus.pending, nullable=False)
+    failure_reason = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    agent = relationship("DeliveryAgent", back_populates="ledger_entries")
+    delivery = relationship("Delivery")

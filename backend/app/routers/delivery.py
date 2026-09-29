@@ -16,7 +16,11 @@ from app.dependencies.auth import require_admin, get_current_active_user
 from app.dependencies.database import get_db
 from decimal import Decimal
 
-from app.models.delivery import DeliveryAgent, DeliveryAgentStatus, Delivery, DeliveryEvent, DeliveryIssue, DeliveryStatus, ActorRole
+from app.models.delivery import (
+    DeliveryAgent, DeliveryAgentStatus, Delivery, DeliveryEvent, DeliveryIssue,
+    DeliveryStatus, ActorRole, DeliveryOffer, DeliveryPricingRule, OfferStatus,
+    DeliveryLedgerEntry, LedgerEntryType, LedgerStatus, VehicleType, KYCStatus,
+)
 from app.models.commerce import Order, OrderStatus
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User
@@ -29,6 +33,12 @@ from app.schemas.delivery import (
     DeliveryRateRead, DeliveryRateUpdate,
     DeliverySimulationRow, DeliverySimulationResponse,
     RouteOptimizationRequest, RouteOptimizationResponse, RouteOptimizationStop,
+    KYCDetailRead, KYCSubmitRequest, KYCReviewRequest,
+    KYCAgentRead, KYCAgentListResponse,
+    OfferRead, OfferListResponse, PingDispatchResponse,
+    LedgerEntryRead, LedgerListResponse, WalletTransactionRequest,
+    PricingRuleRead, PricingRuleListResponse, PricingRuleUpsert,
+    MeteredQuoteRequest, MeteredQuoteResponse,
 )
 from app.services.notifications import create_notification
 from app.services.webhooks import emit_delivery_status_webhook
@@ -39,6 +49,8 @@ from app.services.delivery_pricing import (
     get_region,
 )
 from app.services.routing import get_route_eta_distance, get_route_matrix
+from app.services import fleet
+from app.services.mpesa import get_access_token, initiate_b2c_payment, initiate_b2c_reversal
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -165,6 +177,10 @@ async def assign_delivery(
         raise HTTPException(404, "Agent not found")
     if agent.status == DeliveryAgentStatus.inactive:
         raise HTTPException(400, "Agent is inactive")
+    if agent.kyc_status != KYCStatus.approved:
+        raise HTTPException(400, "Rider KYC is not approved; cannot assign deliveries")
+    if not agent.equipment_verified:
+        raise HTTPException(400, "Rider equipment is not verified; cannot assign deliveries")
 
     delivery = db.query(Delivery).filter(Delivery.order_id == order_id).first()
     if not delivery:
@@ -263,6 +279,8 @@ async def update_delivery_status(
         agent.total_deliveries += 1
         agent.status = DeliveryAgentStatus.active
         agent.current_order_id = None
+        # rider's share of the delivery fee lands in the wallet ledger
+        fleet.credit_delivery_earnings(db, delivery, agent)
 
     event = DeliveryEvent(
         delivery_id=delivery.id,
@@ -319,6 +337,16 @@ def update_my_status(
     db: Session = Depends(get_db),
     agent: DeliveryAgent = Depends(get_current_agent),
 ):
+    # A rider may only come online after an admin has approved their KYC and
+    # vehicle/equipment verification — the fleet safety gate.
+    if payload.status == DeliveryAgentStatus.active:
+        if agent.kyc_status != KYCStatus.approved:
+            raise HTTPException(400, "KYC not approved yet. Complete onboarding before going online.")
+        if not agent.equipment_verified:
+            raise HTTPException(400, "Equipment verification pending. Complete onboarding before going online.")
+        if not agent.current_lat or not agent.current_lng:
+            raise HTTPException(400, "Location not set. Share your location before going online.")
+
     agent.status = payload.status
     db.commit()
     db.refresh(agent)
@@ -393,8 +421,23 @@ def my_earnings(
         or 0
     )
 
-    weekly_earnings = weekly * 150
-    monthly_earnings = monthly * 150
+    # Earnings come from the wallet ledger now: the rider's share of the
+    # delivery fee is credited on delivery and any B2C payout debits it.
+    # Response shape is kept identical for the rider PWA.
+    def _earning_sum(since: datetime) -> Decimal:
+        total = (
+            db.query(func.sum(DeliveryLedgerEntry.amount))
+            .filter(
+                DeliveryLedgerEntry.agent_id == agent.id,
+                DeliveryLedgerEntry.entry_type == LedgerEntryType.earning,
+                DeliveryLedgerEntry.created_at >= since,
+            )
+            .scalar()
+        )
+        return Decimal(total or 0)
+
+    weekly_earnings = _earning_sum(week_start)
+    monthly_earnings = _earning_sum(month_start)
 
     return {
         "total_deliveries": agent.total_deliveries,
@@ -402,28 +445,17 @@ def my_earnings(
         "monthly_deliveries": monthly,
         "weekly_earnings": str(weekly_earnings),
         "monthly_earnings": str(monthly_earnings),
+        "wallet_balance": str(agent.wallet_balance or Decimal("0.00")),
     }
 
 
-@router.get("/{delivery_id}", response_model=DeliveryRead)
-def get_delivery_detail(
-    delivery_id: uuid.UUID,
+@router.get("/pricing-rules", response_model=PricingRuleListResponse)
+def list_pricing_rules(
     db: Session = Depends(get_db),
-    agent: DeliveryAgent = Depends(get_current_agent),
+    _: User = Depends(require_admin),
 ):
-    delivery = (
-        db.query(Delivery)
-        .options(
-            selectinload(Delivery.order).selectinload(Order.buyer),
-            selectinload(Delivery.order).selectinload(Order.items),
-            selectinload(Delivery.order).selectinload(Order.shop),
-        )
-        .filter(Delivery.id == delivery_id, Delivery.agent_id == agent.id)
-        .first()
-    )
-    if not delivery:
-        raise HTTPException(404, "Delivery not found")
-    return delivery
+    rules = db.query(DeliveryPricingRule).order_by(DeliveryPricingRule.vehicle_type).all()
+    return PricingRuleListResponse(results=rules)
 
 
 @router.post("/{delivery_id}/issue", response_model=DeliveryIssueRead, status_code=status.HTTP_201_CREATED)
@@ -603,6 +635,376 @@ def simulate_delivery_fees(
     )
 
 
+# ── Fleet: rider KYC + vehicle/equipment verification ────────────────────────
+
+@router.get("/kyc/me", response_model=KYCDetailRead)
+def my_kyc(
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    return agent
+
+
+@router.put("/kyc/me", response_model=KYCDetailRead)
+def submit_kyc(
+    payload: KYCSubmitRequest,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    agent.vehicle_type = payload.vehicle_type
+    agent.national_id_number = payload.national_id_number
+    agent.license_number = payload.license_number
+    agent.kyc_documents = [doc.model_dump() for doc in payload.kyc_documents] if payload.kyc_documents else None
+    agent.equipment_photo_url = payload.equipment_photo_url
+    agent.kyc_status = KYCStatus.pending_review
+    agent.kyc_submitted_at = datetime.now(timezone.utc)
+    agent.kyc_reviewed_at = None
+    agent.kyc_review_notes = None
+    # a re-flight off the road until re-approved
+    agent.status = DeliveryAgentStatus.inactive
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
+@router.get("/admin/kyc", response_model=KYCAgentListResponse)
+def kyc_queue(
+    status_filter: KYCStatus = Query(KYCStatus.pending_review, alias="status"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    query = db.query(DeliveryAgent).filter(DeliveryAgent.kyc_status == status_filter)
+    pending = (
+        db.query(func.count(DeliveryAgent.id))
+        .filter(DeliveryAgent.kyc_status == KYCStatus.pending_review)
+        .scalar()
+        or 0
+    )
+    results = query.order_by(DeliveryAgent.kyc_submitted_at.asc().nullslast()).all()
+    return KYCAgentListResponse(total=len(results), pending=pending, results=results)
+
+
+@router.post("/admin/kyc/{agent_id}/approve", response_model=KYCAgentRead)
+def approve_kyc(
+    agent_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    agent = db.get(DeliveryAgent, agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+    agent.kyc_status = KYCStatus.approved
+    agent.equipment_verified = True
+    agent.kyc_reviewed_at = datetime.now(timezone.utc)
+    agent.kyc_review_notes = "Approved by admin"
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
+@router.post("/admin/kyc/{agent_id}/reject", response_model=KYCAgentRead)
+def reject_kyc(
+    agent_id: uuid.UUID,
+    payload: KYCReviewRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    agent = db.get(DeliveryAgent, agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+    agent.kyc_status = KYCStatus.rejected
+    agent.equipment_verified = False
+    agent.kyc_reviewed_at = datetime.now(timezone.utc)
+    agent.kyc_review_notes = payload.notes or "Rejected by admin"
+    agent.status = DeliveryAgentStatus.inactive
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
+# ── Fleet: automated ping dispatch engine ─────────────────────────────────────
+
+@router.post("/{order_id}/dispatch", response_model=PingDispatchResponse)
+def dispatch_delivery(
+    order_id: uuid.UUID,
+    radius_km: float = Query(None, ge=0.1, le=100),
+    expires_seconds: int = Query(None, ge=10, le=300),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    delivery = db.query(Delivery).filter(Delivery.order_id == order_id).first()
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    if delivery.status != DeliveryStatus.pending:
+        raise HTTPException(400, f"Delivery is in '{delivery.status.value}' status; only pending deliveries can be dispatched")
+
+    offers = fleet.dispatch(db, delivery, radius_km=radius_km, expires_after_seconds=expires_seconds)
+    db.commit()
+    return PingDispatchResponse(
+        delivery_id=delivery.id,
+        offers_created=len(offers),
+        offers=offers,
+    )
+
+
+@router.get("/offers/me", response_model=OfferListResponse)
+def my_offers(
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    # lazily expire overdue pings before listing so riders see live offers only
+    stale = fleet.expire_stale_offers(db)
+    db.commit()
+
+    offers = (
+        db.query(DeliveryOffer)
+        .options(selectinload(DeliveryOffer.delivery))
+        .filter(DeliveryOffer.agent_id == agent.id)
+        .filter(DeliveryOffer.status.in_([OfferStatus.pending, OfferStatus.queued]))
+        .order_by(DeliveryOffer.created_at.desc())
+        .all()
+    )
+    return OfferListResponse(offers=offers, stale_expired=stale)
+
+
+@router.post("/offers/{offer_id}/accept", response_model=DeliveryRead)
+def accept_ping(
+    offer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    offer = db.get(DeliveryOffer, offer_id)
+    if not offer:
+        raise HTTPException(404, "Ping not found")
+    # re-check expiry before accepting
+    fleet.expire_stale_offers(db)
+    db.refresh(offer)
+    try:
+        delivery = fleet.accept_offer(db, offer, agent)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(400, str(exc))
+    db.commit()
+    db.refresh(delivery)
+    return delivery
+
+
+@router.post("/offers/{offer_id}/decline", response_model=OfferRead)
+def decline_ping(
+    offer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    offer = db.get(DeliveryOffer, offer_id)
+    if not offer:
+        raise HTTPException(404, "Ping not found")
+    try:
+        declined = fleet.decline_offer(db, offer, agent)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(400, str(exc))
+    db.commit()
+    db.refresh(declined)
+    return declined
+
+
+@router.post("/offers/expire-stale", response_model=int)
+def expire_stale_pings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    count = fleet.expire_stale_offers(db)
+    db.commit()
+    return count
+
+
+# ── Fleet: wallet ledger + B2C payouts + reversal ─────────────────────────────
+
+@router.get("/agents/me/ledger", response_model=LedgerListResponse)
+def my_ledger(
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    entries = (
+        db.query(DeliveryLedgerEntry)
+        .filter(DeliveryLedgerEntry.agent_id == agent.id)
+        .order_by(DeliveryLedgerEntry.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return LedgerListResponse(agent_id=agent.id, wallet_balance=str(agent.wallet_balance or Decimal("0.00")), entries=entries)
+
+
+@router.get("/admin/ledger", response_model=LedgerListResponse)
+def admin_ledger(
+    agent_id: uuid.UUID,
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    agent = db.get(DeliveryAgent, agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+    entries = (
+        db.query(DeliveryLedgerEntry)
+        .filter(DeliveryLedgerEntry.agent_id == agent_id)
+        .order_by(DeliveryLedgerEntry.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return LedgerListResponse(agent_id=agent_id, wallet_balance=str(agent.wallet_balance or Decimal("0.00")), entries=entries)
+
+
+@router.post("/admin/ledger/{agent_id}/payout", response_model=LedgerEntryRead)
+async def trigger_b2c_payout(
+    agent_id: uuid.UUID,
+    payload: WalletTransactionRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Admin-triggered B2C payout of part of a rider's wallet balance to their
+    M-Pesa number. The wallet debit is provisional (pending) until Daraja
+    returns a response; on failure the reversal restores the balance."""
+    agent = db.get(DeliveryAgent, agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+
+    try:
+        amount = Decimal(payload.amount)
+    except Exception:
+        raise HTTPException(400, "amount must be a valid decimal")
+
+    balance = Decimal(agent.wallet_balance or 0)
+    if amount <= 0:
+        raise HTTPException(400, "amount must be greater than zero")
+    if amount > balance:
+        raise HTTPException(400, f"Cannot payout {amount}; wallet balance is {balance}")
+
+    entry = fleet.create_manual_payout(db, agent, amount)
+    db.commit()
+
+    try:
+        token = get_access_token()
+        phone = agent.phone
+        response = initiate_b2c_payment(
+            token,
+            phone,
+            int(amount),
+            remarks=payload.note or "Rider payout",
+            transaction_id=str(entry.id),
+        )
+        response_code = response.get("ResponseCode")
+        succeeded = response_code in ("0", 0)
+        reference = response.get("OriginatorConversationID") or str(entry.id)
+        fleet.mark_payout_result(
+            db, entry, reference=reference, succeeded=succeeded,
+            failure_reason=None if succeeded else f"M-Pesa ResponseCode {response_code}",
+        )
+        db.commit()
+    except Exception as exc:
+        logger.warning("B2C payout initiation failed for %s", agent.id, exc_info=True)
+        fleet.mark_payout_result(
+            db, entry, reference=None, succeeded=False, failure_reason=str(exc)
+        )
+        db.commit()
+        raise HTTPException(502, f"B2C payout initiation failed: {exc}")
+    db.refresh(entry)
+    return entry
+
+
+@router.post("/admin/ledger/{entry_id}/reverse", response_model=LedgerEntryRead)
+async def reverse_payout(
+    entry_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Reverses a previously-fulfilled B2C payout back into the rider's wallet.
+    Side effect on M-Pesa is best-effort: reversal is posted to the ledger
+    regardless so the wallet stays consistent."""
+    entry = db.get(DeliveryLedgerEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "Ledger entry not found")
+    if entry.entry_type != LedgerEntryType.b2c_payout or entry.status != LedgerStatus.succeeded:
+        raise HTTPException(400, "Only a succeeded B2C payout can be reversed")
+
+    agent = entry.agent
+    try:
+        token = get_access_token()
+        initiate_b2c_reversal(token, transaction_id=entry.reference or str(entry.id), amount=abs(int(entry.amount)))
+    except Exception as exc:
+        logger.warning("B2C reversal failed for ledger %s (%s)", entry.id, exc)
+
+    fleet.post_ledger_entry(
+        db, agent, LedgerEntryType.reversal, -entry.amount,
+        delivery_id=entry.delivery_id, reference=f"reversal-of-{entry.id}",
+    )
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+# ── Fleet: metered pricing rules + quote ──────────────────────────────────────
+
+@router.put("/pricing-rules/{vehicle_type}", response_model=PricingRuleRead)
+def upsert_pricing_rule(
+    vehicle_type: VehicleType,
+    payload: PricingRuleUpsert,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    rule = db.query(DeliveryPricingRule).filter(DeliveryPricingRule.vehicle_type == vehicle_type).first()
+    if rule is None:
+        rule = DeliveryPricingRule(vehicle_type=vehicle_type)
+        db.add(rule)
+
+    for field, value in payload.model_dump(exclude={"vehicle_type"}).items():
+        setattr(rule, field, value)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@router.post("/quote", response_model=MeteredQuoteResponse)
+def metered_quote(
+    payload: MeteredQuoteRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Quote production pricing for a delivery. As a design choice the quote
+    accepts explicit distance/duration so the router doesn't depend on a live
+    routing provider at request time; pass values already computed by ORS or
+    the legacy cart-total path as needed. Returns the surge-affected metered
+    total plus the full breakdown."""
+    rule = fleet.get_pricing_rule(db, payload.vehicle_type)
+    if rule is None:
+        return MeteredQuoteResponse(
+            total="0.00",
+            currency="KES",
+            breakdown={
+                "base_fare": "0.00",
+                "per_km": "0.00",
+                "per_minute": "0.00",
+                "surge_multiplier": "1.00",
+                "peak_hours": False,
+                "raining": False,
+                "rain_multiplier": "1.00",
+                "peak_hours_multiplier": "1.00",
+                "supply_demand_multiplier": "1.00",
+                "currency": "KES",
+            },
+        )
+
+    total, breakdown = fleet.calculate_metered_fee(
+        distance_km=payload.distance_km,
+        duration_min=payload.duration_min,
+        vehicle_type=payload.vehicle_type,
+        rule=rule,
+        raining=payload.raining,
+    )
+    return MeteredQuoteResponse(total=str(total), currency=breakdown["currency"], breakdown=breakdown)
+
+
 # ── Buyer: track order ────────────────────────────────────────────────────────
 
 @router.get("/{order_id}/track", response_model=DeliveryRead)
@@ -618,6 +1020,27 @@ def track_delivery(
             Delivery.order_id == order_id,
             Order.order_group.has(buyer_id=current_user.id),
         )
+        .first()
+    )
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+    return delivery
+
+
+@router.get("/{delivery_id}", response_model=DeliveryRead)
+def get_delivery_detail(
+    delivery_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    delivery = (
+        db.query(Delivery)
+        .options(
+            selectinload(Delivery.order).selectinload(Order.buyer),
+            selectinload(Delivery.order).selectinload(Order.items),
+            selectinload(Delivery.order).selectinload(Order.shop),
+        )
+        .filter(Delivery.id == delivery_id, Delivery.agent_id == agent.id)
         .first()
     )
     if not delivery:
