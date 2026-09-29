@@ -81,6 +81,14 @@ export default function AdminDeliveriesPage() {
     queryClient.invalidateQueries({ queryKey: ["admin", "orders-needing-delivery"] });
   }
 
+  async function dispatch(orderId: string) {
+    const res = await fetch(`/api/admin/delivery/${orderId}/dispatch`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(data.detail ?? "Could not dispatch delivery"); return; }
+    toast.success(`Dispatched — pinged ${data.offers_created ?? 0} rider${data.offers_created === 1 ? "" : "s"}`);
+    queryClient.invalidateQueries({ queryKey: ["admin", "orders-needing-delivery"] });
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -99,6 +107,9 @@ export default function AdminDeliveriesPage() {
                   <p className="text-xs text-muted">{formatKES(order.total)} · {order.status}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
+                  <button onClick={() => dispatch(order.id)} className="btn-navy text-xs py-1.5 px-3">
+                    Dispatch
+                  </button>
                   <select
                     className="input-field text-sm py-1.5"
                     value={selectedAgent[order.id] ?? ""}
