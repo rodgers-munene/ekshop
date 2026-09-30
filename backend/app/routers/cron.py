@@ -7,9 +7,9 @@ from app.core.config import settings
 from app.dependencies.database import get_db
 from app.routers.payments import reconcile_stale_mpesa_intents
 from app.services.subscriptions import run_billing_cycle
-from app.services.email import _send
+from app.services.email import _send, send_abandoned_cart_email
 from app.services.dashboard_metrics import get_margin_leakage_metrics
-from app.models.commerce import Order
+from app.models.commerce import Order, Cart
 from app.models.shop import Shop
 from app.models.user import User
 
@@ -136,3 +136,83 @@ def send_weekly_insight_digest(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to send weekly digest: {exc}") from exc
     return {"status": "sent", "to": recipient}
+
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+@router.post(
+    "/abandoned-carts",
+    summary="Send abandoned cart recovery emails (cron-triggered)",
+    description="""
+Finds carts with items that haven't been updated in the last 2 hours and
+sends a recovery email to the user. Triggered periodically by an external scheduler.
+""",
+)
+def run_abandoned_carts_recovery(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_cron_secret),
+):
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
+
+    abandoned_carts = (
+        db.query(Cart)
+        .join(Cart.items)
+        .join(Cart.user)
+        .filter(
+            Cart.updated_at < cutoff,
+            Cart.items.any(),
+            User.email.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+
+    sent = 0
+    skipped = 0
+
+    for cart in abandoned_carts:
+        recent_order = (
+            db.query(Order)
+            .filter(
+                Order.buyer_id == cart.user_id,
+                Order.created_at > datetime.now(timezone.utc) - timedelta(hours=24),
+            )
+            .first()
+        )
+        if recent_order:
+            skipped += 1
+            continue
+
+        items_data = []
+        for item in cart.items:
+            product = item.product
+            if not product or product.status != "active":
+                continue
+            items_data.append({
+                "name": product.name,
+                "price": product.price,
+                "quantity": item.quantity,
+                "image_url": product.images[0].url if product.images else "",
+            })
+
+        if not items_data:
+            skipped += 1
+            continue
+
+        cart_url = f"{settings.FRONTEND_URL}/cart"
+        try:
+            send_abandoned_cart_email(
+                to=cart.user.email,
+                user_name=cart.user.first_name,
+                cart_items=items_data,
+                cart_url=cart_url,
+            )
+            sent += 1
+        except Exception as exc:
+            logger.warning("Failed to send abandoned cart email to %s: %s", cart.user.email, exc)
+
+    return {"status": "completed", "sent": sent, "skipped": skipped}

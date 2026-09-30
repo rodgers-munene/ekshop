@@ -340,3 +340,57 @@ def send_invoice_email(to: str, invoice: dict) -> None:
         subject=f"Ekshop invoice {invoice_id}",
         html=body_html,
     )
+
+
+def send_abandoned_cart_email(to: str, user_name: str, cart_items: list[dict], cart_url: str) -> None:
+    """Send abandoned cart recovery email with cart contents and recovery link."""
+    e = html_lib.escape
+
+    items_rows = "".join(
+        f"""
+        <tr>
+            <td style="padding:8px;border-bottom:1px solid #eee;">
+                <img src="{e(item.get('image_url', ''))}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:4px;">
+            </td>
+            <td style="padding:8px;border-bottom:1px solid #eee;">{e(item.get('name', 'Product'))}</td>
+            <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;">{item.get('quantity', 1)}</td>
+            <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;">KES {e(str(item.get('price', '0')))}</td>
+        </tr>
+        """
+        for item in cart_items
+    )
+
+    body_html = f"""
+        <h2>You left something behind 🛒</h2>
+        <p>Hi {e(user_name)},</p>
+        <p>Your cart is waiting for you. Complete your order now before items sell out.</p>
+
+        <table style="border-collapse:collapse;width:100%;">
+            <thead>
+                <tr style="background:#f5f5f5;">
+                    <th style="text-align:left;padding:8px;border-bottom:2px solid #333;">Image</th>
+                    <th style="text-align:left;padding:8px;border-bottom:2px solid #333;">Product</th>
+                    <th style="text-align:center;padding:8px;border-bottom:2px solid #333;">Qty</th>
+                    <th style="text-align:right;padding:8px;border-bottom:2px solid #333;">Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_rows}
+            </tbody>
+        </table>
+
+        <p style="text-align:center;margin:24px 0;">
+            <a href="{e(cart_url)}" style="background:#e8a838;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">
+                Complete my order
+            </a>
+        </p>
+
+        <p style="font-size:12px;color:#888;">
+            This link expires in 7 days. If you have questions, <a href="{settings.FRONTEND_URL}/contact">contact support</a>.
+        </p>
+    """
+    _send(
+        to=to,
+        subject="Your Ekshop cart is waiting — complete your order",
+        html=body_html,
+    )
