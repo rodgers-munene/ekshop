@@ -13,6 +13,17 @@ Two invariants are enforced here, both from the PRD:
 
 Callers must go through :func:`transition_job` rather than assigning
 ``job.status`` directly.
+
+Transaction control
+-------------------
+The functions that change a *fulfillment* (``create_fulfillment``,
+``open_retry_job``, ``open_return_job``, ``record_job_settlement``,
+``settle_fulfillment``) commit before returning, so they are safe to call from a
+request handler on their own. The lower-level job and assignment functions
+(:func:`transition_job`, :func:`create_assignment`, :func:`respond_to_assignment`,
+:func:`issue_otp`, :func:`override_job`) only ``flush()``: they leave the
+transaction open so several steps can be recorded as one unit. A router that
+calls those directly is responsible for ``db.commit()``.
 """
 
 from __future__ import annotations
@@ -720,16 +731,27 @@ def record_job_settlement(
     Mirrors the margin calculator:
         contribution = fee_collected - rider_payout - incentive_paid
                        - payment_fee - partner_cost - waiting_fee
+
+    Amounts are coerced through :func:`_decimal` so a string from a JSON body
+    cannot blow up the arithmetic halfway through a settlement.
     """
+    fee_collected = _decimal(fee_collected, "fee_collected")
+    rider_payout = _decimal(rider_payout, "rider_payout")
+    incentive_paid = _decimal(incentive_paid, "incentive_paid")
+    partner_cost = _decimal(partner_cost, "partner_cost")
+    waiting_fee = _decimal(waiting_fee, "waiting_fee")
+
     if payment_fee is None:
         pct = _decimal(payment_fee_pct, "payment_fee_pct")
         payment_fee = (fee_collected * pct).quantize(Decimal("0.01"))
+    else:
+        payment_fee = _decimal(payment_fee, "payment_fee")
 
     contribution = (
         fee_collected
         - rider_payout
         - incentive_paid
-        - _decimal(payment_fee, "payment_fee")
+        - payment_fee
         - partner_cost
         - waiting_fee
     ).quantize(Decimal("0.01"))

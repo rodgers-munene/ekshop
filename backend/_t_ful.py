@@ -18,6 +18,7 @@ from app.models.shop import Shop
 from app.models.delivery import DeliveryAgent
 from app.models.fulfillment import (
     AssignmentStatus,
+    DeliveryJob,
     DeliveryJobStatus,
     FulfillmentMode,
     FulfillmentPayer,
@@ -116,6 +117,9 @@ check("fulfillment derives delivered", f.status.value == "delivered", f.status.v
 check("delivered_at stamped", job.delivered_at is not None)
 check("one event per transition", len(job.events) == 8, len(job.events))
 check("last event is DELIVERED", job.events[-1].to_status == "delivered")
+s.commit()
+check("events survive a commit", len(s.get(DeliveryJob, job.id).events) == 8,
+      len(s.get(DeliveryJob, job.id).events))
 
 print("\n== illegal transition is refused ==")
 try:
