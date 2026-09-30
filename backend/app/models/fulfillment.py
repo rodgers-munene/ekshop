@@ -270,10 +270,15 @@ class DeliveryJob(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     __table_args__ = (
+        # One job per attempt number. Deliberately NOT unique on
+        # (fulfillment_id, job_type): a fulfillment can have many `forward`
+        # jobs, because every retry is a new forward attempt. Uniqueness on the
+        # attempt number is what actually prevents two jobs claiming to be the
+        # same attempt.
         UniqueConstraint("fulfillment_id", "attempt", name="uq_delivery_job_attempt"),
-        UniqueConstraint("fulfillment_id", "job_type", name="uq_delivery_job_type_per_fulfillment"),
         Index("ix_delivery_jobs_fulfillment_id", "fulfillment_id"),
         Index("ix_delivery_jobs_status", "status"),
+        Index("ix_delivery_jobs_fulfillment_id_job_type", "fulfillment_id", "job_type"),
         CheckConstraint("distance_km IS NULL OR distance_km >= 0", name="ck_delivery_job_distance"),
     )
 

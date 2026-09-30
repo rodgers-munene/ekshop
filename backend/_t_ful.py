@@ -156,13 +156,31 @@ fset = fs.settle_fulfillment(s, f, actor_user_id=seller.id)
 check("fulfillment settlement created", fset.id is not None)
 check("fee rolled up", str(fset.fee_collected) == "60.00", fset.fee_collected)
 check("contribution rolled up", str(fset.contribution) == "18.00", fset.contribution)
-check("margin_pct = 18/60 = 0.30", str(fset.margin_pct) == "0.3", fset.margin_pct)
+check("margin_pct = 18/60 = 0.3000", str(fset.margin_pct) == "0.3000", fset.margin_pct)
 check("fulfillment settled_at stamped", f.settled_at is not None)
 check("fulfillment closed on settle", f.closed_at is not None and f.close_reason == "settled")
 
+print("\n== one fulfillment per order ==")
+try:
+    fs.create_fulfillment(s, order.id, mode=FulfillmentMode.ekshop)
+    check("a second fulfillment on the same order is blocked", False, "allowed")
+except fs.FulfillmentError:
+    check("a second fulfillment on the same order is blocked", True)
+
+# A second order, so the retry scenario starts from a clean fulfillment.
+group2 = OrderGroup(buyer_id=buyer.id, status="paid", subtotal="50.00",
+                    delivery_fee="60.00", tax_amount="8.00", total="118.00",
+                    delivery_address={"county": "Nairobi"})
+s.add(group2)
+s.flush()
+order2 = Order(group_id=group2.id, shop_id=shop.id, buyer_id=buyer.id,
+               status="confirmed", subtotal="50.00", delivery_fee="60.00",
+               tax_amount="8.00", total="118.00")
+s.add(order2)
+s.commit()
+
 print("\n== retry after failure keeps history ==")
-o2 = s.get(Order, order.id)
-f2 = fs.create_fulfillment(s, o2.id, mode=FulfillmentMode.ekshop)
+f2 = fs.create_fulfillment(s, order2.id, mode=FulfillmentMode.ekshop)
 j2 = f2.current_job
 fs.transition_job(s, j2, DeliveryJobStatus.dispatch_requested, event_type="DISPATCH_REQUESTED")
 fs.transition_job(s, j2, DeliveryJobStatus.failed, event_type="FAILED",
@@ -172,11 +190,21 @@ r2 = fs.open_retry_job(s, f2, actor_user_id=seller.id, reason="customer unavaila
 check("retry is a NEW job", r2.id != j2.id)
 check("retry is attempt 2", r2.attempt == 2, r2.attempt)
 check("retry type is forward", r2.job_type.value == "forward", r2.job_type.value)
+check("retry gets a fresh OTP", r2.otp_hash is not None and r2.otp_hash != j2.otp_hash)
 check("fulfillment follows the retry", f2.current_job.id == r2.id)
 check("fulfillment status back to pending", f2.status.value == "pending", f2.status.value)
 check("attempt 1 still failed and preserved", j2.status.value == "failed")
 check("both jobs retained", len(f2.jobs) == 2, len(f2.jobs))
 check("retry has its own event", len(r2.events) >= 1, [e.event_type for e in r2.events])
+
+print("\n== an in-flight attempt blocks a retry ==")
+fs.transition_job(s, r2, DeliveryJobStatus.dispatch_requested, event_type="DISPATCH_REQUESTED")
+fs.transition_job(s, r2, DeliveryJobStatus.offered, event_type="OFFERED")
+try:
+    fs.open_retry_job(s, f2, actor_user_id=seller.id, reason="double dispatch")
+    check("retry blocked while an attempt is in flight", False, "allowed")
+except fs.FulfillmentError:
+    check("retry blocked while an attempt is in flight", True)
 
 print("\n== return leg ==")
 rj = fs.open_return_job(s, f2, actor_user_id=seller.id, reason="customer refused")
@@ -209,14 +237,14 @@ for label, sql in [("UPDATE", "UPDATE delivery_job_events SET notes='x' WHERE jo
         check(f"{label} of a job event blocked", True, str(e.orig).split("\n")[0][:56])
 
 # cleanup
-s.execute(text("DELETE FROM delivery_job_events WHERE job_id IN (SELECT id FROM delivery_jobs WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = :o))"), {"o": order.id})
-s.execute(text("DELETE FROM job_settlements WHERE job_id IN (SELECT id FROM delivery_jobs WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = :o))"), {"o": order.id})
-s.execute(text("DELETE FROM delivery_assignments WHERE job_id IN (SELECT id FROM delivery_jobs WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = :o))"), {"o": order.id})
-s.execute(text("DELETE FROM delivery_jobs WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = :o)"), {"o": order.id})
-s.execute(text("DELETE FROM fulfillment_settlements WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = :o)"), {"o": order.id})
-s.execute(text("DELETE FROM fulfillments WHERE order_id = :o"), {"o": order.id})
-s.execute(text("DELETE FROM orders WHERE id = :o"), {"o": order.id})
-s.execute(text("DELETE FROM order_groups WHERE id = :g"), {"g": group.id})
+s.execute(text("DELETE FROM delivery_job_events WHERE job_id IN (SELECT id FROM delivery_jobs WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = ANY(:o)))"), {"o": [order.id, order2.id]})
+s.execute(text("DELETE FROM job_settlements WHERE job_id IN (SELECT id FROM delivery_jobs WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = ANY(:o)))"), {"o": [order.id, order2.id]})
+s.execute(text("DELETE FROM delivery_assignments WHERE job_id IN (SELECT id FROM delivery_jobs WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = ANY(:o)))"), {"o": [order.id, order2.id]})
+s.execute(text("DELETE FROM delivery_jobs WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = ANY(:o))"), {"o": [order.id, order2.id]})
+s.execute(text("DELETE FROM fulfillment_settlements WHERE fulfillment_id IN (SELECT id FROM fulfillments WHERE order_id = ANY(:o))"), {"o": [order.id, order2.id]})
+s.execute(text("DELETE FROM fulfillments WHERE order_id = ANY(:o)"), {"o": [order.id, order2.id]})
+s.execute(text("DELETE FROM orders WHERE id = ANY(:o)"), {"o": [order.id, order2.id]})
+s.execute(text("DELETE FROM order_groups WHERE id = ANY(:g)"), {"g": [group.id, group2.id]})
 s.execute(text("DELETE FROM delivery_agents WHERE id IN (:a,:b)"), {"a": agent.id, "b": agent2.id})
 s.execute(text("DELETE FROM shops WHERE id = :s"), {"s": shop.id})
 s.execute(text("DELETE FROM users WHERE id IN (:a,:b)"), {"a": buyer.id, "b": seller.id})

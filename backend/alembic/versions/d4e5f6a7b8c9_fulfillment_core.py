@@ -96,15 +96,19 @@ def upgrade() -> None:
         sa.Column("failed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        # Two jobs can never claim to be the same attempt.
+        # Two jobs can never claim to be the same attempt. Note there is
+        # deliberately no uniqueness on (fulfillment_id, job_type): a
+        # fulfillment has many `forward` jobs, one per retry attempt.
         sa.UniqueConstraint("fulfillment_id", "attempt", name="uq_delivery_job_attempt"),
-        sa.UniqueConstraint("fulfillment_id", "job_type", name="uq_delivery_job_type_per_fulfillment"),
         sa.UniqueConstraint("external_reference", name="uq_delivery_jobs_external_reference"),
         sa.CheckConstraint("distance_km IS NULL OR distance_km >= 0", name="ck_delivery_job_distance"),
     )
     op.create_index("ix_delivery_jobs_fulfillment_id", "delivery_jobs", ["fulfillment_id"])
     op.create_index("ix_delivery_jobs_status", "delivery_jobs", ["status"])
     op.create_index("ix_delivery_jobs_agent_id", "delivery_jobs", ["agent_id"])
+    op.create_index(
+        "ix_delivery_jobs_fulfillment_id_job_type", "delivery_jobs", ["fulfillment_id", "job_type"]
+    )
 
     op.create_table(
         "delivery_assignments",
@@ -220,6 +224,7 @@ def downgrade() -> None:
     op.drop_index("ix_delivery_assignments_agent_id", table_name="delivery_assignments")
     op.drop_index("ix_delivery_assignments_job_id", table_name="delivery_assignments")
     op.drop_table("delivery_assignments")
+    op.drop_index("ix_delivery_jobs_fulfillment_id_job_type", table_name="delivery_jobs")
     op.drop_index("ix_delivery_jobs_agent_id", table_name="delivery_jobs")
     op.drop_index("ix_delivery_jobs_status", table_name="delivery_jobs")
     op.drop_index("ix_delivery_jobs_fulfillment_id", table_name="delivery_jobs")
