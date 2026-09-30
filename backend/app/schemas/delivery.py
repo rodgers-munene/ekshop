@@ -478,3 +478,128 @@ class TripShareRead(BaseModel):
 class TripShareCreate(BaseModel):
     delivery_id: uuid.UUID
     expires_in_hours: int = 24
+
+
+# Loyalty / Gamification Schemas
+class RiderTier(str, enum.Enum):
+    bronze = "bronze"
+    silver = "silver"
+    gold = "gold"
+    platinum = "platinum"
+
+
+class QuestType(str, enum.Enum):
+    delivery_count = "delivery_count"
+    earnings_target = "earnings_target"
+    streak_days = "streak_days"
+    rating_target = "rating_target"
+    peak_hours = "peak_hours"
+    distance_total = "distance_total"
+    referral = "referral"
+    batch_complete = "batch_complete"
+
+
+class QuestStatus(str, enum.Enum):
+    active = "active"
+    completed = "completed"
+    claimed = "claimed"
+    expired = "expired"
+    cancelled = "cancelled"
+
+
+class RewardType(str, enum.Enum):
+    cash = "cash"
+    bonus = "bonus"
+    points = "points"
+    badge = "badge"
+    tier_upgrade = "tier_upgrade"
+
+
+class QuestRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: Optional[str]
+    quest_type: QuestType
+    target_value: str
+    reward_type: RewardType
+    reward_value: str
+    reward_badge: Optional[str]
+    tier_requirement: Optional[RiderTier]
+    is_active: bool
+    is_recurring: bool
+    recurrence_period: Optional[str]
+    starts_at: Optional[datetime]
+    ends_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class QuestCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    quest_type: QuestType
+    target_value: str
+    reward_type: RewardType
+    reward_value: str = "0"
+    reward_badge: Optional[str] = None
+    tier_requirement: Optional[RiderTier] = None
+    is_active: bool = True
+    is_recurring: bool = False
+    recurrence_period: Optional[str] = None
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+
+
+class QuestUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    target_value: Optional[str] = None
+    reward_value: Optional[str] = None
+    reward_badge: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_recurring: Optional[bool] = None
+    recurrence_period: Optional[str] = None
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+
+
+class QuestProgressRead(BaseModel):
+    id: uuid.UUID
+    agent_id: uuid.UUID
+    quest_id: uuid.UUID
+    status: QuestStatus
+    current_value: str
+    completed_at: Optional[datetime]
+    claimed_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+    quest: QuestRead
+
+    model_config = {"from_attributes": True}
+
+
+class RiderProfileRead(BaseModel):
+    """Extended rider profile with loyalty info"""
+    id: uuid.UUID
+    name: str
+    email: str
+    phone: str
+    tier: RiderTier
+    loyalty_points: int
+    lifetime_deliveries: int
+    lifetime_earnings: str
+    current_streak_days: int
+    longest_streak_days: int
+    last_active_date: Optional[datetime]
+    total_distance_km: float
+    rating_avg: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class QuestProgressUpdate(BaseModel):
+    """Update quest progress (internal use)"""
+    current_value: str

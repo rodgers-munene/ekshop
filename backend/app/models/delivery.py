@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text, Float, Numeric
+from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text, Float, Numeric, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -66,6 +66,40 @@ class LedgerStatus(str, enum.Enum):
     failed = "failed"
 
 
+class RiderTier(str, enum.Enum):
+    bronze = "bronze"
+    silver = "silver"
+    gold = "gold"
+    platinum = "platinum"
+
+
+class QuestType(str, enum.Enum):
+    delivery_count = "delivery_count"      # Complete N deliveries
+    earnings_target = "earnings_target"    # Earn KES X
+    streak_days = "streak_days"            # Work N consecutive days
+    rating_target = "rating_target"        # Maintain rating >= X
+    peak_hours = "peak_hours"              # Deliver during peak hours
+    distance_total = "distance_total"      # Cover X km total
+    referral = "referral"                  # Refer a new rider
+    batch_complete = "batch_complete"      # Complete a batch
+
+
+class QuestStatus(str, enum.Enum):
+    active = "active"
+    completed = "completed"
+    claimed = "claimed"
+    expired = "expired"
+    cancelled = "cancelled"
+
+
+class RewardType(str, enum.Enum):
+    cash = "cash"
+    bonus = "bonus"
+    points = "points"
+    badge = "badge"
+    tier_upgrade = "tier_upgrade"
+
+
 class DeliveryAgent(Base):
     __tablename__ = "delivery_agents"
 
@@ -95,6 +129,15 @@ class DeliveryAgent(Base):
     # Wallet / payout ledger running balance. Writes happen ONLY through the
     # ledger service (credit/debit), never by direct column assignment.
     wallet_balance = Column(Numeric(14, 2), default=0, nullable=False)
+    # Loyalty / Gamification
+    tier = Column(Enum(RiderTier, native_enum=False), default=RiderTier.bronze, nullable=False)
+    loyalty_points = Column(Integer, default=0, nullable=False)
+    lifetime_deliveries = Column(Integer, default=0, nullable=False)
+    lifetime_earnings = Column(Numeric(14, 2), default=0, nullable=False)
+    current_streak_days = Column(Integer, default=0, nullable=False)
+    longest_streak_days = Column(Integer, default=0, nullable=False)
+    last_active_date = Column(DateTime(timezone=True), nullable=True)
+    total_distance_km = Column(Float, default=0.0, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     current_order = relationship("Order", foreign_keys=[current_order_id])
@@ -103,6 +146,53 @@ class DeliveryAgent(Base):
     ledger_entries = relationship("DeliveryLedgerEntry", back_populates="agent", cascade="all, delete-orphan")
     safety_alerts = relationship("SafetyAlert", back_populates="agent", cascade="all, delete-orphan")
     emergency_contacts = relationship("EmergencyContact", back_populates="agent", cascade="all, delete-orphan")
+    quest_progress = relationship("QuestProgress", back_populates="agent", cascade="all, delete-orphan")
+
+
+class Quest(Base):
+    """Quest/challenge definitions for rider gamification."""
+    __tablename__ = "quests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    quest_type = Column(Enum(QuestType, native_enum=False), nullable=False)
+    target_value = Column(Numeric(14, 2), nullable=False)  # e.g., 50 deliveries, 10000 KES, 7 days
+    reward_type = Column(Enum(RewardType, native_enum=False), nullable=False)
+    reward_value = Column(Numeric(14, 2), default=0, nullable=False)  # cash amount, points, etc.
+    reward_badge = Column(String(100))  # badge identifier
+    tier_requirement = Column(Enum(RiderTier, native_enum=False))  # minimum tier to access
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_recurring = Column(Boolean, default=False, nullable=False)  # daily/weekly/monthly
+    recurrence_period = Column(String(20))  # daily, weekly, monthly
+    starts_at = Column(DateTime(timezone=True))
+    ends_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    progress = relationship("QuestProgress", back_populates="quest", cascade="all, delete-orphan")
+
+
+class QuestProgress(Base):
+    """Tracks rider progress on a specific quest."""
+    __tablename__ = "quest_progress"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="CASCADE"), nullable=False)
+    quest_id = Column(UUID(as_uuid=True), ForeignKey("quests.id", ondelete="CASCADE"), nullable=False)
+    status = Column(Enum(QuestStatus, native_enum=False), default=QuestStatus.active, nullable=False)
+    current_value = Column(Numeric(14, 2), default=0, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    claimed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("agent_id", "quest_id", name="uq_quest_progress_agent_quest"),
+    )
+
+    agent = relationship("DeliveryAgent", back_populates="quest_progress")
+    quest = relationship("Quest", back_populates="progress")
 
 
 class Delivery(Base):
