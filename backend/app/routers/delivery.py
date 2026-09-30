@@ -269,11 +269,20 @@ async def update_delivery_status(
     if payload.status not in allowed:
         raise HTTPException(400, f"Cannot transition from '{delivery.status}' to '{payload.status}'")
 
+    # Validate photo proof requirements
+    if payload.status == DeliveryStatus.picked:
+        if not payload.picked_photo_url:
+            raise HTTPException(400, "Photo proof is required when marking order as picked up")
+    if payload.status == DeliveryStatus.delivered:
+        if not payload.delivered_photo_url:
+            raise HTTPException(400, "Photo proof is required when marking order as delivered")
+
     now = datetime.now(timezone.utc)
     delivery.status = payload.status
 
     if payload.status == DeliveryStatus.picked:
         delivery.picked_at = now
+        delivery.picked_photo_url = payload.picked_photo_url
     elif payload.status == DeliveryStatus.in_transit:
         delivery.in_transit_at = now
     elif payload.status == DeliveryStatus.delivered:
@@ -288,6 +297,7 @@ async def update_delivery_status(
                     f"You must be within 500m of the delivery address to mark as delivered. Current distance: {distance:.2f} km",
                 )
         delivery.delivered_at = now
+        delivery.delivered_photo_url = payload.delivered_photo_url
         agent.total_deliveries += 1
         agent.status = DeliveryAgentStatus.active
         agent.current_order_id = None

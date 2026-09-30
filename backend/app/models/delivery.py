@@ -116,6 +116,9 @@ class Delivery(Base):
     delivered_at = Column(DateTime(timezone=True))
     distance_km = Column(Float)
     duration_min = Column(Float)
+    # Photo proof URLs (stored as S3/CDN URLs)
+    picked_photo_url = Column(String(500))
+    delivered_photo_url = Column(String(500))
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     order = relationship("Order", back_populates="delivery", foreign_keys=[order_id])

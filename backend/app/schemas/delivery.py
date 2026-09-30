@@ -80,6 +80,9 @@ class DeliveryRead(BaseModel):
     delivered_at: Optional[datetime]
     distance_km: Optional[float] = None
     duration_min: Optional[float] = None
+    # Photo proof URLs
+    picked_photo_url: Optional[str] = None
+    delivered_photo_url: Optional[str] = None
     created_at: datetime
     events: List[DeliveryEventRead] = []
     order: Optional[OrderRead] = None
@@ -90,6 +93,9 @@ class DeliveryRead(BaseModel):
 class DeliveryStatusUpdate(BaseModel):
     status: DeliveryStatus
     notes: Optional[str] = None
+    # Photo proof URLs (required for picked/delivered transitions)
+    picked_photo_url: Optional[str] = None
+    delivered_photo_url: Optional[str] = None
 
 
 class DeliveryRateRead(BaseModel):
