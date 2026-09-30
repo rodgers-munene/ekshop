@@ -673,7 +673,10 @@ class InsuranceClaim(Base):
     paid_at = Column(DateTime(timezone=True), nullable=True)
 
     delivery = relationship("Delivery")
-    claimant = relationship("User")
+    # Two FKs point at users (claimant_id, reviewed_by), so the join must be
+    # disambiguated explicitly or SQLAlchemy cannot build it.
+    claimant = relationship("User", foreign_keys=[claimant_id])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
 
 
 """Partner fleet (3PL) integration: external courier/logistics partners.
