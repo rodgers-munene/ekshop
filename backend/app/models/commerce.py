@@ -201,6 +201,11 @@ class Order(Base):
     shop = relationship("Shop", back_populates="orders")
     buyer = relationship("User", back_populates="orders", foreign_keys=[buyer_id])
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    # Fulfillment is 1:1 with the order in v1, but declared as a list so
+    # item-level grouping can be added without reshaping the schema.
+    fulfillments = relationship(
+        "Fulfillment", back_populates="order", cascade="all, delete-orphan"
+    )
     delivery = relationship("Delivery", back_populates="order", uselist=False)
     return_requests = relationship("ReturnRequest", back_populates="order", cascade="all, delete-orphan")
 
