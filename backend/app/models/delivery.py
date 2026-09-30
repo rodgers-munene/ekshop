@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text, Float, Numeric, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Integer, Boolean, Text, Float, Numeric, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -259,6 +259,7 @@ class Delivery(Base):
     safety_alerts = relationship("SafetyAlert", back_populates="delivery")
     trip_shares = relationship("TripShare", back_populates="delivery", cascade="all, delete-orphan")
     stops = relationship("DeliveryStop", back_populates="delivery", cascade="all, delete-orphan", order_by="DeliveryStop.sequence")
+    partner_jobs = relationship("PartnerJob", back_populates="delivery")
 
 
 class DeliveryStop(Base):
@@ -673,3 +674,156 @@ class InsuranceClaim(Base):
 
     delivery = relationship("Delivery")
     claimant = relationship("User")
+
+
+"""Partner fleet (3PL) integration: external courier/logistics partners.
+
+These classes live alongside the rest of the delivery schema so the whole
+fleet domain stays in one place; they intentionally reuse the module-level
+imports and utcnow() defined at the top of this file.
+"""
+
+
+class PartnerStatus(str, enum.Enum):
+    pending = "pending"      # awaiting credentials review
+    active = "active"
+    suspended = "suspended"
+    rejected = "rejected"
+
+
+class PartnerJobStatus(str, enum.Enum):
+    created = "created"          # payload built, not yet sent
+    dispatched = "dispatched"    # accepted by partner API
+    accepted = "accepted"        # partner confirmed a driver
+    picked_up = "picked_up"
+    in_transit = "in_transit"
+    delivered = "delivered"
+    failed = "failed"
+    cancelled = "cancelled"
+    returned = "returned"
+
+
+class PartnerFulfillmentMode(str, enum.Enum):
+    """How a partner fulfils the job it was handed."""
+    same_city = "same_city"
+    same_country = "same_country"
+    cross_border = "cross_border"
+    last_mile = "last_mile"
+
+
+class PartnerFleet(Base):
+    """A third-party courier/logistics partner (Sendy, Little, Viking, etc.)."""
+    __tablename__ = "partner_fleets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(150), nullable=False, unique=True)
+    slug = Column(String(150), nullable=False, unique=True)
+    status = Column(Enum(PartnerStatus, native_enum=False), default=PartnerStatus.pending, nullable=False)
+
+    # Integration wiring
+    api_base_url = Column(String(500))
+    api_key_encrypted = Column(Text)          # encrypted at rest via app.core.crypto
+    webhook_secret_encrypted = Column(Text)   # used to verify inbound callbacks
+    auth_header_name = Column(String(100), default="Authorization")
+    auth_header_prefix = Column(String(20), default="Bearer")
+    supports_webhooks = Column(Boolean, default=True, nullable=False)
+    timeout_seconds = Column(Integer, default=15, nullable=False)
+
+    # Commercials
+    base_pickup_fee = Column(Numeric(12, 2), default=0)
+    per_km_fee = Column(Numeric(12, 2), default=0)
+    per_kg_fee = Column(Numeric(12, 2), default=0)
+    currency = Column(String(3), default="KES", nullable=False)
+    coverage_counties = Column(JSONB)        # list[str]; JSONB keeps this portable
+
+    # Reliability telemetry
+    success_rate = Column(Float, default=0.0)
+    avg_pickup_minutes = Column(Float)
+    avg_delivery_minutes = Column(Float)
+    total_jobs = Column(Integer, default=0, nullable=False)
+    failed_jobs = Column(Integer, default=0, nullable=False)
+
+    notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    jobs = relationship("PartnerJob", back_populates="partner", cascade="all, delete-orphan")
+
+
+class PartnerJob(Base):
+    """One delivery handed to a partner fleet. Mirrors our Delivery state."""
+    __tablename__ = "partner_jobs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    partner_id = Column(UUID(as_uuid=True), ForeignKey("partner_fleets.id", ondelete="CASCADE"), nullable=False)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="SET NULL"))
+
+    external_reference = Column(String(150), unique=True)   # our id sent to the partner
+    partner_job_id = Column(String(150), index=True)        # partner's own job/driver id
+
+    status = Column(Enum(PartnerJobStatus, native_enum=False), default=PartnerJobStatus.created, nullable=False)
+    fulfillment_mode = Column(Enum(PartnerFulfillmentMode, native_enum=False), default=PartnerFulfillmentMode.same_city)
+
+    # Job payload snapshot -- what we actually sent, so disputes are reconstructable
+    pickup_address = Column(JSONB, nullable=False)
+    pickup_lat = Column(Float)
+    pickup_lng = Column(Float)
+    drop_address = Column(JSONB, nullable=False)
+    drop_lat = Column(Float)
+    drop_lng = Column(Float)
+
+    distance_km = Column(Float)
+    weight_kg = Column(Numeric(10, 2))
+    quoted_fee = Column(Numeric(12, 2))
+    partner_reported_fee = Column(Numeric(12, 2))
+
+    # Driver details as reported back by the partner
+    driver_name = Column(String(150))
+    driver_phone = Column(String(20))
+    vehicle_plate = Column(String(50))
+
+    failure_reason = Column(Text)
+    partner_raw_response = Column(JSONB)
+
+    dispatched_at = Column(DateTime(timezone=True), nullable=True)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    picked_up_at = Column(DateTime(timezone=True), nullable=True)
+    in_transit_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    failed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_partner_jobs_partner_status", "partner_id", "status"),
+        Index("ix_partner_jobs_delivery_id", "delivery_id"),
+    )
+
+    partner = relationship("PartnerFleet", back_populates="jobs")
+    delivery = relationship("Delivery", back_populates="partner_jobs")
+
+
+class PartnerWebhookEvent(Base):
+    """Inbound partner callback log. Insert-only, for audit + replay."""
+    __tablename__ = "partner_webhook_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    partner_id = Column(UUID(as_uuid=True), ForeignKey("partner_fleets.id", ondelete="CASCADE"), nullable=False)
+    partner_job_id = Column(String(150), index=True)
+
+    event_type = Column(String(100), nullable=False)
+    payload = Column(JSONB, nullable=False)
+    signature_valid = Column(Boolean, default=False, nullable=False)
+
+    # Dedupe: partners retry, so we key on their event id.
+    partner_event_id = Column(String(150))
+    processed_at = Column(DateTime(timezone=True), nullable=True)
+    processing_error = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("partner_id", "partner_event_id", name="uq_partner_webhook_event"),
+        Index("ix_partner_webhook_events_partner_id", "partner_id"),
+    )
+
+    partner = relationship("PartnerFleet")
