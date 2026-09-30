@@ -17,6 +17,8 @@ class ShopCreate(BaseModel):
     ward_id: Optional[uuid.UUID] = None
     exact_location: Optional[str] = None
     phone: Optional[str] = None
+    prep_time_minutes: int = 30
+    max_prep_time_minutes: int = 60
 
 
 class ShopRead(BaseModel):
@@ -39,6 +41,8 @@ class ShopRead(BaseModel):
     is_verified: bool
     is_featured: bool
     status: ShopStatus
+    prep_time_minutes: int
+    max_prep_time_minutes: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -56,6 +60,8 @@ class ShopUpdate(BaseModel):
     ward_id: Optional[uuid.UUID] = None
     exact_location: Optional[str] = None
     phone: Optional[str] = None
+    prep_time_minutes: Optional[int] = None
+    max_prep_time_minutes: Optional[int] = None
 
 
 class ShopPaymentMethodCreate(BaseModel):

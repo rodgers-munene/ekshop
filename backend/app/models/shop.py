@@ -40,6 +40,9 @@ class Shop(Base):
     is_verified = Column(Boolean, default=False, nullable=False)
     is_featured = Column(Boolean, default=False, nullable=False)
     status = Column(Enum(ShopStatus, native_enum=False), default=ShopStatus.pending, nullable=False)
+    # Prep time management
+    prep_time_minutes = Column(Integer, default=30, nullable=False)
+    max_prep_time_minutes = Column(Integer, default=60, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
