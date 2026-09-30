@@ -101,6 +101,8 @@ class DeliveryAgent(Base):
     deliveries = relationship("Delivery", back_populates="agent")
     batches = relationship("DeliveryBatch", back_populates="agent")
     ledger_entries = relationship("DeliveryLedgerEntry", back_populates="agent", cascade="all, delete-orphan")
+    safety_alerts = relationship("SafetyAlert", back_populates="agent", cascade="all, delete-orphan")
+    emergency_contacts = relationship("EmergencyContact", back_populates="agent", cascade="all, delete-orphan")
 
 
 class Delivery(Base):
@@ -127,6 +129,8 @@ class Delivery(Base):
     agent = relationship("DeliveryAgent", back_populates="deliveries")
     batch = relationship("DeliveryBatch", back_populates="deliveries")
     events = relationship("DeliveryEvent", back_populates="delivery", cascade="all, delete-orphan")
+    safety_alerts = relationship("SafetyAlert", back_populates="delivery")
+    trip_shares = relationship("TripShare", back_populates="delivery", cascade="all, delete-orphan")
 
 
 class DeliveryEvent(Base):
@@ -184,6 +188,73 @@ class DeliveryBatch(Base):
 
     agent = relationship("DeliveryAgent", back_populates="batches")
     deliveries = relationship("Delivery", back_populates="batch")
+
+
+class SafetyAlertType(str, enum.Enum):
+    sos = "sos"
+    check_in_missed = "check_in_missed"
+    route_deviation = "route_deviation"
+    speed_violation = "speed_violation"
+    offline_too_long = "offline_too_long"
+
+
+class SafetyAlertStatus(str, enum.Enum):
+    active = "active"
+    acknowledged = "acknowledged"
+    resolved = "resolved"
+    false_alarm = "false_alarm"
+
+
+class SafetyAlert(Base):
+    """Safety alerts triggered by rider SOS, missed check-ins, or automated detection."""
+    __tablename__ = "safety_alerts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="CASCADE"), nullable=False)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="SET NULL"))
+    alert_type = Column(Enum(SafetyAlertType, native_enum=False), nullable=False)
+    status = Column(Enum(SafetyAlertStatus, native_enum=False), default=SafetyAlertStatus.active, nullable=False)
+    lat = Column(Float)
+    lng = Column(Float)
+    message = Column(Text)
+    alert_metadata = Column(JSONB)  # additional context: speed, heading, battery, etc.
+    triggered_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    acknowledged_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    agent = relationship("DeliveryAgent", back_populates="safety_alerts")
+    delivery = relationship("Delivery")
+
+
+class EmergencyContact(Base):
+    """Emergency contacts for riders."""
+    __tablename__ = "emergency_contacts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    phone = Column(String(20), nullable=False)
+    contact_relationship = Column(String(50))  # spouse, parent, friend, etc.
+    is_primary = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    agent = relationship("DeliveryAgent", back_populates="emergency_contacts")
+
+
+class TripShare(Base):
+    """Shareable trip links for real-time tracking by contacts."""
+    __tablename__ = "trip_shares"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    viewed_count = Column(Integer, default=0)
+    last_viewed_at = Column(DateTime(timezone=True), nullable=True)
+
+    delivery = relationship("Delivery")
 
 
 class DeliveryRateSettings(Base):

@@ -389,3 +389,92 @@ class DeliveryBatchAssign(BaseModel):
 
 class DeliveryBatchStatusUpdate(BaseModel):
     status: DeliveryBatchStatus
+
+
+# Safety Toolkit Schemas
+class SafetyAlertType(str, enum.Enum):
+    sos = "sos"
+    check_in_missed = "check_in_missed"
+    route_deviation = "route_deviation"
+    speed_violation = "speed_violation"
+    offline_too_long = "offline_too_long"
+
+
+class SafetyAlertStatus(str, enum.Enum):
+    active = "active"
+    acknowledged = "acknowledged"
+    resolved = "resolved"
+    false_alarm = "false_alarm"
+
+
+class SafetyAlertRead(BaseModel):
+    id: uuid.UUID
+    agent_id: uuid.UUID
+    delivery_id: Optional[uuid.UUID]
+    alert_type: SafetyAlertType
+    status: SafetyAlertStatus
+    lat: Optional[float]
+    lng: Optional[float]
+    message: Optional[str]
+    alert_metadata: Optional[dict]
+    triggered_at: datetime
+    acknowledged_at: Optional[datetime]
+    acknowledged_by: Optional[uuid.UUID]
+    resolved_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
+class SafetyAlertCreate(BaseModel):
+    alert_type: SafetyAlertType
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    message: Optional[str] = None
+    alert_metadata: Optional[dict] = None
+
+
+class SafetyAlertAcknowledge(BaseModel):
+    status: SafetyAlertStatus = SafetyAlertStatus.acknowledged
+
+
+class EmergencyContactRead(BaseModel):
+    id: uuid.UUID
+    agent_id: uuid.UUID
+    name: str
+    phone: str
+    contact_relationship: Optional[str]
+    is_primary: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EmergencyContactCreate(BaseModel):
+    name: str
+    phone: str
+    contact_relationship: Optional[str] = None
+    is_primary: bool = False
+
+
+class EmergencyContactUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    contact_relationship: Optional[str] = None
+    is_primary: Optional[bool] = None
+
+
+class TripShareRead(BaseModel):
+    id: uuid.UUID
+    delivery_id: uuid.UUID
+    token: str
+    expires_at: datetime
+    created_at: datetime
+    viewed_count: int
+    last_viewed_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
+class TripShareCreate(BaseModel):
+    delivery_id: uuid.UUID
+    expires_in_hours: int = 24

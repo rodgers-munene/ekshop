@@ -21,6 +21,7 @@ from app.models.delivery import (
     DeliveryStatus, ActorRole, DeliveryOffer, DeliveryPricingRule, OfferStatus,
     DeliveryLedgerEntry, LedgerEntryType, LedgerStatus, VehicleType, KYCStatus,
     DeliveryBatch,
+    SafetyAlert, SafetyAlertType, SafetyAlertStatus, EmergencyContact, TripShare,
 )
 from app.models.commerce import Order, OrderStatus
 from app.models.shop import Shop, ShopStatus
@@ -42,6 +43,9 @@ from app.schemas.delivery import (
     MeteredQuoteRequest, MeteredQuoteResponse,
     DeliveryBatchRead, DeliveryBatchCreate, DeliveryBatchAssign,
     DeliveryBatchStatusUpdate, DeliveryBatchStatus,
+    SafetyAlertRead, SafetyAlertCreate, SafetyAlertAcknowledge,
+    EmergencyContactRead, EmergencyContactCreate, EmergencyContactUpdate,
+    TripShareRead, TripShareCreate,
 )
 from app.services.notifications import create_notification
 from app.services.webhooks import emit_delivery_status_webhook
@@ -1280,3 +1284,288 @@ def update_batch_status(
     db.commit()
     db.refresh(batch)
     return batch
+
+
+# ── Safety Toolkit (SOS, Trip Share, Emergency Contacts) ────────────────────────
+
+@router.post(
+    "/safety/sos",
+    response_model=SafetyAlertRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Trigger SOS alert (rider)",
+)
+async def trigger_sos(
+    payload: SafetyAlertCreate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    """Trigger an SOS alert. Immediately notifies emergency contacts and ops."""
+    alert = SafetyAlert(
+        agent_id=agent.id,
+        alert_type=SafetyAlertType.sos,
+        status=SafetyAlertStatus.active,
+        lat=payload.lat,
+        lng=payload.lng,
+        message=payload.message or "SOS triggered by rider",
+        alert_metadata=payload.alert_metadata or {"source": "manual_sos"},
+    )
+    db.add(alert)
+    db.commit()
+    db.refresh(alert)
+
+    contacts = db.query(EmergencyContact).filter(EmergencyContact.agent_id == agent.id).all()
+    for contact in contacts:
+        create_notification(
+            db,
+            user_id=contact.id,
+            type="safety_alert",
+            title=f"SOS Alert from {agent.name}",
+            body=f"Rider {agent.name} triggered SOS. Location: {payload.lat}, {payload.lng}. Message: {payload.message}",
+            data={"alert_id": str(alert.id), "lat": payload.lat, "lng": payload.lng},
+        )
+
+    return alert
+
+
+@router.post(
+    "/safety/check-in",
+    response_model=SafetyAlertRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Manual safety check-in (rider)",
+)
+async def safety_check_in(
+    payload: SafetyAlertCreate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    """Rider manually checks in to confirm safety."""
+    alert = SafetyAlert(
+        agent_id=agent.id,
+        alert_type=SafetyAlertType.check_in_missed,
+        status=SafetyAlertStatus.resolved,
+        lat=payload.lat,
+        lng=payload.lng,
+        message=payload.message or "Safety check-in",
+        alert_metadata=payload.alert_metadata or {"source": "manual_checkin"},
+    )
+    db.add(alert)
+    db.commit()
+    db.refresh(alert)
+    return alert
+
+
+@router.get(
+    "/safety/alerts",
+    response_model=List[SafetyAlertRead],
+    summary="Get my safety alerts (rider)",
+)
+def list_my_safety_alerts(
+    status: Optional[SafetyAlertStatus] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    query = db.query(SafetyAlert).filter(SafetyAlert.agent_id == agent.id)
+    if status:
+        query = query.filter(SafetyAlert.status == status)
+    return query.order_by(SafetyAlert.triggered_at.desc()).limit(limit).all()
+
+
+@router.get(
+    "/safety/alerts/{alert_id}",
+    response_model=SafetyAlertRead,
+    summary="Get safety alert details",
+)
+def get_safety_alert(
+    alert_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    alert = db.query(SafetyAlert).filter(
+        SafetyAlert.id == alert_id,
+        SafetyAlert.agent_id == agent.id,
+    ).first()
+    if not alert:
+        raise HTTPException(404, "Safety alert not found")
+    return alert
+
+
+@router.patch(
+    "/safety/alerts/{alert_id}",
+    response_model=SafetyAlertRead,
+    summary="Acknowledge/resolve safety alert (admin/ops)",
+)
+def acknowledge_safety_alert(
+    alert_id: uuid.UUID,
+    payload: SafetyAlertAcknowledge,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Admin/ops acknowledges or resolves a safety alert."""
+    alert = db.query(SafetyAlert).filter(SafetyAlert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(404, "Safety alert not found")
+
+    alert.status = payload.status
+    if payload.status in (SafetyAlertStatus.acknowledged, SafetyAlertStatus.resolved):
+        alert.acknowledged_at = datetime.now(timezone.utc)
+    if payload.status == SafetyAlertStatus.resolved:
+        alert.resolved_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(alert)
+    return alert
+
+
+# Emergency Contacts
+@router.post(
+    "/emergency-contacts",
+    response_model=EmergencyContactRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add emergency contact",
+)
+def create_emergency_contact(
+    payload: EmergencyContactCreate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    if payload.is_primary:
+        db.query(EmergencyContact).filter(
+            EmergencyContact.agent_id == agent.id,
+            EmergencyContact.is_primary == True,
+        ).update({"is_primary": False})
+
+    contact = EmergencyContact(
+        agent_id=agent.id,
+        name=payload.name,
+        phone=payload.phone,
+        contact_relationship=payload.contact_relationship,
+        is_primary=payload.is_primary,
+    )
+    db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@router.get(
+    "/emergency-contacts",
+    response_model=List[EmergencyContactRead],
+    summary="List my emergency contacts",
+)
+def list_emergency_contacts(
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    return db.query(EmergencyContact).filter(EmergencyContact.agent_id == agent.id).order_by(EmergencyContact.is_primary.desc()).all()
+
+
+@router.patch(
+    "/emergency-contacts/{contact_id}",
+    response_model=EmergencyContactRead,
+    summary="Update emergency contact",
+)
+def update_emergency_contact(
+    contact_id: uuid.UUID,
+    payload: EmergencyContactUpdate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    contact = db.query(EmergencyContact).filter(
+        EmergencyContact.id == contact_id,
+        EmergencyContact.agent_id == agent.id,
+    ).first()
+    if not contact:
+        raise HTTPException(404, "Emergency contact not found")
+
+    if payload.is_primary:
+        db.query(EmergencyContact).filter(
+            EmergencyContact.agent_id == agent.id,
+            EmergencyContact.is_primary == True,
+        ).update({"is_primary": False})
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(contact, field, value)
+
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@router.delete(
+    "/emergency-contacts/{contact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete emergency contact",
+)
+def delete_emergency_contact(
+    contact_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    contact = db.query(EmergencyContact).filter(
+        EmergencyContact.id == contact_id,
+        EmergencyContact.agent_id == agent.id,
+    ).first()
+    if not contact:
+        raise HTTPException(404, "Emergency contact not found")
+    db.delete(contact)
+    db.commit()
+
+
+# Trip Sharing
+@router.post(
+    "/trip-share",
+    response_model=TripShareRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a shareable trip link",
+)
+def create_trip_share(
+    payload: TripShareCreate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    """Create a shareable link for real-time trip tracking."""
+    delivery = db.query(Delivery).filter(
+        Delivery.id == payload.delivery_id,
+        Delivery.agent_id == agent.id,
+    ).first()
+    if not delivery:
+        raise HTTPException(404, "Delivery not found or not assigned to you")
+
+    import secrets
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=payload.expires_in_hours)
+
+    trip_share = TripShare(
+        delivery_id=payload.delivery_id,
+        token=token,
+        expires_at=expires_at,
+    )
+    db.add(trip_share)
+    db.commit()
+    db.refresh(trip_share)
+    return trip_share
+
+
+@router.get(
+    "/trip-share/{token}",
+    response_model=TripShareRead,
+    summary="View shared trip (public, no auth)",
+)
+def view_trip_share(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to view a shared trip. No authentication required."""
+    trip_share = db.query(TripShare).filter(
+        TripShare.token == token,
+        TripShare.expires_at > datetime.now(timezone.utc),
+    ).first()
+    if not trip_share:
+        raise HTTPException(404, "Trip share not found or expired")
+
+    trip_share.viewed_count += 1
+    trip_share.last_viewed_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return trip_share
