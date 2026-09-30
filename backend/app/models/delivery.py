@@ -317,6 +317,10 @@ class DeliveryIssue(Base):
 
     delivery = relationship("Delivery")
 
+    __table_args__ = (
+        Index("ix_delivery_issues_delivery_id", "delivery_id"),
+    )
+
 
 class DeliveryBatchStatus(str, enum.Enum):
     created = "created"

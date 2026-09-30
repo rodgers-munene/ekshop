@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = "Ekshop <notifications@mail.ekshop.store>"
     ADMIN_REPORT_EMAIL: str | None = None
 
+    # HMAC key for delivery OTP hashes. Required: a 6-digit code has only a
+    # million possible values, so an unkeyed hash would be brute-forceable
+    # from a database dump. app.services.fulfillment refuses to store a code
+    # without this set. Generate with:
+    #   python -c "import secrets; print(secrets.token_urlsafe(32))"
+    DELIVERY_OTP_PEPPER: str | None = None
+
     ALERT_MIN_GROSS_MARGIN_PCT: float = 90.0
     ALERT_MAX_MPESA_LATENCY_SECONDS: float = 2.0
     ALERT_MAX_HOSTING_COST_PER_ORDER: float = 20.0

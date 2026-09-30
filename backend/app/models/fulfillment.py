@@ -142,6 +142,7 @@ class Fulfillment(Base):
     quoted_at = Column(DateTime(timezone=True))
     confirmed_at = Column(DateTime(timezone=True))
     closed_at = Column(DateTime(timezone=True))
+    settled_at = Column(DateTime(timezone=True))
     close_reason = Column(Text)
 
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -173,10 +174,13 @@ class Fulfillment(Base):
 
     @property
     def status(self) -> FulfillmentStatus:
-        """Derived, never stored -- so it cannot drift from the job log."""
+        """Derived from the current job, never stored -- so it cannot drift.
+
+        `closed_at` / `close_reason` record *why* a fulfillment was closed but
+        deliberately do not override the derived value: the job log is the
+        source of truth for what actually happened.
+        """
         job = self.current_job
-        if self.close_reason and self.closed_at:
-            pass  # fall through to job-derived status
         if job is None:
             return FulfillmentStatus.pending
         if self.mode == FulfillmentMode.pickup:
