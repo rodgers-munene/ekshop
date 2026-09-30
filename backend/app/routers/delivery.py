@@ -23,6 +23,7 @@ from app.models.delivery import (
     DeliveryBatch,
     SafetyAlert, SafetyAlertType, SafetyAlertStatus, EmergencyContact, TripShare,
     GPSFraudAlert, GPSFraudType, GPSFraudSeverity,
+    DeliveryStop,
 )
 from app.models.commerce import Order, OrderStatus
 from app.models.shop import Shop, ShopStatus
@@ -49,6 +50,7 @@ from app.schemas.delivery import (
     TripShareRead, TripShareCreate,
     DeliveryTrackingRead, AgentLocationRead,
     GPSFraudAlertRead, GPSFraudAlertListResponse, GPSFraudAlertReview,
+    DeliveryStopCreate, DeliveryStopUpdate, DeliveryStopRead, DeliveryStopListResponse,
 )
 from app.services.notifications import create_notification
 from app.services.webhooks import emit_delivery_status_webhook
@@ -1771,3 +1773,183 @@ def get_gps_fraud_stats(
         "period": period or "last_30_days",
         **stats,
     }
+
+
+# ── Multi-stop Delivery ──────────────────────────────────────────────────────────
+
+@router.post(
+    "/{delivery_id}/stops",
+    response_model=DeliveryStopRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a stop to a delivery",
+)
+def add_delivery_stop(
+    delivery_id: uuid.UUID,
+    payload: DeliveryStopCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Add a stop to a delivery (admin only)."""
+    delivery = db.query(Delivery).filter(Delivery.id == delivery_id).first()
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+
+    # Check if sequence already exists
+    existing = db.query(DeliveryStop).filter(
+        DeliveryStop.delivery_id == delivery_id,
+        DeliveryStop.sequence == payload.sequence,
+    ).first()
+    if existing:
+        raise HTTPException(400, f"Stop with sequence {payload.sequence} already exists")
+
+    stop = DeliveryStop(
+        delivery_id=delivery_id,
+        sequence=payload.sequence,
+        address=payload.address,
+        contact_name=payload.contact_name,
+        contact_phone=payload.contact_phone,
+        notes=payload.notes,
+        estimated_at=payload.estimated_at,
+    )
+    db.add(stop)
+    db.commit()
+    db.refresh(stop)
+    return stop
+
+
+@router.get(
+    "/{delivery_id}/stops",
+    response_model=DeliveryStopListResponse,
+    summary="List all stops for a delivery",
+)
+def list_delivery_stops(
+    delivery_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    """List all stops for a delivery (rider or admin)."""
+    delivery = db.query(Delivery).filter(Delivery.id == delivery_id).first()
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+
+    # Authorization: agent assigned to this delivery or admin
+    is_admin = agent.role == UserRole.admin if hasattr(agent, 'role') else False
+    if delivery.agent_id != agent.id and not is_admin:
+        raise HTTPException(403, "Not authorized")
+
+    stops = db.query(DeliveryStop).filter(
+        DeliveryStop.delivery_id == delivery_id
+    ).order_by(DeliveryStop.sequence).all()
+
+    return DeliveryStopListResponse(total=len(stops), results=stops)
+
+
+@router.get(
+    "/{delivery_id}/stops/{stop_id}",
+    response_model=DeliveryStopRead,
+    summary="Get a specific stop",
+)
+def get_delivery_stop(
+    delivery_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    """Get details of a specific stop."""
+    stop = db.query(DeliveryStop).filter(
+        DeliveryStop.id == stop_id,
+        DeliveryStop.delivery_id == delivery_id,
+    ).first()
+    if not stop:
+        raise HTTPException(404, "Stop not found")
+    return stop
+
+
+@router.patch(
+    "/{delivery_id}/stops/{stop_id}",
+    response_model=DeliveryStopRead,
+    summary="Update a stop (rider marks arrived/completed)",
+)
+def update_delivery_stop(
+    delivery_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    payload: DeliveryStopUpdate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    """Update stop status (rider marks arrived/completed, or admin updates)."""
+    stop = db.query(DeliveryStop).filter(
+        DeliveryStop.id == stop_id,
+        DeliveryStop.delivery_id == delivery_id,
+    ).first()
+    if not stop:
+        raise HTTPException(404, "Stop not found")
+
+    delivery = db.query(Delivery).filter(Delivery.id == delivery_id).first()
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+
+    is_admin = agent.role == UserRole.admin if hasattr(agent, 'role') else False
+    if delivery.agent_id != agent.id and not is_admin:
+        raise HTTPException(403, "Not authorized")
+
+    # Handle OTP verification for completion
+    if payload.status == DeliveryStatus.delivered:
+        if not payload.otp_code:
+            raise HTTPException(400, "OTP code is required to mark stop as completed")
+        if not stop.otp_code or stop.otp_code != payload.otp_code:
+            raise HTTPException(400, "Invalid OTP code")
+        if not stop.otp_expires_at or stop.otp_expires_at < datetime.now(timezone.utc):
+            raise HTTPException(400, "OTP has expired")
+        stop.otp_verified_at = datetime.now(timezone.utc)
+
+    now = datetime.now(timezone.utc)
+    if payload.status:
+        stop.status = payload.status
+        if payload.status == DeliveryStatus.picked:
+            stop.arrived_at = datetime.now(timezone.utc)
+            # Generate OTP for this stop
+            import random
+            stop.otp_code = str(random.randint(100000, 999999))
+            stop.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        elif payload.status == DeliveryStatus.delivered:
+            stop.completed_at = datetime.now(timezone.utc)
+
+    if payload.notes is not None:
+        stop.notes = payload.notes
+    if payload.estimated_at is not None:
+        stop.estimated_at = payload.estimated_at
+    if payload.arrived_at is not None:
+        stop.arrived_at = payload.arrived_at
+    if payload.completed_at is not None:
+        stop.completed_at = payload.completed_at
+    if payload.photo_url is not None:
+        stop.photo_url = payload.photo_url
+
+    stop.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(stop)
+    return stop
+
+
+@router.delete(
+    "/{delivery_id}/stops/{stop_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a stop (admin only)",
+)
+def delete_delivery_stop(
+    delivery_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Remove a stop from a delivery."""
+    stop = db.query(DeliveryStop).filter(
+        DeliveryStop.id == stop_id,
+        DeliveryStop.delivery_id == delivery_id,
+    ).first()
+    if not stop:
+        raise HTTPException(404, "Stop not found")
+
+    db.delete(stop)
+    db.commit()

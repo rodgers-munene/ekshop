@@ -231,6 +231,36 @@ class Delivery(Base):
     events = relationship("DeliveryEvent", back_populates="delivery", cascade="all, delete-orphan")
     safety_alerts = relationship("SafetyAlert", back_populates="delivery")
     trip_shares = relationship("TripShare", back_populates="delivery", cascade="all, delete-orphan")
+    stops = relationship("DeliveryStop", back_populates="delivery", cascade="all, delete-orphan", order_by="DeliveryStop.sequence")
+
+
+class DeliveryStop(Base):
+    """Individual stop in a multi-stop delivery."""
+    __tablename__ = "delivery_stops"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
+    sequence = Column(Integer, nullable=False)  # order of stops (1, 2, 3...)
+    address = Column(JSONB, nullable=False)  # {first_name, last_name, phone, county, town, ward, exact_location, lat, lng}
+    contact_name = Column(String(100), nullable=False)
+    contact_phone = Column(String(20), nullable=False)
+    status = Column(Enum(DeliveryStatus, native_enum=False), default=DeliveryStatus.pending, nullable=False)
+    notes = Column(Text)
+    estimated_at = Column(DateTime(timezone=True), nullable=True)
+    arrived_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    photo_url = Column(String(500))
+    otp_code = Column(String(6))
+    otp_expires_at = Column(DateTime(timezone=True))
+    otp_verified_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("delivery_id", "sequence", name="uq_delivery_stop_sequence"),
+    )
+
+    delivery = relationship("Delivery", back_populates="stops")
 
 
 class DeliveryEvent(Base):

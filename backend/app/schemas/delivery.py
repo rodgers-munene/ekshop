@@ -823,3 +823,47 @@ class GPSFraudAlertListResponse(BaseModel):
 
 class GPSFraudAlertReview(BaseModel):
     resolution: str  # confirmed_fraud, false_positive, inconclusive
+
+
+# Multi-stop Delivery Schemas
+class DeliveryStopCreate(BaseModel):
+    sequence: int
+    address: dict
+    contact_name: str
+    contact_phone: str
+    notes: Optional[str] = None
+    estimated_at: Optional[datetime] = None
+
+
+class DeliveryStopUpdate(BaseModel):
+    status: Optional[DeliveryStatus] = None
+    notes: Optional[str] = None
+    estimated_at: Optional[datetime] = None
+    arrived_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    photo_url: Optional[str] = None
+    otp_code: Optional[str] = None
+
+
+class DeliveryStopRead(BaseModel):
+    id: uuid.UUID
+    delivery_id: uuid.UUID
+    sequence: int
+    address: dict
+    contact_name: str
+    contact_phone: str
+    status: DeliveryStatus
+    notes: Optional[str]
+    estimated_at: Optional[datetime]
+    arrived_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    photo_url: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DeliveryStopListResponse(BaseModel):
+    total: int
+    results: List[DeliveryStopRead]
