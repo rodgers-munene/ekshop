@@ -388,6 +388,7 @@ def checkout(
         call_on_arrival=payload.call_on_arrival,
         leave_at_door=payload.leave_at_door,
         require_signature=payload.require_signature,
+        scheduled_at=payload.scheduled_at,
     )
     db.add(order_group)
     db.flush()  # generates order_group.id

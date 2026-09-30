@@ -165,6 +165,8 @@ class OrderGroup(Base):
     call_on_arrival = Column(Boolean, default=False)
     leave_at_door = Column(Boolean, default=False)
     require_signature = Column(Boolean, default=False)
+    # Scheduled delivery
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     buyer = relationship("User", back_populates="order_groups")

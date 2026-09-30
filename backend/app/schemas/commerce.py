@@ -20,6 +20,8 @@ class CheckoutCreate(BaseModel):
     call_on_arrival: bool = False
     leave_at_door: bool = False
     require_signature: bool = False
+    # Scheduled delivery
+    scheduled_at: Optional[datetime] = None
 
 
 class DeliveryFeePreviewItem(BaseModel):
