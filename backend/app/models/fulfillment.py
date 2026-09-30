@@ -347,14 +347,19 @@ class DeliveryAssignment(Base):
 class DeliveryJobEvent(Base):
     """Append-only event log for a job. INSERT-ONLY.
 
-    The database revokes UPDATE and DELETE on this table (see the migration),
-    so an accidental mutation fails loudly instead of corrupting history.
+    A trigger in the database raises on any UPDATE or DELETE of this table, so
+    an accidental mutation fails loudly instead of corrupting history. The FK to
+    the job is deliberately ON DELETE RESTRICT, not CASCADE: with the trigger in
+    place a cascade could never complete anyway, and RESTRICT states the real
+    rule plainly -- a job that has a recorded history is not deletable. Ops can
+    still erase history deliberately with
+    ``SET LOCAL ekshop.allow_event_mutation = 'on'`` (GDPR erasure, test cleanup).
     """
 
     __tablename__ = "delivery_job_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_id = Column(UUID(as_uuid=True), ForeignKey("delivery_jobs.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("delivery_jobs.id", ondelete="RESTRICT"), nullable=False)
 
     # e.g. JOB_CREATED, DISPATCH_STARTED, OFFER_SENT, RIDER_ASSIGNED,
     # EXCEPTION_LOGGED, DISPATCH_RESTARTED, PICKUP_CONFIRMED, IN_TRANSIT,
