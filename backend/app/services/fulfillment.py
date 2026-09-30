@@ -56,12 +56,22 @@ from app.models.fulfillment import (
 logger = logging.getLogger(__name__)
 
 
-class InvalidTransition(RuntimeError):
-    """A transition that the state machine does not permit."""
-
-
 class FulfillmentError(RuntimeError):
-    """A request that is well-formed but not allowed in the current state."""
+    """A request that is well-formed but not allowed in the current state.
+
+    The base class for every error this module raises on purpose. Callers should
+    catch this one; the HTTP layer maps it to 400, or to 409 for
+    :class:`InvalidTransition`.
+    """
+
+
+class InvalidTransition(FulfillmentError):
+    """A transition that the state machine does not permit.
+
+    Deliberately a subclass of :class:`FulfillmentError` and not a sibling of it:
+    a rejected transition is still a fulfillment error, so a caller that catches
+    the base class must not let it escape as an unhandled 500.
+    """
 
 
 # Legal forward transitions. Absence of a key means the state is terminal.
@@ -373,7 +383,14 @@ def respond_to_assignment(
     *,
     decline_reason: Optional[str] = None,
 ) -> DeliveryAssignment:
-    """Record a rider's accept/decline, or expire a stale offer."""
+    """Record a rider's accept/decline, or expire a stale offer.
+
+    Accepting also claims the job for that rider (`job.agent_id`). Without this
+    the rider would hold an accepted offer but still own no job, and every
+    rider-facing lookup -- which authorises on `job.agent_id` -- would refuse
+    them. Claiming here keeps the assignment and the ownership in one place
+    instead of relying on each caller to remember.
+    """
     if assignment.status in (AssignmentStatus.accepted, AssignmentStatus.cancelled):
         raise FulfillmentError(
             f"Assignment is already '{assignment.status.value}' and cannot be changed"
@@ -390,6 +407,27 @@ def respond_to_assignment(
     assignment.responded_at = datetime.now(timezone.utc)
     if decline_reason:
         assignment.decline_reason = decline_reason
+
+    if status == AssignmentStatus.accepted:
+        if job.agent_id is not None and job.agent_id != assignment.agent_id:
+            raise FulfillmentError(
+                "This job is already claimed by another rider; it cannot be "
+                "accepted by a second rider"
+            )
+        job.agent_id = assignment.agent_id
+        # Every other offer for this job is now moot.
+        for other in job.assignments:
+            if other.id != assignment.id and other.status == AssignmentStatus.offered:
+                other.status = AssignmentStatus.cancelled
+                other.responded_at = assignment.responded_at
+                record_event(
+                    db,
+                    job,
+                    "OFFER_WITHDRAWN",
+                    actor_role="system",
+                    payload={"agent_id": str(other.agent_id), "wave": other.wave},
+                )
+        db.add(job)
 
     record_event(
         db,
