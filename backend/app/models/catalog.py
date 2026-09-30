@@ -57,6 +57,7 @@ class Product(Base):
     compare_price = Column(String(20))
     sku = Column(String(100))
     stock_qty = Column(Integer, default=0, nullable=False)
+    reserved_qty = Column(Integer, default=0, nullable=False)
     condition = Column(Enum(ProductCondition, native_enum=False), default=ProductCondition.new)
     status = Column(Enum(ProductStatus, native_enum=False), default=ProductStatus.draft, nullable=False)
     is_fragile = Column(Boolean, default=False)
@@ -115,6 +116,7 @@ class ProductVariant(Base):
     value = Column(String(100), nullable=False)
     price_delta = Column(String(20), default="0.00")
     stock_qty = Column(Integer, default=0)
+    reserved_qty = Column(Integer, default=0, nullable=False)
     sku = Column(String(100))
     sort_order = Column(Integer, default=0)
 

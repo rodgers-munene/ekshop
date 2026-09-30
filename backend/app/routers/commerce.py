@@ -30,6 +30,7 @@ from app.services.delivery_pricing import (
     calculate_delivery_fee,
     get_or_create_rate_settings,
 )
+from app.services.inventory import InventoryReservation
 
 cart_router = APIRouter(prefix="/cart", tags=["cart"])
 checkout_router = APIRouter(prefix="/checkout", tags=["checkout"])
@@ -181,7 +182,92 @@ def clear_cart(
     db.execute(delete(CartItem).where(CartItem.cart_id == cart.id))
     db.commit()
     
-    
+
+# Inventory reservations
+@cart_router.post(
+    "/reserve",
+    response_model=dict,
+    summary="Reserve stock for cart items (TTL hold)",
+)
+def reserve_cart_stock(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Reserve stock for all items in cart. Returns reservation details with TTL."""
+    cart = db.query(Cart).filter(Cart.user_id == current_user.id).first()
+    if not cart or not cart.items:
+        raise HTTPException(status_code=400, detail="Cart is empty")
+
+    reservation = InventoryReservation(db)
+    reserved = []
+    failed = []
+
+    for item in cart.items:
+        product = item.product
+        variant = item.variant
+        if not product or product.status != "active":
+            failed.append({"product_id": str(item.product_id), "reason": "Product not available"})
+            continue
+
+        if variant and variant.stock_qty < item.quantity:
+            failed.append({"product_id": str(item.product_id), "reason": "Insufficient stock"})
+            continue
+        if not variant and product.stock_qty < item.quantity:
+            failed.append({"product_id": str(item.product_id), "reason": "Insufficient stock"})
+            continue
+
+        success = reservation.reserve(
+            product_id=item.product_id,
+            quantity=item.quantity,
+            variant_id=item.variant_id,
+        )
+        if success:
+            reserved.append({"product_id": str(item.product_id), "quantity": item.quantity})
+        else:
+            failed.append({"product_id": str(item.product_id), "reason": "Reservation failed"})
+
+    if failed:
+        # Release any successful reservations if some failed
+        for r in reserved:
+            reservation.release(product_id=uuid.UUID(r["product_id"]), quantity=r["quantity"])
+        raise HTTPException(status_code=400, detail={"reserved": reserved, "failed": failed})
+
+    return {
+        "reserved": reserved,
+        "ttl_minutes": 10,
+        "message": "Stock reserved for 10 minutes. Complete checkout to confirm."
+    }
+
+
+@cart_router.delete(
+    "/reserve",
+    response_model=dict,
+    summary="Release cart stock reservations",
+)
+def release_cart_stock(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Release stock reservations for cart items."""
+    cart = db.query(Cart).filter(Cart.user_id == current_user.id).first()
+    if not cart or not cart.items:
+        return {"released": []}
+
+    reservation = InventoryReservation(db)
+    released = []
+
+    for item in cart.items:
+        success = reservation.release(
+            product_id=item.product_id,
+            quantity=item.quantity,
+            variant_id=item.variant_id,
+        )
+        if success:
+            released.append({"product_id": str(item.product_id), "quantity": item.quantity})
+
+    return {"released": released}
+
+
 # checkout
 
 @checkout_router.post(
