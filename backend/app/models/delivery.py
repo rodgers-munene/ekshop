@@ -428,3 +428,85 @@ class DeliveryLedgerEntry(Base):
 
     agent = relationship("DeliveryAgent", back_populates="ledger_entries")
     delivery = relationship("Delivery")
+
+
+class SLAConfig(Base):
+    """SLA configuration for delivery time limits."""
+    __tablename__ = "sla_configs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False, unique=True)
+    max_dispatch_time_min = Column(Integer, default=30)
+    max_pickup_time_min = Column(Integer, default=60)
+    max_delivery_time_min = Column(Integer, default=120)
+    max_total_time_min = Column(Integer, default=180)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class SLABreach(Base):
+    """Tracks SLA breaches for alerting and reporting."""
+    __tablename__ = "sla_breaches"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
+    breach_type = Column(String(50), nullable=False)
+    expected_time = Column(DateTime(timezone=True), nullable=False)
+    actual_time = Column(DateTime(timezone=True), nullable=False)
+    breach_minutes = Column(Integer, nullable=False)
+    severity = Column(String(20), default="medium")
+    is_alerted = Column(Boolean, default=False)
+    alerted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    delivery = relationship("Delivery")
+
+
+class DispatcherLog(Base):
+    __tablename__ = "dispatcher_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dispatcher_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    action = Column(String(100), nullable=False)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="SET NULL"))
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="SET NULL"))
+    previous_agent_id = Column(UUID(as_uuid=True), nullable=True)
+    details = Column(JSONB)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    delivery = relationship("Delivery")
+    agent = relationship("DeliveryAgent")
+
+
+class ZoneConfig(Base):
+    __tablename__ = "zone_configs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False)
+    boundary = Column(JSONB, nullable=False)
+    center_lat = Column(Float)
+    center_lng = Column(Float)
+    radius_km = Column(Float)
+    is_active = Column(Boolean, default=True, nullable=False)
+    priority = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class AgentZoneAssignment(Base):
+    __tablename__ = "agent_zone_assignments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="CASCADE"), nullable=False)
+    zone_id = Column(UUID(as_uuid=True), ForeignKey("zone_configs.id", ondelete="CASCADE"), nullable=False)
+    is_primary = Column(Boolean, default=False)
+    assigned_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+
+    __table_args__ = (
+        UniqueConstraint("agent_id", "zone_id", name="uq_agent_zone_assignment"),
+    )
+
+    agent = relationship("DeliveryAgent")
+    zone = relationship("ZoneConfig")

@@ -603,3 +603,129 @@ class RiderProfileRead(BaseModel):
 class QuestProgressUpdate(BaseModel):
     """Update quest progress (internal use)"""
     current_value: str
+
+
+# Dispatcher / SLA Schemas
+class SLAConfigRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    max_dispatch_time_min: int
+    max_pickup_time_min: int
+    max_delivery_time_min: int
+    max_total_time_min: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SLAConfigCreate(BaseModel):
+    name: str
+    max_dispatch_time_min: int = 30
+    max_pickup_time_min: int = 60
+    max_delivery_time_min: int = 120
+    max_total_time_min: int = 180
+    is_active: bool = True
+
+
+class SLAConfigUpdate(BaseModel):
+    name: Optional[str] = None
+    max_dispatch_time_min: Optional[int] = None
+    max_pickup_time_min: Optional[int] = None
+    max_delivery_time_min: Optional[int] = None
+    max_total_time_min: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class SLABreachRead(BaseModel):
+    id: uuid.UUID
+    delivery_id: uuid.UUID
+    breach_type: str
+    expected_time: datetime
+    actual_time: datetime
+    breach_minutes: int
+    severity: str
+    is_alerted: bool
+    alerted_at: Optional[datetime]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DispatcherLogRead(BaseModel):
+    id: uuid.UUID
+    dispatcher_id: Optional[uuid.UUID]
+    action: str
+    delivery_id: Optional[uuid.UUID]
+    agent_id: Optional[uuid.UUID]
+    previous_agent_id: Optional[uuid.UUID]
+    details: Optional[dict]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ZoneConfigRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    boundary: dict
+    center_lat: Optional[float]
+    center_lng: Optional[float]
+    radius_km: Optional[float]
+    is_active: bool
+    priority: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ZoneConfigCreate(BaseModel):
+    name: str
+    boundary: dict
+    center_lat: Optional[float] = None
+    center_lng: Optional[float] = None
+    radius_km: Optional[float] = None
+    is_active: bool = True
+    priority: int = 0
+
+
+class ZoneConfigUpdate(BaseModel):
+    name: Optional[str] = None
+    boundary: Optional[dict] = None
+    center_lat: Optional[float] = None
+    center_lng: Optional[float] = None
+    radius_km: Optional[float] = None
+    is_active: Optional[bool] = None
+    priority: Optional[int] = None
+
+
+class AgentZoneAssignmentRead(BaseModel):
+    id: uuid.UUID
+    agent_id: uuid.UUID
+    zone_id: uuid.UUID
+    is_primary: bool
+    assigned_at: datetime
+    assigned_by: Optional[uuid.UUID]
+    zone: Optional[dict] = None
+
+    model_config = {"from_attributes": True}
+
+
+class AgentZoneAssignmentCreate(BaseModel):
+    agent_id: uuid.UUID
+    zone_id: uuid.UUID
+    is_primary: bool = False
+
+
+class DispatcherDashboardRead(BaseModel):
+    active_agents: List[dict]
+    active_deliveries: List[dict]
+    pending_deliveries: List[dict]
+    sla_breaches: List[SLABreachRead]
+    zone_stats: List[dict]
+    agent_locations: List[dict]
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
