@@ -18,6 +18,7 @@ from app.models.commerce import (
     OrderStatus,
 )
 from app.models.catalog import Product, Category
+from app.services.fraud import FraudDetectionService, evaluate_order_fraud, get_high_risk_orders
 from app.models.delivery import Delivery, DeliveryStatus
 from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
@@ -1311,3 +1312,63 @@ async def import_products_csv(
 
     db.commit()
     return {"created": created, "errors": errors}
+
+
+# ── Fraud detection ────────────────────────────────────────────────────────────
+
+@router.get(
+    "/fraud/high-risk",
+    response_model=list[dict],
+    summary="Get orders flagged as high fraud risk",
+)
+def list_high_risk_orders(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return get_high_risk_orders(db, limit=limit)
+
+
+@router.get(
+    "/fraud/evaluate/{order_group_id}",
+    response_model=dict,
+    summary="Evaluate a specific order for fraud risk",
+)
+def evaluate_order_fraud_risk(
+    order_group_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return evaluate_order_fraud(db, order_group_id)
+
+
+@router.get(
+    "/fraud/stats",
+    response_model=dict,
+    summary="Get fraud detection statistics",
+)
+def get_fraud_stats(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, 30)
+    
+    # Get recent paid orders
+    orders = db.query(OrderGroup).filter(
+        OrderGroup.status == "paid",
+        OrderGroup.created_at >= since,
+        OrderGroup.created_at < until,
+    ).all()
+    
+    stats = {"low": 0, "medium": 0, "high": 0, "critical": 0}
+    for og in orders:
+        evaluation = FraudDetectionService(db).evaluate_order(og)
+        stats[evaluation["risk_level"]] += 1
+    
+    return {
+        "period": period or "last_30_days",
+        "total_evaluated": len(orders),
+        "risk_distribution": stats,
+        "review_required": stats["high"] + stats["critical"],
+    }
