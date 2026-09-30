@@ -46,6 +46,7 @@ from app.schemas.delivery import (
     SafetyAlertRead, SafetyAlertCreate, SafetyAlertAcknowledge,
     EmergencyContactRead, EmergencyContactCreate, EmergencyContactUpdate,
     TripShareRead, TripShareCreate,
+    DeliveryTrackingRead, AgentLocationRead,
 )
 from app.services.notifications import create_notification
 from app.services.webhooks import emit_delivery_status_webhook
@@ -1077,6 +1078,84 @@ def track_delivery(
     if not delivery:
         raise HTTPException(404, "Delivery not found")
     return delivery
+
+
+@router.get("/{order_id}/track/live", response_model=DeliveryTrackingRead)
+def track_delivery_live(
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Enhanced tracking with agent location, route, and ETA for customer."""
+    delivery = (
+        db.query(Delivery)
+        .options(
+            selectinload(Delivery.order).selectinload(Order.buyer),
+            selectinload(Delivery.order).selectinload(Order.shop),
+            selectinload(Delivery.agent),
+        )
+        .join(Order, Delivery.order_id == Order.id)
+        .filter(
+            Delivery.order_id == order_id,
+            Order.order_group.has(buyer_id=current_user.id),
+        )
+        .first()
+    )
+    if not delivery:
+        raise HTTPException(404, "Delivery not found")
+
+    # Build agent location info
+    agent_info = None
+    if delivery.agent:
+        agent_info = AgentLocationRead(
+            agent_id=delivery.agent.id,
+            name=delivery.agent.name,
+            lat=delivery.agent.current_lat,
+            lng=delivery.agent.current_lng,
+            last_update=delivery.agent.last_location_update,
+            status=delivery.agent.status,
+        )
+
+    # Determine human-readable status
+    status_map = {
+        DeliveryStatus.pending: "Order placed, waiting for rider",
+        DeliveryStatus.assigned: "Rider assigned, heading to pickup",
+        DeliveryStatus.picked: "Order picked up, on the way",
+        DeliveryStatus.in_transit: "En route to you",
+        DeliveryStatus.delivered: "Delivered",
+        DeliveryStatus.cancelled: "Cancelled",
+    }
+    status_display = status_map.get(delivery.status, delivery.status.value)
+
+    # Calculate distance remaining if agent has location and delivery address has coords
+    distance_remaining = None
+    if delivery.agent and delivery.agent.current_lat and delivery.agent.current_lng:
+        address = delivery.order.delivery_address or {}
+        buyer_lat = address.get("lat")
+        buyer_lng = address.get("lng")
+        if buyer_lat and buyer_lng:
+            from math import radians, sin, cos, sqrt, atan2
+            R = 6371  # Earth radius in km
+            lat1, lon1 = radians(delivery.agent.current_lat), radians(delivery.agent.current_lng)
+            lat2, lon2 = radians(float(buyer_lat)), radians(float(buyer_lng))
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
+            distance_remaining = R * 2 * atan2(sqrt(a), sqrt(1-a))
+
+    # Check if OTP is required (only for in_transit status)
+    otp_required = delivery.status == DeliveryStatus.in_transit
+
+    return DeliveryTrackingRead(
+        delivery=delivery,
+        agent=agent_info,
+        route=None,  # TODO: integrate with routing service for full route
+        estimated_arrival=delivery.estimated_at,
+        distance_remaining_km=round(distance_remaining, 2) if distance_remaining else None,
+        status_display=status_display,
+        can_contact_agent=delivery.status in (DeliveryStatus.assigned, DeliveryStatus.picked, DeliveryStatus.in_transit),
+        otp_required=otp_required,
+    )
 
 
 @router.get("/{delivery_id}", response_model=DeliveryRead)

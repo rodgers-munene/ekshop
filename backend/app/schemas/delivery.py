@@ -729,3 +729,38 @@ class DispatcherDashboardRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# Customer Tracking Schemas
+class AgentLocationRead(BaseModel):
+    """Real-time agent location for tracking"""
+    agent_id: uuid.UUID
+    name: str
+    lat: Optional[float]
+    lng: Optional[float]
+    heading: Optional[float] = None
+    speed_kmh: Optional[float] = None
+    last_update: Optional[datetime]
+    status: DeliveryAgentStatus
+
+    model_config = {"from_attributes": True}
+
+
+class DeliveryTrackingRead(BaseModel):
+    """Complete delivery tracking info for customer"""
+    delivery: DeliveryRead
+    agent: Optional[AgentLocationRead] = None
+    route: Optional[List[dict]] = None
+    estimated_arrival: Optional[datetime]
+    distance_remaining_km: Optional[float]
+    status_display: str
+    can_contact_agent: bool
+    otp_required: bool
+    otp_code: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class DeliveryOTPVerify(BaseModel):
+    delivery_id: uuid.UUID
+    otp_code: str
