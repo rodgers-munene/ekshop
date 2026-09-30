@@ -57,6 +57,7 @@ class User(Base):
     wishlists = relationship("Wishlist", back_populates="user", cascade="all, delete-orphan")
     order_groups = relationship("OrderGroup", back_populates="buyer")
     orders = relationship("Order", back_populates="buyer", foreign_keys="[Order.buyer_id]")
+    return_requests = relationship("ReturnRequest", back_populates="buyer", cascade="all, delete-orphan")
     reviews = relationship("ProductReview", back_populates="buyer")
     back_in_stock_subscriptions = relationship("BackInStockSubscription", back_populates="user", cascade="all, delete-orphan")
     events = relationship("UserEvent", back_populates="user")

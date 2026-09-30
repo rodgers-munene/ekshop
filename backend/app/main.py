@@ -28,6 +28,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 from app.routers import auth, users, shop, payments, admin, messaging, investor, subscriptions, cron
 from app.routers.catalog import categories_router, products_router
 from app.routers.commerce import cart_router, checkout_router, orders_router
+from app.routers.returns import returns_router
 from app.routers.delivery import router as delivery_router
 from app.routers.recommendations import router as recommendations_router
 from app.routers.hero import router as hero_router
@@ -71,6 +72,7 @@ app.include_router(messaging.router)
 app.include_router(messaging_ws_router)
 app.include_router(invoices_router)
 app.include_router(receipts_router)
+app.include_router(returns_router)
 app.include_router(hero_router)
 app.include_router(deals_router)
 app.include_router(notifications_router)

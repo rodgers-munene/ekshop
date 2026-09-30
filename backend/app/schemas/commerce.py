@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, Any
 from pydantic import BaseModel, field_validator
-from app.models.commerce import OrderStatus, OrderGroupStatus
+from app.models.commerce import OrderStatus, OrderGroupStatus, ReturnStatus, ReturnReason
 from app.schemas.geography import WardWithLocationRead
 
 
@@ -174,3 +174,61 @@ class OrderGroupRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ReturnItemCreate(BaseModel):
+    order_item_id: uuid.UUID
+    quantity: int
+    reason: ReturnReason
+    reason_detail: Optional[str] = None
+    condition: Optional[str] = None
+
+
+class ReturnRequestCreate(BaseModel):
+    order_id: uuid.UUID
+    reason: ReturnReason
+    reason_detail: Optional[str] = None
+    items: List[ReturnItemCreate]
+
+
+class ReturnItemRead(BaseModel):
+    id: uuid.UUID
+    return_request_id: uuid.UUID
+    order_item_id: uuid.UUID
+    quantity: int
+    refund_amount: str
+    condition: Optional[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ReturnRequestRead(BaseModel):
+    id: uuid.UUID
+    order_id: uuid.UUID
+    buyer_id: uuid.UUID
+    shop_id: uuid.UUID
+    status: ReturnStatus
+    reason: ReturnReason
+    reason_detail: Optional[str]
+    refund_amount: str
+    admin_notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: Optional[datetime]
+    items: List[ReturnItemRead] = []
+
+    model_config = {"from_attributes": True}
+
+
+class ReturnRequestListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[ReturnRequestRead]
+
+
+class ReturnStatusUpdate(BaseModel):
+    status: ReturnStatus
+    admin_notes: Optional[str] = None
+    refund_amount: Optional[str] = None

@@ -49,6 +49,7 @@ class Shop(Base):
     products = relationship("Product", back_populates="shop")
     orders = relationship("Order", back_populates="shop")
     reviews = relationship("ProductReview", back_populates="shop")
+    return_requests = relationship("ReturnRequest", back_populates="shop", cascade="all, delete-orphan")
     conversations = relationship("Conversation", back_populates="shop")
     subscription = relationship("Subscription", back_populates="shop", uselist=False)
 

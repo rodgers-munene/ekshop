@@ -30,6 +30,25 @@ class OrderStatus(str, enum.Enum):
     refunded = "refunded"
 
 
+class ReturnStatus(str, enum.Enum):
+    requested = "requested"
+    approved = "approved"
+    rejected = "rejected"
+    received = "received"
+    refunded = "refunded"
+    cancelled = "cancelled"
+
+
+class ReturnReason(str, enum.Enum):
+    damaged = "damaged"
+    wrong_item = "wrong_item"
+    not_as_described = "not_as_described"
+    changed_mind = "changed_mind"
+    defective = "defective"
+    late_delivery = "late_delivery"
+    other = "other"
+
+
 class UserAddress(Base):
     __tablename__ = "user_addresses"
 
@@ -145,6 +164,7 @@ class Order(Base):
     buyer = relationship("User", back_populates="orders", foreign_keys=[buyer_id])
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     delivery = relationship("Delivery", back_populates="order", uselist=False)
+    return_requests = relationship("ReturnRequest", back_populates="order", cascade="all, delete-orphan")
 
     @property
     def buyer_name(self) -> str:
@@ -171,3 +191,48 @@ class OrderItem(Base):
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
     variant = relationship("ProductVariant", back_populates="order_items")
+    return_items = relationship("ReturnItem", back_populates="order_item", cascade="all, delete-orphan")
+
+
+class ReturnRequest(Base):
+    __tablename__ = "return_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    buyer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    shop_id = Column(UUID(as_uuid=True), ForeignKey("shops.id", ondelete="CASCADE"), nullable=False)
+    status = Column(Enum(ReturnStatus, native_enum=False), default=ReturnStatus.requested, nullable=False)
+    reason = Column(Enum(ReturnReason, native_enum=False), nullable=False)
+    reason_detail = Column(Text)
+    refund_amount = Column(String(20), default="0.00")
+    admin_notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_return_requests_order_id", "order_id"),
+        Index("ix_return_requests_buyer_id", "buyer_id"),
+        Index("ix_return_requests_shop_id", "shop_id"),
+        Index("ix_return_requests_status", "status"),
+    )
+
+    order = relationship("Order", back_populates="return_requests")
+    buyer = relationship("User", back_populates="return_requests")
+    shop = relationship("Shop", back_populates="return_requests")
+    items = relationship("ReturnItem", back_populates="return_request", cascade="all, delete-orphan")
+
+
+class ReturnItem(Base):
+    __tablename__ = "return_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    return_request_id = Column(UUID(as_uuid=True), ForeignKey("return_requests.id", ondelete="CASCADE"), nullable=False)
+    order_item_id = Column(UUID(as_uuid=True), ForeignKey("order_items.id", ondelete="CASCADE"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    refund_amount = Column(String(20), default="0.00")
+    condition = Column(String(50))  # "new", "used", "damaged"
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    return_request = relationship("ReturnRequest", back_populates="items")
+    order_item = relationship("OrderItem", back_populates="return_items")
