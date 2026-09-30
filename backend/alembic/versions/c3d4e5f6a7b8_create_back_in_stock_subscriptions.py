@@ -45,11 +45,13 @@ def upgrade() -> None:
         ),
     )
     # Partial unique indexes: dedupe works even when variant_id is NULL.
+    # All-zeros UUID is the sentinel for "no variant" -- coalesce needs a
+    # value of the column's own type, so a text sentinel is not usable here.
     op.execute(
         """
         CREATE UNIQUE INDEX uq_back_in_stock_user_product
         ON back_in_stock_subscriptions
-            (product_id, COALESCE(variant_id, '-'::uuid), user_id)
+            (product_id, COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::uuid), user_id)
         WHERE user_id IS NOT NULL
         """
     )
@@ -57,7 +59,7 @@ def upgrade() -> None:
         """
         CREATE UNIQUE INDEX uq_back_in_stock_email_product
         ON back_in_stock_subscriptions
-            (product_id, COALESCE(variant_id, '-'::uuid), email)
+            (product_id, COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::uuid), email)
         WHERE user_id IS NULL
         """
     )

@@ -168,10 +168,12 @@ class BackInStockSubscription(Base):
         # UNIQUE(user_id, product_id, variant_id) would never fire when
         # variant_id IS NULL -- the most common case. Partial unique indexes
         # with COALESCE give real dedupe for both guest and logged-in rows.
+        # The all-zeros UUID is the "no variant" sentinel; coalesce needs a
+        # value of the column's own type, so a text sentinel is not usable.
         Index(
             "uq_back_in_stock_user_product",
             "product_id",
-            func.coalesce(variant_id, text("'-'")),
+            func.coalesce(variant_id, text("'00000000-0000-0000-0000-000000000000'::uuid")),
             "user_id",
             unique=True,
             postgresql_where=text("user_id IS NOT NULL"),
@@ -179,7 +181,7 @@ class BackInStockSubscription(Base):
         Index(
             "uq_back_in_stock_email_product",
             "product_id",
-            func.coalesce(variant_id, text("'-'")),
+            func.coalesce(variant_id, text("'00000000-0000-0000-0000-000000000000'::uuid")),
             "email",
             unique=True,
             postgresql_where=text("user_id IS NULL"),
