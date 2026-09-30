@@ -49,6 +49,30 @@ class ReturnReason(str, enum.Enum):
     other = "other"
 
 
+class TaxType(str, enum.Enum):
+    vat = "vat"
+    excise = "excise"
+    withholding = "withholding"
+
+
+class TaxConfig(Base):
+    __tablename__ = "tax_configs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False, unique=True)  # e.g., "Kenya VAT"
+    tax_type = Column(Enum(TaxType, native_enum=False), nullable=False)
+    rate = Column(Float, nullable=False)  # e.g., 0.16 for 16%
+    is_active = Column(Boolean, default=True, nullable=False)
+    applies_to_shipping = Column(Boolean, default=True, nullable=False)
+    country = Column(String(2), default="KE", nullable=False)  # ISO 3166-1 alpha-2
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("tax_type", "country", name="uq_tax_config_type_country"),
+    )
+
+
 class UserAddress(Base):
     __tablename__ = "user_addresses"
 
@@ -128,6 +152,7 @@ class OrderGroup(Base):
     status = Column(Enum(OrderGroupStatus, native_enum=False), default=OrderGroupStatus.pending_payment, nullable=False)
     subtotal = Column(String(20), nullable=False)
     delivery_fee = Column(String(20), default="0.00")
+    tax_amount = Column(String(20), default="0.00")
     total = Column(String(20), nullable=False)
     delivery_address = Column(JSONB, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -148,6 +173,7 @@ class Order(Base):
     status = Column(Enum(OrderStatus, native_enum=False), default=OrderStatus.pending, nullable=False)
     subtotal = Column(String(20), nullable=False)
     delivery_fee = Column(String(20), default="0.00")
+    tax_amount = Column(String(20), default="0.00")
     total = Column(String(20), nullable=False)
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -186,6 +212,8 @@ class OrderItem(Base):
     quantity = Column(Integer, nullable=False)
     unit_price = Column(String(20), nullable=False)
     discount_amount = Column(String(20), default="0.00")
+    tax_amount = Column(String(20), default="0.00")
+    tax_rate = Column(Float, default=0.0)
     line_total = Column(String(20), nullable=False)
 
     order = relationship("Order", back_populates="items")

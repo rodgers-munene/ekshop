@@ -8,7 +8,7 @@ from sqlalchemy import update, delete
 from app.dependencies.auth import get_current_active_user
 from app.dependencies.database import get_db
 from app.models.user import User
-from app.models.commerce import Cart, CartItem, UserAddress, OrderGroup, Order, OrderItem
+from app.models.commerce import Cart, CartItem, UserAddress, OrderGroup, Order, OrderItem, TaxConfig, TaxType
 from app.models.catalog import Product
 from app.models.shop import Shop
 from app.core.limiter import limiter
@@ -309,6 +309,14 @@ def checkout(
 
     delivery_settings = get_or_create_rate_settings(db)
 
+    # Get active VAT config (Kenya 16% VAT)
+    vat_config = db.query(TaxConfig).filter(
+        TaxConfig.tax_type == TaxType.vat,
+        TaxConfig.country == "KE",
+        TaxConfig.is_active.is_(True),
+    ).first()
+    vat_rate = Decimal(str(vat_config.rate)) if vat_config else Decimal("0.16")
+
     group_fee_flat = Decimal("0.00")
     if not delivery_settings.use_geo_pricing:
         # cart-total-tiered fee, charged once for the whole order group
@@ -342,6 +350,7 @@ def checkout(
             notes=payload.notes,
             subtotal="0.00",
             delivery_fee=str(order_delivery_fee),
+            tax_amount="0.00",
             total="0.00",
         )
         db.add(order)
@@ -352,6 +361,9 @@ def checkout(
             unit_price = Decimal(product.price)
             line_total = unit_price * item.quantity
             order_subtotal += line_total
+
+            # Calculate VAT on this line
+            item_tax = line_total * vat_rate
 
             snapshot = {
                 "name": product.name,
@@ -368,26 +380,45 @@ def checkout(
                 quantity=item.quantity,
                 unit_price=str(unit_price),
                 discount_amount="0.00",
+                tax_amount=str(item_tax),
+                tax_rate=float(vat_rate),
                 line_total=str(line_total),
             ))
 
             # decrement stock on the locked product object
             product.stock_qty -= item.quantity
 
+        # Calculate VAT on delivery fee if applicable
+        delivery_tax = Decimal("0.00")
+        if vat_config and vat_config.applies_to_shipping:
+            delivery_tax = order_delivery_fee * vat_rate
+
+        order_tax = order_subtotal * vat_rate + delivery_tax
         order.subtotal = str(order_subtotal)
-        order.total = str(order_subtotal + order_delivery_fee)
+        order.tax_amount = str(order_tax)
+        order.total = str(order_subtotal + order_delivery_fee + order_tax)
         group_subtotal += order_subtotal
         group_delivery_fee += order_delivery_fee
 
+    # Calculate group-level tax (sum of all order taxes)
+    group_tax = Decimal("0.00")
+    # This is a simplification - we'd need to track each order's tax
+    # For now, calculate based on group subtotal + delivery
+    if vat_config:
+        group_tax = group_subtotal * vat_rate
+        if vat_config.applies_to_shipping:
+            group_tax += group_delivery_fee * vat_rate
+
     if not delivery_settings.use_geo_pricing:
         group_delivery_fee = group_fee_flat
-        # legacy behavior: the one flat fee is charged on the group total, not
-        # split onto individual orders (their delivery_fee stays "0.00" above)
+        if vat_config and vat_config.applies_to_shipping:
+            group_tax += group_fee_flat * vat_rate
 
     # update group totals now that we know the real sum
     order_group.subtotal = str(group_subtotal)
     order_group.delivery_fee = str(group_delivery_fee)
-    order_group.total = str(group_subtotal + group_delivery_fee)
+    order_group.tax_amount = str(group_tax)
+    order_group.total = str(group_subtotal + group_delivery_fee + group_tax)
 
     # clear the cart
     db.execute(delete(CartItem).where(CartItem.cart_id == cart.id))
