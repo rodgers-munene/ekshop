@@ -3,7 +3,8 @@ import enum
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, DateTime, Boolean, Enum, ForeignKey,
-    Integer, SmallInteger, Text, UniqueConstraint, Index
+    Integer, SmallInteger, Text, UniqueConstraint, Index,
+    CheckConstraint, func, text
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, TSVECTOR
 from sqlalchemy.orm import relationship
@@ -152,17 +153,41 @@ class BackInStockSubscription(Base):
     __tablename__ = "back_in_stock_subscriptions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # Nullable: guests subscribe with just an email, logged-in users get an
+    # in-app Notification as well. Exactly one of user_id/email is always set.
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="CASCADE"), nullable=True)
-    email = Column(String(255), nullable=False)  # allow non-logged-in users to subscribe
+    email = Column(String(255), nullable=False)  # always captured, even for logged-in users
     is_notified = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     notified_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("user_id", "product_id", "variant_id", name="uq_back_in_stock_user_product"),
-        UniqueConstraint("email", "product_id", "variant_id", name="uq_back_in_stock_email_product"),
+        # Postgres treats NULLs as distinct in unique constraints, so a plain
+        # UNIQUE(user_id, product_id, variant_id) would never fire when
+        # variant_id IS NULL -- the most common case. Partial unique indexes
+        # with COALESCE give real dedupe for both guest and logged-in rows.
+        Index(
+            "uq_back_in_stock_user_product",
+            "product_id",
+            func.coalesce(variant_id, text("'-'")),
+            "user_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_back_in_stock_email_product",
+            "product_id",
+            func.coalesce(variant_id, text("'-'")),
+            "email",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+        ),
+        CheckConstraint(
+            "user_id IS NOT NULL OR email IS NOT NULL",
+            name="ck_back_in_stock_has_recipient",
+        ),
     )
 
     product = relationship("Product", back_populates="back_in_stock_subscriptions")
