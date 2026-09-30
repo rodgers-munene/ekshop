@@ -1,4 +1,5 @@
 import uuid
+import enum
 from datetime import datetime
 from typing import Optional, List, Dict
 from pydantic import BaseModel
@@ -349,3 +350,42 @@ class MeteredQuoteResponse(BaseModel):
     total: str
     currency: str
     breakdown: Dict[str, str | bool | float]
+
+
+class DeliveryBatchStatus(str, enum.Enum):
+    created = "created"
+    assigned = "assigned"
+    picked = "picked"
+    in_transit = "in_transit"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+class DeliveryBatchRead(BaseModel):
+    id: uuid.UUID
+    agent_id: Optional[uuid.UUID]
+    status: DeliveryBatchStatus
+    pickup_lat: Optional[float]
+    pickup_lng: Optional[float]
+    pickup_address: Optional[str]
+    total_distance_km: Optional[float]
+    estimated_duration_min: Optional[float]
+    created_at: datetime
+    assigned_at: Optional[datetime]
+    picked_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    deliveries: List[DeliveryRead] = []
+
+    model_config = {"from_attributes": True}
+
+
+class DeliveryBatchCreate(BaseModel):
+    delivery_ids: List[uuid.UUID]  # deliveries to batch together
+
+
+class DeliveryBatchAssign(BaseModel):
+    agent_id: uuid.UUID
+
+
+class DeliveryBatchStatusUpdate(BaseModel):
+    status: DeliveryBatchStatus

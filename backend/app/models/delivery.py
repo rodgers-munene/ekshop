@@ -99,6 +99,7 @@ class DeliveryAgent(Base):
 
     current_order = relationship("Order", foreign_keys=[current_order_id])
     deliveries = relationship("Delivery", back_populates="agent")
+    batches = relationship("DeliveryBatch", back_populates="agent")
     ledger_entries = relationship("DeliveryLedgerEntry", back_populates="agent", cascade="all, delete-orphan")
 
 
@@ -108,6 +109,7 @@ class Delivery(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), unique=True, nullable=False)
     agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="SET NULL"))
+    batch_id = Column(UUID(as_uuid=True), ForeignKey("delivery_batches.id", ondelete="SET NULL"))
     status = Column(Enum(DeliveryStatus, native_enum=False), default=DeliveryStatus.pending, nullable=False)
     tracking_number = Column(String(50), unique=True)
     estimated_at = Column(DateTime(timezone=True))
@@ -123,6 +125,7 @@ class Delivery(Base):
 
     order = relationship("Order", back_populates="delivery", foreign_keys=[order_id])
     agent = relationship("DeliveryAgent", back_populates="deliveries")
+    batch = relationship("DeliveryBatch", back_populates="deliveries")
     events = relationship("DeliveryEvent", back_populates="delivery", cascade="all, delete-orphan")
 
 
@@ -151,6 +154,36 @@ class DeliveryIssue(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     delivery = relationship("Delivery")
+
+
+class DeliveryBatchStatus(str, enum.Enum):
+    created = "created"
+    assigned = "assigned"
+    picked = "picked"
+    in_transit = "in_transit"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+class DeliveryBatch(Base):
+    """Batch multiple deliveries for a single rider pickup (same seller/area)."""
+    __tablename__ = "delivery_batches"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="SET NULL"))
+    status = Column(Enum(DeliveryBatchStatus, native_enum=False), default=DeliveryBatchStatus.created, nullable=False)
+    pickup_lat = Column(Float)
+    pickup_lng = Column(Float)
+    pickup_address = Column(Text)
+    total_distance_km = Column(Float)
+    estimated_duration_min = Column(Float)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
+    picked_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    agent = relationship("DeliveryAgent", back_populates="batches")
+    deliveries = relationship("Delivery", back_populates="batch")
 
 
 class DeliveryRateSettings(Base):

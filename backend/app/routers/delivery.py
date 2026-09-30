@@ -3,7 +3,7 @@ import secrets
 import math
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -20,10 +20,11 @@ from app.models.delivery import (
     DeliveryAgent, DeliveryAgentStatus, Delivery, DeliveryEvent, DeliveryIssue,
     DeliveryStatus, ActorRole, DeliveryOffer, DeliveryPricingRule, OfferStatus,
     DeliveryLedgerEntry, LedgerEntryType, LedgerStatus, VehicleType, KYCStatus,
+    DeliveryBatch,
 )
 from app.models.commerce import Order, OrderStatus
 from app.models.shop import Shop, ShopStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.delivery import (
     AgentLoginRequest, AgentTokenResponse,
     AgentStatusUpdate, AgentLocationUpdate,
@@ -39,6 +40,8 @@ from app.schemas.delivery import (
     LedgerEntryRead, LedgerListResponse, WalletTransactionRequest,
     PricingRuleRead, PricingRuleListResponse, PricingRuleUpsert,
     MeteredQuoteRequest, MeteredQuoteResponse,
+    DeliveryBatchRead, DeliveryBatchCreate, DeliveryBatchAssign,
+    DeliveryBatchStatusUpdate, DeliveryBatchStatus,
 )
 from app.services.notifications import create_notification
 from app.services.webhooks import emit_delivery_status_webhook
@@ -1091,3 +1094,189 @@ def get_delivery_detail(
     if not delivery:
         raise HTTPException(404, "Delivery not found")
     return delivery
+
+
+# ── Batch/Multi-order dispatch ──────────────────────────────────────────────────
+
+@router.post(
+    "/batches",
+    response_model=DeliveryBatchRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a delivery batch from multiple deliveries (admin/auto)",
+)
+def create_delivery_batch(
+    payload: DeliveryBatchCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Create a batch from multiple deliveries. Validates they share the same pickup area."""
+    if len(payload.delivery_ids) < 2:
+        raise HTTPException(400, "Batch must contain at least 2 deliveries")
+
+    deliveries = db.query(Delivery).filter(Delivery.id.in_(payload.delivery_ids)).all()
+    if len(deliveries) != len(payload.delivery_ids):
+        raise HTTPException(404, "One or more deliveries not found")
+
+    # Validate all deliveries are in 'assigned' status and unbatched
+    for d in deliveries:
+        if d.status != DeliveryStatus.assigned:
+            raise HTTPException(400, f"Delivery {d.id} is not in 'assigned' status")
+        if d.batch_id is not None:
+            raise HTTPException(400, f"Delivery {d.id} is already in a batch")
+
+    # Calculate pickup location (use first delivery's shop location)
+    first_order = deliveries[0].order
+    shop = first_order.shop
+    if not shop or not shop.lat or not shop.lng:
+        raise HTTPException(400, "Pickup location (shop) not found for batching")
+
+    # Verify all deliveries are from the same shop/area
+    for d in deliveries[1:]:
+        if d.order.shop_id != shop.id:
+            raise HTTPException(400, "All deliveries in a batch must be from the same shop")
+
+    # Calculate total distance and estimated duration
+    total_distance = 0.0
+    for d in deliveries:
+        if d.distance_km:
+            total_distance += d.distance_km
+
+    batch = DeliveryBatch(
+        pickup_lat=shop.lat,
+        pickup_lng=shop.lng,
+        pickup_address=f"{shop.name}, {shop.town or ''}, {shop.county or ''}".strip(", "),
+        total_distance_km=total_distance,
+        estimated_duration_min=sum(d.duration_min or 0 for d in deliveries),
+    )
+    db.add(batch)
+    db.flush()
+
+    # Assign deliveries to batch
+    for d in deliveries:
+        d.batch_id = batch.id
+
+    db.commit()
+    db.refresh(batch)
+    return batch
+
+
+@router.get(
+    "/batches",
+    response_model=List[DeliveryBatchRead],
+    summary="List delivery batches (admin)",
+)
+def list_delivery_batches(
+    status: Optional[DeliveryBatchStatus] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    query = db.query(DeliveryBatch).options(selectinload(DeliveryBatch.deliveries))
+    if status:
+        query = query.filter(DeliveryBatch.status == status)
+    return query.order_by(DeliveryBatch.created_at.desc()).all()
+
+
+@router.get(
+    "/batches/{batch_id}",
+    response_model=DeliveryBatchRead,
+    summary="Get batch details",
+)
+def get_delivery_batch(
+    batch_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    batch = db.query(DeliveryBatch).options(selectinload(DeliveryBatch.deliveries)).filter(DeliveryBatch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    return batch
+
+
+@router.post(
+    "/batches/{batch_id}/assign",
+    response_model=DeliveryBatchRead,
+    summary="Assign batch to a rider",
+)
+def assign_delivery_batch(
+    batch_id: uuid.UUID,
+    payload: DeliveryBatchAssign,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    batch = db.query(DeliveryBatch).filter(DeliveryBatch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    if batch.status != DeliveryBatchStatus.created:
+        raise HTTPException(400, "Batch already assigned or in progress")
+
+    agent = db.get(DeliveryAgent, payload.agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+    if agent.status != DeliveryAgentStatus.active:
+        raise HTTPException(400, "Agent must be active to accept batch")
+
+    batch.agent_id = agent.id
+    batch.status = DeliveryBatchStatus.assigned
+    batch.assigned_at = datetime.now(timezone.utc)
+
+    # Update all deliveries in batch
+    for d in batch.deliveries:
+        d.agent_id = agent.id
+
+    db.commit()
+    db.refresh(batch)
+    return batch
+
+
+@router.patch(
+    "/batches/{batch_id}/status",
+    response_model=DeliveryBatchRead,
+    summary="Update batch status (rider/admin)",
+)
+def update_batch_status(
+    batch_id: uuid.UUID,
+    payload: DeliveryBatchStatusUpdate,
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    batch = db.query(DeliveryBatch).filter(DeliveryBatch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+
+    # Authorization: batch agent or admin
+    is_admin = agent.role == UserRole.admin if hasattr(agent, 'role') else False
+    if batch.agent_id != agent.id and not is_admin:
+        raise HTTPException(403, "Not authorized")
+
+    # Validate transitions
+    valid = {
+        DeliveryBatchStatus.created: [DeliveryBatchStatus.assigned],
+        DeliveryBatchStatus.assigned: [DeliveryBatchStatus.picked],
+        DeliveryBatchStatus.picked: [DeliveryBatchStatus.in_transit],
+        DeliveryBatchStatus.in_transit: [DeliveryBatchStatus.completed],
+    }
+    if batch.status in valid and payload.status not in valid[batch.status]:
+        raise HTTPException(400, f"Invalid transition from {batch.status.value} to {payload.status.value}")
+
+    batch.status = payload.status
+    now = datetime.now(timezone.utc)
+    if payload.status == DeliveryBatchStatus.picked:
+        batch.picked_at = now
+    elif payload.status == DeliveryBatchStatus.completed:
+        batch.completed_at = now
+
+    # Update all deliveries in batch
+    for d in batch.deliveries:
+        if payload.status == DeliveryBatchStatus.picked and d.status == DeliveryStatus.assigned:
+            d.status = DeliveryStatus.picked
+            d.picked_at = now
+        elif payload.status == DeliveryBatchStatus.in_transit and d.status == DeliveryStatus.picked:
+            d.status = DeliveryStatus.in_transit
+            d.in_transit_at = now
+        elif payload.status == DeliveryBatchStatus.completed and d.status == DeliveryStatus.in_transit:
+            d.status = DeliveryStatus.delivered
+            d.delivered_at = now
+
+    db.commit()
+    db.refresh(batch)
+    return batch
