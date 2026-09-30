@@ -365,6 +365,14 @@ def update_my_status(
     return agent
 
 
+@router.get("/agents/me/status", response_model=DeliveryAgentRead)
+def get_my_status(
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    return agent
+
+
 @router.patch("/agents/me/location", response_model=DeliveryAgentRead)
 def update_my_location(
     payload: AgentLocationUpdate,
