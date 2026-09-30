@@ -30,6 +30,7 @@ from app.routers.catalog import categories_router, products_router
 from app.routers.commerce import cart_router, checkout_router, orders_router
 from app.routers.returns import returns_router
 from app.routers.delivery import router as delivery_router
+from app.routers.fulfillment import router as fulfillment_router
 from app.routers.partner_fleet import router as partner_fleet_router
 from app.routers.recommendations import router as recommendations_router
 from app.routers.hero import router as hero_router
@@ -66,6 +67,7 @@ app.include_router(checkout_router)
 app.include_router(orders_router)
 app.include_router(payments.router)
 app.include_router(delivery_router)
+app.include_router(fulfillment_router)
 app.include_router(partner_fleet_router)
 app.include_router(recommendations_router)
 app.include_router(admin.router)
