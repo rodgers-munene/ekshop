@@ -725,6 +725,7 @@ def record_job_settlement(
     partner_cost: Decimal = Decimal("0"),
     waiting_fee: Decimal = Decimal("0"),
     payment_fee_pct: Optional[Decimal] = None,
+    actor_user_id: Optional[uuid.UUID] = None,
 ) -> JobSettlement:
     """Record the money for one attempt (PRD F1).
 
@@ -734,7 +735,24 @@ def record_job_settlement(
 
     Amounts are coerced through :func:`_decimal` so a string from a JSON body
     cannot blow up the arithmetic halfway through a settlement.
+
+    Recording the money and closing the attempt are the same fact, so this also
+    moves the job to `settled` and commits. A `failed` job can be settled too:
+    a failed attempt still costs a rider payout and a payment fee, and the PRD
+    wants that visible rather than lost.
     """
+    if job.status not in (
+        DeliveryJobStatus.delivered,
+        DeliveryJobStatus.failed,
+        DeliveryJobStatus.settled,
+    ):
+        raise FulfillmentError(
+            f"Job is '{job.status.value}'; money can only be recorded against a "
+            f"delivered or failed attempt"
+        )
+    if job.status == DeliveryJobStatus.settled and job.settlement is not None:
+        raise FulfillmentError("This attempt has already been settled")
+
     fee_collected = _decimal(fee_collected, "fee_collected")
     rider_payout = _decimal(rider_payout, "rider_payout")
     incentive_paid = _decimal(incentive_paid, "incentive_paid")
@@ -778,6 +796,18 @@ def record_job_settlement(
             "contribution": str(contribution),
         },
     )
+    if job.status != DeliveryJobStatus.settled:
+        transition_job(
+            db,
+            job,
+            DeliveryJobStatus.settled,
+            event_type="SETTLED",
+            actor_user_id=actor_user_id,
+            actor_role="system",
+            payload={"contribution": str(contribution)},
+        )
+    db.commit()
+    db.refresh(settlement)
     return settlement
 
 
@@ -798,6 +828,19 @@ def settle_fulfillment(
     if job.status not in (DeliveryJobStatus.delivered, DeliveryJobStatus.settled):
         raise FulfillmentError(
             f"Job is '{job.status.value}'; only a delivered job can be settled"
+        )
+
+    # Every attempt that cost money must be settled first, otherwise the roll-up
+    # would quietly under-report the margin. Cancelled attempts cost nothing.
+    unsettled = [
+        j
+        for j in fulfillment.jobs
+        if j.status != DeliveryJobStatus.cancelled and j.settlement is None
+    ]
+    if unsettled:
+        raise FulfillmentError(
+            f"{len(unsettled)} attempt(s) have no settlement recorded yet "
+            f"(first: {unsettled[0].id} is '{unsettled[0].status.value}')"
         )
 
     parts = [j.settlement for j in fulfillment.jobs if j.settlement is not None]
@@ -830,16 +873,10 @@ def settle_fulfillment(
         margin_pct=margin_pct,
     )
     db.add(settlement)
-    transition_job(
-        db,
-        job,
-        DeliveryJobStatus.settled,
-        event_type="SETTLED",
-        actor_user_id=actor_user_id,
-        actor_role="system",
-        payload={"contribution": str(contribution), "margin_pct": str(margin_pct)},
-    )
     fulfillment.settled_at = datetime.now(timezone.utc)
+    if fulfillment.closed_at is None:
+        fulfillment.closed_at = fulfillment.settled_at
+        fulfillment.close_reason = "settled"
     db.commit()
     db.refresh(settlement)
     return settlement

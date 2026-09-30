@@ -115,11 +115,12 @@ for st in (DeliveryJobStatus.offered,
 check("delivered", job.status.value == "delivered")
 check("fulfillment derives delivered", f.status.value == "delivered", f.status.value)
 check("delivered_at stamped", job.delivered_at is not None)
-check("one event per transition", len(job.events) == 8, len(job.events))
+check("12 events recorded (created, 2 offers, 2 replies, 7 transitions)",
+      len(job.events) == 12, len(job.events))
 check("last event is DELIVERED", job.events[-1].to_status == "delivered")
 s.commit()
-check("events survive a commit", len(s.get(DeliveryJob, job.id).events) == 8,
-      len(s.get(DeliveryJob, job.id).events))
+reloaded = s.get(DeliveryJob, job.id)
+check("events survive a commit", len(reloaded.events) == 12, len(reloaded.events))
 
 print("\n== illegal transition is refused ==")
 try:
@@ -138,11 +139,18 @@ check("not expired", not fs.is_otp_expired(job))
 
 print("\n== settlement ==")
 js = fs.record_job_settlement(s, job, fee_collected="60.00", rider_payout="35.00",
-                              incentive_paid="5.00", payment_fee="2.00")
+                              incentive_paid="5.00", payment_fee="2.00",
+                              actor_user_id=seller.id)
 check("job settlement created", js.id is not None)
 check("contribution = 60-35-5-2 = 18.00", str(js.contribution) == "18.00", js.contribution)
+check("string amounts coerced to Decimal", str(js.fee_collected) == "60.00", js.fee_collected)
 check("job is settled", job.status.value == "settled", job.status.value)
 check("job settled_at stamped", job.settled_at is not None)
+try:
+    fs.record_job_settlement(s, job, fee_collected="60.00", rider_payout="35.00")
+    check("double settlement blocked", False, "allowed")
+except fs.FulfillmentError:
+    check("double settlement blocked", True)
 
 fset = fs.settle_fulfillment(s, f, actor_user_id=seller.id)
 check("fulfillment settlement created", fset.id is not None)
@@ -150,6 +158,7 @@ check("fee rolled up", str(fset.fee_collected) == "60.00", fset.fee_collected)
 check("contribution rolled up", str(fset.contribution) == "18.00", fset.contribution)
 check("margin_pct = 18/60 = 0.30", str(fset.margin_pct) == "0.3", fset.margin_pct)
 check("fulfillment settled_at stamped", f.settled_at is not None)
+check("fulfillment closed on settle", f.closed_at is not None and f.close_reason == "settled")
 
 print("\n== retry after failure keeps history ==")
 o2 = s.get(Order, order.id)
