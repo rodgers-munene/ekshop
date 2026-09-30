@@ -88,6 +88,7 @@ class Product(Base):
     events = relationship("UserEvent", back_populates="product")
     score = relationship("ProductScore", back_populates="product", uselist=False, cascade="all, delete-orphan")
     promotions = relationship("Promotion", back_populates="product", cascade="all, delete-orphan")
+    back_in_stock_subscriptions = relationship("BackInStockSubscription", back_populates="product", cascade="all, delete-orphan")
 
 
 class ProductImage(Base):
@@ -120,6 +121,7 @@ class ProductVariant(Base):
     product = relationship("Product", back_populates="variants")
     cart_items = relationship("CartItem", back_populates="variant")
     order_items = relationship("OrderItem", back_populates="variant")
+    back_in_stock_subscriptions = relationship("BackInStockSubscription", back_populates="variant", cascade="all, delete-orphan")
 
 
 class ProductReview(Base):
@@ -142,3 +144,25 @@ class ProductReview(Base):
     product = relationship("Product", back_populates="reviews")
     buyer = relationship("User", back_populates="reviews")
     shop = relationship("Shop", back_populates="reviews")
+
+
+class BackInStockSubscription(Base):
+    __tablename__ = "back_in_stock_subscriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="CASCADE"), nullable=True)
+    email = Column(String(255), nullable=False)  # allow non-logged-in users to subscribe
+    is_notified = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    notified_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", "variant_id", name="uq_back_in_stock_user_product"),
+        UniqueConstraint("email", "product_id", "variant_id", name="uq_back_in_stock_email_product"),
+    )
+
+    product = relationship("Product", back_populates="back_in_stock_subscriptions")
+    variant = relationship("ProductVariant")
+    user = relationship("User", back_populates="back_in_stock_subscriptions")

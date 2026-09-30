@@ -25,14 +25,61 @@ from app.schemas.catalog import (
     ProductVariantRead,
     ReviewCreate,
     ReviewRead,
+    BackInStockSubscribe,
+    BackInStockSubscriptionRead,
 )
-from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview
+from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview, BackInStockSubscription
 from app.models.shop import Shop
 from app.services import storage
 from app.services.catalog import with_active_shop
+from app.services.notifications import create_notification
+from app.services.email import send_notification_email
 
 categories_router = APIRouter(prefix="/categories", tags=["categories"])
 products_router = APIRouter(prefix="/products", tags=["products"])
+
+
+def notify_back_in_stock_subscribers(db: Session, product: Product, variant) -> None:
+    """Notify all subscribers when a product/variant comes back in stock."""
+    from datetime import datetime, timezone
+    import logging
+    logger = logging.getLogger(__name__)
+
+    query = db.query(BackInStockSubscription).filter(
+        BackInStockSubscription.product_id == product.id,
+        BackInStockSubscription.is_notified.is_(False),
+    )
+    if variant:
+        query = query.filter(BackInStockSubscription.variant_id == variant.id)
+    else:
+        query = query.filter(BackInStockSubscription.variant_id.is_(None))
+
+    subscriptions = query.all()
+    for sub in subscriptions:
+        try:
+            if sub.user_id:
+                create_notification(
+                    db,
+                    user_id=sub.user_id,
+                    type="back_in_stock",
+                    title=f"{product.name} is back in stock!",
+                    body=f"The product you wanted is now available. Order now before it sells out again.",
+                    data={"product_id": str(product.id), "variant_id": str(variant.id) if variant else None},
+                )
+            else:
+                send_notification_email(
+                    to=sub.email,
+                    title=f"{product.name} is back in stock!",
+                    body=f"The product you wanted is now available. Order now before it sells out again.",
+                )
+            sub.is_notified = True
+            sub.notified_at = datetime.now(timezone.utc)
+            db.add(sub)
+        except Exception as exc:
+            logger.warning("Failed to notify back-in-stock subscriber %s: %s", sub.email, exc)
+
+    if subscriptions:
+        db.commit()
 
 
 def _build_prefix_tsquery(term: str) -> Optional[str]:
@@ -376,6 +423,9 @@ def update_product(slug: str, payload: ProductUpdate, db: Session= Depends(get_d
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    old_stock = product.stock_qty
+    new_stock = payload.stock_qty if payload.stock_qty is not None else old_stock
+
     update_stmt = update(Product).where(
         Product.slug == slug,
         Product.shop_id == shop.id,
@@ -384,7 +434,11 @@ def update_product(slug: str, payload: ProductUpdate, db: Session= Depends(get_d
     db.execute(update_stmt)
     db.commit()
     db.refresh(product)
-    
+
+    # Trigger back-in-stock notifications if stock went from 0 to >0
+    if old_stock == 0 and new_stock > 0:
+        notify_back_in_stock_subscribers(db, product, None)
+
     return product
 
 
@@ -668,3 +722,133 @@ def get_product_reviews(
         raise HTTPException(status_code=404, detail="Product not found")
 
     return product.reviews
+
+
+# Back-in-stock subscriptions
+@products_router.post(
+    "/{product_id}/back-in-stock",
+    response_model=BackInStockSubscriptionRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Subscribe to back-in-stock notifications",
+)
+def subscribe_back_in_stock(
+    product_id: uuid.UUID,
+    payload: BackInStockSubscribe,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    variant_id = payload.variant_id
+    if variant_id:
+        variant = db.query(ProductVariant).filter(
+            ProductVariant.id == variant_id,
+            ProductVariant.product_id == product_id,
+        ).first()
+        if not variant:
+            raise HTTPException(status_code=404, detail="Variant not found")
+
+    # Check if already subscribed
+    existing = db.query(BackInStockSubscription).filter(
+        BackInStockSubscription.user_id == current_user.id,
+        BackInStockSubscription.product_id == product_id,
+        BackInStockSubscription.variant_id == variant_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Already subscribed to restock notifications")
+
+    subscription = BackInStockSubscription(
+        user_id=current_user.id,
+        product_id=product_id,
+        variant_id=variant_id,
+        email=current_user.email,
+    )
+    db.add(subscription)
+    db.commit()
+    db.refresh(subscription)
+    return subscription
+
+
+@products_router.post(
+    "/{product_id}/back-in-stock/guest",
+    response_model=BackInStockSubscriptionRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Subscribe to back-in-stock notifications (guest)",
+)
+def subscribe_back_in_stock_guest(
+    product_id: uuid.UUID,
+    payload: BackInStockSubscribe,
+    db: Session = Depends(get_db),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    variant_id = payload.variant_id
+    if variant_id:
+        variant = db.query(ProductVariant).filter(
+            ProductVariant.id == variant_id,
+            ProductVariant.product_id == product_id,
+        ).first()
+        if not variant:
+            raise HTTPException(status_code=404, detail="Variant not found")
+
+    existing = db.query(BackInStockSubscription).filter(
+        BackInStockSubscription.email == payload.email,
+        BackInStockSubscription.product_id == product_id,
+        BackInStockSubscription.variant_id == variant_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Already subscribed to restock notifications")
+
+    subscription = BackInStockSubscription(
+        product_id=product_id,
+        variant_id=variant_id,
+        email=payload.email,
+    )
+    db.add(subscription)
+    db.commit()
+    db.refresh(subscription)
+    return subscription
+
+
+@products_router.get(
+    "/{product_id}/back-in-stock",
+    response_model=list[BackInStockSubscriptionRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get my back-in-stock subscriptions for a product",
+)
+def get_my_back_in_stock_subscriptions(
+    product_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    subs = db.query(BackInStockSubscription).filter(
+        BackInStockSubscription.user_id == current_user.id,
+        BackInStockSubscription.product_id == product_id,
+    ).all()
+    return subs
+
+
+@products_router.delete(
+    "/{product_id}/back-in-stock/{subscription_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Unsubscribe from back-in-stock notifications",
+)
+def unsubscribe_back_in_stock(
+    product_id: uuid.UUID,
+    subscription_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    sub = db.query(BackInStockSubscription).filter(
+        BackInStockSubscription.id == subscription_id,
+        BackInStockSubscription.user_id == current_user.id,
+        BackInStockSubscription.product_id == product_id,
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    db.delete(sub)
+    db.commit()

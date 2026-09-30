@@ -176,3 +176,20 @@ class ReviewRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BackInStockSubscribe(BaseModel):
+    product_id: uuid.UUID
+    variant_id: Optional[uuid.UUID] = None
+    email: str
+
+
+class BackInStockSubscriptionRead(BaseModel):
+    id: uuid.UUID
+    product_id: uuid.UUID
+    variant_id: Optional[uuid.UUID]
+    email: str
+    is_notified: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
