@@ -867,3 +867,59 @@ class DeliveryStopRead(BaseModel):
 class DeliveryStopListResponse(BaseModel):
     total: int
     results: List[DeliveryStopRead]
+
+
+# Vehicle Requirement Schemas
+class TemperatureRequirement(str, enum.Enum):
+    ambient = "ambient"
+    cool = "cool"
+    frozen = "frozen"
+    ultra_frozen = "ultra_frozen"
+
+
+class VehicleRequirementRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    required_vehicle_type: VehicleType
+    temperature_requirement: TemperatureRequirement
+    min_capacity_kg: int
+    min_capacity_liters: int
+    requires_license: bool
+    license_type: Optional[str]
+    special_features: Optional[dict]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VehicleRequirementCreate(BaseModel):
+    name: str
+    required_vehicle_type: VehicleType
+    temperature_requirement: TemperatureRequirement = TemperatureRequirement.ambient
+    min_capacity_kg: int = 0
+    min_capacity_liters: int = 0
+    requires_license: bool = False
+    license_type: Optional[str] = None
+    special_features: Optional[dict] = None
+    is_active: bool = True
+
+
+class VehicleRequirementUpdate(BaseModel):
+    name: Optional[str] = None
+    required_vehicle_type: Optional[VehicleType] = None
+    temperature_requirement: Optional[TemperatureRequirement] = None
+    min_capacity_kg: Optional[int] = None
+    min_capacity_liters: Optional[int] = None
+    requires_license: Optional[bool] = None
+    license_type: Optional[str] = None
+    special_features: Optional[dict] = None
+    is_active: Optional[bool] = None
+
+
+class VehicleRequirementListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[VehicleRequirementRead]

@@ -36,6 +36,33 @@ class VehicleType(str, enum.Enum):
     bicycle = "bicycle"
     motorcycle = "motorcycle"
     pickup_van = "pickup_van"
+    refrigerated_van = "refrigerated_van"
+    refrigerated_truck = "refrigerated_truck"
+
+
+class TemperatureRequirement(str, enum.Enum):
+    ambient = "ambient"          # Room temperature (15-25°C)
+    cool = "cool"                # Cool (2-8°C)
+    frozen = "frozen"            # Frozen (-18°C or below)
+    ultra_frozen = "ultra_frozen" # Ultra frozen (-40°C or below)
+
+
+class VehicleRequirement(Base):
+    """Defines vehicle requirements for different order types."""
+    __tablename__ = "vehicle_requirements"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False, unique=True)
+    required_vehicle_type = Column(Enum(VehicleType, native_enum=False), nullable=False)
+    temperature_requirement = Column(Enum(TemperatureRequirement, native_enum=False), default=TemperatureRequirement.ambient)
+    min_capacity_kg = Column(Integer, default=0)
+    min_capacity_liters = Column(Integer, default=0)
+    requires_license = Column(Boolean, default=False)
+    license_type = Column(String(50))  # e.g., "Class C", "Hazmat"
+    special_features = Column(JSONB)  # e.g., {"tail_lift": true, "gps_tracking": true}
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class KYCStatus(str, enum.Enum):
