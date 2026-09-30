@@ -488,6 +488,16 @@ def update_order_status(
         data={"order_id": str(order.id), "status": payload.status.value},
     )
 
+    if order.shop and order.shop.seller_id:
+        create_notification(
+            db,
+            user_id=order.shop.seller_id,
+            type="order_status",
+            title=f"Order {order.id} updated",
+            body=f"Order status changed to '{payload.status.value}'.",
+            data={"order_id": str(order.id), "status": payload.status.value},
+        )
+
     db.commit()
     db.refresh(order)
 

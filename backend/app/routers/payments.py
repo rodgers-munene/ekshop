@@ -70,6 +70,18 @@ def _mark_order_paid(db: Session, order_group_id: uuid.UUID) -> None:
         data={"order_group_id": str(order_group.id)},
     )
 
+    # Notify sellers of new confirmed orders
+    for order in order_group.orders:
+        if order.shop and order.shop.seller_id:
+            create_notification(
+                db,
+                user_id=order.shop.seller_id,
+                type="new_order",
+                title=f"New order from {order_group.buyer.first_name}",
+                body=f"Order {order.id} for KES {order.total} has been confirmed.",
+                data={"order_id": str(order.id), "order_group_id": str(order_group.id)},
+            )
+
     # Confirmed order -> open delivery ping windows for riders, no admin needed.
     fleet_service.auto_dispatch_group(db, order_group)
 

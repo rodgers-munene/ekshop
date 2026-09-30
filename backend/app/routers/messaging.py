@@ -18,6 +18,7 @@ from app.models.delivery import DeliveryAgent, Delivery
 from app.schemas.messaging import MessageCreate, MessageRead, ConversationRead, ConversationCreate
 from app.schemas.user import UserRead
 from app.models.shop import Shop
+from app.services.notifications import create_notification
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 bearer_scheme = HTTPBearer()
@@ -80,6 +81,46 @@ def _actor_role(identity: Union[User, AuthenticatedIdentity]) -> ActorRole:
     if identity.role == UserRole.admin:
         return ActorRole.admin
     return ActorRole.customer
+
+
+def _notify_conversation_participants(
+    db: Session,
+    conversation: Conversation,
+    sender: Union[User, AuthenticatedIdentity],
+    message: Message,
+) -> None:
+    """Create notifications for all conversation participants except the sender."""
+    participants = set()
+
+    if conversation.order_id is None:
+        for p in conversation.participants:
+            participants.add(("user", p.id))
+    else:
+        order = db.query(Order).filter(Order.id == conversation.order_id).first()
+        if order:
+            participants.add(("user", order.buyer_id))
+            if order.shop:
+                participants.add(("user", order.shop.seller_id))
+
+        delivery = db.query(Delivery).filter(Delivery.order_id == conversation.order_id).first()
+        if delivery and delivery.agent_id:
+            participants.add(("agent", delivery.agent_id))
+
+    if isinstance(sender, User):
+        sender_key = ("user", sender.id)
+    else:
+        sender_key = ("agent", sender.id)
+
+    for p_type, p_id in participants:
+        if (p_type, p_id) != sender_key:
+            create_notification(
+                db,
+                user_id=p_id,
+                type="new_message",
+                title="New message",
+                body=f"You have a new message in conversation {conversation.id}",
+                data={"conversation_id": str(conversation.id), "message_id": str(message.id)},
+            )
 
 
 def _is_participant(identity: Union[User, AuthenticatedIdentity], conversation: Conversation, db: Session) -> bool:
@@ -427,6 +468,9 @@ def create_message(
     conversation.last_message_at = message.created_at
     db.commit()
     db.refresh(message)
+
+    _notify_conversation_participants(db, conversation, identity, message)
+
     return MessageRead(
         id=message.id,
         conversation_id=message.conversation_id,

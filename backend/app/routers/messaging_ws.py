@@ -15,6 +15,7 @@ from app.models.commerce import Order
 from app.models.user import User
 from app.models.delivery import DeliveryAgent, Delivery
 from app.schemas.messaging import MessageRead
+from app.services.notifications import create_notification
 
 router = APIRouter(tags=["messaging-ws"])
 
@@ -126,6 +127,8 @@ async def websocket_conversation(
             db.commit()
             db.refresh(message)
 
+            _notify_ws_participants(db, conv, identity, message)
+
             read_model = MessageRead(
                 id=message.id,
                 conversation_id=message.conversation_id,
@@ -152,3 +155,43 @@ async def _broadcast(room_key: str, message: dict) -> None:
             dead.add(ws)
     for ws in dead:
         active_connections[room_key].discard(ws)
+
+
+def _notify_ws_participants(
+    db: Session,
+    conversation: Conversation,
+    identity: dict,
+    message: Message,
+) -> None:
+    """Create notifications for all conversation participants except the sender (WebSocket version)."""
+    participants = set()
+
+    if conversation.order_id is None:
+        for p in conversation.participants:
+            participants.add(("user", p.id))
+    else:
+        order = db.query(Order).filter(Order.id == conversation.order_id).first()
+        if order:
+            participants.add(("user", order.buyer_id))
+            if order.shop:
+                participants.add(("user", order.shop.seller_id))
+
+        delivery = db.query(Delivery).filter(Delivery.order_id == conversation.order_id).first()
+        if delivery and delivery.agent_id:
+            participants.add(("agent", delivery.agent_id))
+
+    if identity["type"] == "agent":
+        sender_key = ("agent", identity["id"])
+    else:
+        sender_key = ("user", identity["id"])
+
+    for p_type, p_id in participants:
+        if (p_type, p_id) != sender_key:
+            create_notification(
+                db,
+                user_id=p_id,
+                type="new_message",
+                title="New message",
+                body=f"You have a new message in conversation {conversation.id}",
+                data={"conversation_id": str(conversation.id), "message_id": str(message.id)},
+            )
