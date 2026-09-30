@@ -315,6 +315,10 @@ async def update_delivery_status(
         delivery.picked_photo_url = payload.picked_photo_url
     elif payload.status == DeliveryStatus.in_transit:
         delivery.in_transit_at = now
+        # Generate OTP for delivery verification
+        import random
+        delivery.otp_code = str(random.randint(100000, 999999))
+        delivery.otp_expires_at = now + timedelta(minutes=30)
     elif payload.status == DeliveryStatus.delivered:
         address = delivery.order.delivery_address or {}
         buyer_lat = address.get("lat")
@@ -326,12 +330,21 @@ async def update_delivery_status(
                     status.HTTP_400_BAD_REQUEST,
                     f"You must be within 500m of the delivery address to mark as delivered. Current distance: {distance:.2f} km",
                 )
+
+        # Verify OTP
+        if not payload.otp_code:
+            raise HTTPException(400, "OTP code is required to mark as delivered")
+        if not delivery.otp_code or delivery.otp_code != payload.otp_code:
+            raise HTTPException(400, "Invalid OTP code")
+        if not delivery.otp_expires_at or delivery.otp_expires_at < datetime.now(timezone.utc):
+            raise HTTPException(400, "OTP has expired")
+
         delivery.delivered_at = now
         delivery.delivered_photo_url = payload.delivered_photo_url
+        delivery.otp_verified_at = now
         agent.total_deliveries += 1
         agent.status = DeliveryAgentStatus.active
         agent.current_order_id = None
-        # rider's share of the delivery fee lands in the wallet ledger
         fleet.credit_delivery_earnings(db, delivery, agent)
 
     event = DeliveryEvent(

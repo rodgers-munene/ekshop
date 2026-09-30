@@ -97,6 +97,8 @@ class DeliveryStatusUpdate(BaseModel):
     # Photo proof URLs (required for picked/delivered transitions)
     picked_photo_url: Optional[str] = None
     delivered_photo_url: Optional[str] = None
+    # OTP code (required for delivered transition)
+    otp_code: Optional[str] = None
 
 
 class DeliveryRateRead(BaseModel):

@@ -213,6 +213,10 @@ class Delivery(Base):
     # Photo proof URLs (stored as S3/CDN URLs)
     picked_photo_url = Column(String(500))
     delivered_photo_url = Column(String(500))
+    # OTP verification for delivery completion
+    otp_code = Column(String(6))
+    otp_expires_at = Column(DateTime(timezone=True))
+    otp_verified_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     order = relationship("Order", back_populates="delivery", foreign_keys=[order_id])
