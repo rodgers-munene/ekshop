@@ -479,6 +479,64 @@ class DispatcherLog(Base):
     agent = relationship("DeliveryAgent")
 
 
+class GPSFraudType(str, enum.Enum):
+    gps_spoofing = "gps_spoofing"
+    impossible_speed = "impossible_speed"
+    teleportation = "teleportation"
+    stationary_drift = "stationary_drift"
+    route_deviation = "route_deviation"
+    fake_delivery = "fake_delivery"
+    location_mismatch = "location_mismatch"
+
+
+class GPSFraudSeverity(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+
+class GPSFraudAlert(Base):
+    """Detects and tracks GPS fraud/spoofing attempts by riders."""
+    __tablename__ = "gps_fraud_alerts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("delivery_agents.id", ondelete="CASCADE"), nullable=False)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="SET NULL"))
+    fraud_type = Column(Enum(GPSFraudType, native_enum=False), nullable=False)
+    severity = Column(Enum(GPSFraudSeverity, native_enum=False), default=GPSFraudSeverity.medium, nullable=False)
+    
+    # Location data at time of detection
+    lat = Column(Float)
+    lng = Column(Float)
+    speed_kmh = Column(Float)
+    heading = Column(Float)
+    accuracy_m = Column(Float)
+    
+    # Detection details
+    expected_lat = Column(Float)
+    expected_lng = Column(Float)
+    distance_km = Column(Float)  # distance from expected location
+    time_delta_sec = Column(Integer)  # time since last valid location
+    speed_kmh = Column(Float)  # calculated speed
+    
+    # Evidence
+    evidence = Column(JSONB)  # raw GPS points, timestamps, calculations
+    description = Column(Text)
+    
+    # Status
+    is_reviewed = Column(Boolean, default=False)
+    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    resolution = Column(String(50))  # confirmed_fraud, false_positive, inconclusive
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    agent = relationship("DeliveryAgent")
+    delivery = relationship("Delivery")
+
+
 class ZoneConfig(Base):
     __tablename__ = "zone_configs"
 

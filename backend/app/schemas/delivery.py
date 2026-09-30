@@ -764,3 +764,60 @@ class DeliveryTrackingRead(BaseModel):
 class DeliveryOTPVerify(BaseModel):
     delivery_id: uuid.UUID
     otp_code: str
+
+
+# GPS Fraud Detection Schemas
+class GPSFraudType(str, enum.Enum):
+    gps_spoofing = "gps_spoofing"
+    impossible_speed = "impossible_speed"
+    teleportation = "teleportation"
+    stationary_drift = "stationary_drift"
+    route_deviation = "route_deviation"
+    fake_delivery = "fake_delivery"
+    location_mismatch = "location_mismatch"
+
+
+class GPSFraudSeverity(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+
+class GPSFraudAlertRead(BaseModel):
+    id: uuid.UUID
+    agent_id: uuid.UUID
+    delivery_id: Optional[uuid.UUID]
+    fraud_type: GPSFraudType
+    severity: GPSFraudSeverity
+    lat: Optional[float]
+    lng: Optional[float]
+    speed_kmh: Optional[float]
+    heading: Optional[float]
+    accuracy_m: Optional[float]
+    expected_lat: Optional[float]
+    expected_lng: Optional[float]
+    distance_km: Optional[float]
+    time_delta_sec: Optional[int]
+    speed_kmh: Optional[float]
+    description: Optional[str]
+    evidence: Optional[dict]
+    is_reviewed: bool
+    reviewed_by: Optional[uuid.UUID]
+    reviewed_at: Optional[datetime]
+    resolution: Optional[str]
+    resolved_at: Optional[datetime]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GPSFraudAlertListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[GPSFraudAlertRead]
+
+
+class GPSFraudAlertReview(BaseModel):
+    resolution: str  # confirmed_fraud, false_positive, inconclusive
