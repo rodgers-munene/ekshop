@@ -1418,7 +1418,25 @@ async def trigger_sos(
     db: Session = Depends(get_db),
     agent: DeliveryAgent = Depends(get_current_agent),
 ):
-    """Trigger an SOS alert. Immediately notifies emergency contacts and ops."""
+    """Raise an SOS alert and page on-call ops.
+
+    Emergency contacts are not platform users -- they only carry a phone
+    number, and Notification.user_id is a FK to users.id. Passing a contact id
+    here raised a foreign-key violation on insert, and emailing them is not
+    viable either since they have no address on file. They are therefore
+    recorded on the alert for a human to call, while the in-app alert goes to
+    real admin users.
+    """
+    contacts = (
+        db.query(EmergencyContact)
+        .filter(EmergencyContact.agent_id == agent.id)
+        .all()
+    )
+    contact_payload = [
+        {"name": c.name, "phone": c.phone, "relationship": c.contact_relationship}
+        for c in contacts
+    ]
+
     alert = SafetyAlert(
         agent_id=agent.id,
         alert_type=SafetyAlertType.sos,
@@ -1426,23 +1444,52 @@ async def trigger_sos(
         lat=payload.lat,
         lng=payload.lng,
         message=payload.message or "SOS triggered by rider",
-        alert_metadata=payload.alert_metadata or {"source": "manual_sos"},
+        alert_metadata={
+            "source": "manual_sos",
+            "emergency_contacts": contact_payload,
+            # Surfaced on the ops board so a human calls these numbers.
+            "requires_manual_callout": bool(contact_payload),
+        },
     )
     db.add(alert)
     db.commit()
     db.refresh(alert)
 
-    contacts = db.query(EmergencyContact).filter(EmergencyContact.agent_id == agent.id).all()
-    for contact in contacts:
+    body = (
+        f"Rider {agent.name} triggered SOS. "
+        f"Location: {payload.lat}, {payload.lng}. "
+        f"Message: {payload.message or 'none'}"
+    )
+    if contact_payload:
+        numbers = ", ".join(c["phone"] for c in contact_payload)
+        body += f" Emergency contacts to call: {numbers}"
+
+    # Ops on duty are real users, so these are valid notification recipients.
+    on_call = (
+        db.query(User)
+        .filter(User.role == UserRole.admin, User.status == "active")
+        .all()
+    )
+    for admin in on_call:
         create_notification(
             db,
-            user_id=contact.id,
+            user_id=admin.id,
             type="safety_alert",
-            title=f"SOS Alert from {agent.name}",
-            body=f"Rider {agent.name} triggered SOS. Location: {payload.lat}, {payload.lng}. Message: {payload.message}",
-            data={"alert_id": str(alert.id), "lat": payload.lat, "lng": payload.lng},
+            title=f"SOS: {agent.name}",
+            body=body,
+            data={
+                "alert_id": str(alert.id),
+                "agent_id": str(agent.id),
+                "lat": payload.lat,
+                "lng": payload.lng,
+            },
         )
+    db.commit()
 
+    logger.warning(
+        "SOS raised by agent %s (alert %s); %d admin(s) notified, %d contact(s) listed for callout",
+        agent.id, alert.id, len(on_call), len(contact_payload),
+    )
     return alert
 
 
@@ -1906,7 +1953,6 @@ def update_delivery_stop(
             raise HTTPException(400, "OTP has expired")
         stop.otp_verified_at = datetime.now(timezone.utc)
 
-    now = datetime.now(timezone.utc)
     if payload.status:
         stop.status = payload.status
         if payload.status == DeliveryStatus.picked:
