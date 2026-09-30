@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # only for seller subscription billing (see PAYSTACK_* below).
     MPESA_CONSUMER_KEY: str | None = None
     MPESA_CONSUMER_SECRET: str | None = None
-    MPESA_SHORTCODE: str = "174379"
+    MPESA_SHORTCODE: str | None = None
     MPESA_PASSKEY: str | None = None
     # Set only when the shortcode above is a Store/Organization number with a
     # separate Till (Buy Goods) number linked to it — the STK push password
