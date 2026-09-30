@@ -217,6 +217,12 @@ class Delivery(Base):
     otp_code = Column(String(6))
     otp_expires_at = Column(DateTime(timezone=True))
     otp_verified_at = Column(DateTime(timezone=True))
+    # Insurance
+    insurance_enabled = Column(Boolean, default=False)
+    insurance_value = Column(Numeric(14, 2), default=0)
+    insurance_premium = Column(Numeric(14, 2), default=0)
+    insurance_provider = Column(String(100))
+    insurance_policy_number = Column(String(100))
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     order = relationship("Order", back_populates="delivery", foreign_keys=[order_id])
@@ -572,3 +578,41 @@ class AgentZoneAssignment(Base):
 
     agent = relationship("DeliveryAgent")
     zone = relationship("ZoneConfig")
+
+
+class InsuranceClaimStatus(str, enum.Enum):
+    filed = "filed"
+    under_review = "under_review"
+    approved = "approved"
+    rejected = "rejected"
+    paid = "paid"
+    closed = "closed"
+
+
+class InsuranceClaimType(str, enum.Enum):
+    damage = "damage"
+    loss = "loss"
+    theft = "theft"
+    delay = "delay"
+
+
+class InsuranceClaim(Base):
+    """Insurance claims for delivery issues."""
+    __tablename__ = "insurance_claims"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="CASCADE"), nullable=False)
+    claimant_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)  # buyer or seller
+    claim_type = Column(Enum(InsuranceClaimType, native_enum=False), nullable=False)
+    status = Column(Enum(InsuranceClaimStatus, native_enum=False), default=InsuranceClaimStatus.filed, nullable=False)
+    claimed_amount = Column(Numeric(14, 2), nullable=False)
+    approved_amount = Column(Numeric(14, 2), default=0)
+    description = Column(Text)
+    evidence = Column(JSONB)  # photos, documents, etc.
+    filed_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+
+    delivery = relationship("Delivery")
+    claimant = relationship("User")
