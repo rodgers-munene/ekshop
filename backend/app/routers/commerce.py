@@ -382,7 +382,12 @@ def checkout(
         delivery_address=address_snapshot,
         subtotal="0.00",
         delivery_fee="0.00",
+        tax_amount="0.00",
         total="0.00",
+        delivery_instructions=payload.delivery_instructions,
+        call_on_arrival=payload.call_on_arrival,
+        leave_at_door=payload.leave_at_door,
+        require_signature=payload.require_signature,
     )
     db.add(order_group)
     db.flush()  # generates order_group.id

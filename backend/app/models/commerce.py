@@ -92,6 +92,11 @@ class UserAddress(Base):
     lng = Column(Float)
     sublocation = Column(String(255))
     is_default = Column(Boolean, default=False, nullable=False)
+    # Delivery preferences
+    delivery_instructions = Column(Text)  # leave at door, call on arrival, etc.
+    call_on_arrival = Column(Boolean, default=False)
+    leave_at_door = Column(Boolean, default=False)
+    require_signature = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     user = relationship("User", back_populates="addresses")
@@ -155,6 +160,11 @@ class OrderGroup(Base):
     tax_amount = Column(String(20), default="0.00")
     total = Column(String(20), nullable=False)
     delivery_address = Column(JSONB, nullable=False)
+    # Delivery preferences
+    delivery_instructions = Column(Text)  # leave at door, call on arrival, etc.
+    call_on_arrival = Column(Boolean, default=False)
+    leave_at_door = Column(Boolean, default=False)
+    require_signature = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     buyer = relationship("User", back_populates="order_groups")

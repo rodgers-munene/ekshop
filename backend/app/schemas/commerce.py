@@ -15,6 +15,11 @@ class CartItemCreate(BaseModel):
 class CheckoutCreate(BaseModel):
     address_id: uuid.UUID
     notes: Optional[str] = None
+    # Delivery preferences
+    delivery_instructions: Optional[str] = None
+    call_on_arrival: bool = False
+    leave_at_door: bool = False
+    require_signature: bool = False
 
 
 class DeliveryFeePreviewItem(BaseModel):
@@ -53,6 +58,11 @@ class UserAddressCreate(BaseModel):
     lng: Optional[float] = None
     sublocation: Optional[str] = None
     is_default: bool = False
+    # Delivery preferences
+    delivery_instructions: Optional[str] = None
+    call_on_arrival: bool = False
+    leave_at_door: bool = False
+    require_signature: bool = False
 
 
 class UserAddressRead(BaseModel):
@@ -71,6 +81,11 @@ class UserAddressRead(BaseModel):
     lng: Optional[float] = None
     sublocation: Optional[str] = None
     is_default: bool
+    # Delivery preferences
+    delivery_instructions: Optional[str] = None
+    call_on_arrival: bool = False
+    leave_at_door: bool = False
+    require_signature: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -90,6 +105,11 @@ class UserAddressUpdate(BaseModel):
     lng: Optional[float] = None
     sublocation: Optional[str] = None
     is_default: Optional[bool] = None
+    # Delivery preferences
+    delivery_instructions: Optional[str] = None
+    call_on_arrival: Optional[bool] = None
+    leave_at_door: Optional[bool] = None
+    require_signature: Optional[bool] = None
 
 
 
