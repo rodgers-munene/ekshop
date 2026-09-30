@@ -17,7 +17,7 @@ from app.models.commerce import (
     Order,
     OrderStatus,
 )
-from app.models.catalog import Product
+from app.models.catalog import Product, Category
 from app.models.delivery import Delivery, DeliveryStatus
 from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
@@ -1100,3 +1100,214 @@ def get_churn_risks_insight(
 ):
     since, until = _period_bounds(period, 30)
     return dashboard_metrics.get_churn_risks_insight(db, since, until)
+
+
+# ── Bulk actions / CSV import-export ────────────────────────────────────────────
+
+import csv
+import io
+from fastapi.responses import StreamingResponse
+
+
+@router.get(
+    "/orders/export",
+    response_class=StreamingResponse,
+    summary="Export orders as CSV",
+)
+def export_orders_csv(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until = _period_bounds(period, 30)
+    query = (
+        db.query(OrderGroup)
+        .options(
+            selectinload(OrderGroup.buyer),
+            selectinload(OrderGroup.orders).selectinload(Order.items),
+            selectinload(OrderGroup.orders).selectinload(Order.shop),
+        )
+        .filter(OrderGroup.status == OrderGroupStatus.paid)
+    )
+    if period is not None:
+        query = query.filter(OrderGroup.created_at >= since, OrderGroup.created_at < until)
+    if status:
+        query = query.filter(OrderGroup.status == status)
+
+    def generate():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "Order Group ID", "Short ID", "Date", "Buyer Name", "Buyer Email",
+            "Buyer Phone", "Total", "Tax", "Delivery Fee", "Status",
+            "Shop Count", "Item Count", "Delivery County", "Delivery Town"
+        ])
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for g in query.order_by(OrderGroup.created_at.desc()).yield_per(100):
+            address = g.delivery_address or {}
+            writer.writerow([
+                str(g.id),
+                str(g.id)[:8],
+                g.created_at.isoformat(),
+                f"{g.buyer.first_name} {g.buyer.last_name}",
+                g.buyer.email,
+                g.buyer.phone or "",
+                g.total,
+                g.tax_amount,
+                g.delivery_fee,
+                g.status.value if hasattr(g.status, "value") else str(g.status),
+                len({o.shop_id for o in g.orders}),
+                sum(len(o.items) for o in g.orders),
+                address.get("county", ""),
+                address.get("town", ""),
+            ])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=orders_export_{datetime.now().strftime('%Y%m%d')}.csv"},
+    )
+
+
+@router.get(
+    "/products/export",
+    response_class=StreamingResponse,
+    summary="Export products as CSV",
+)
+def export_products_csv(
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    q = db.query(Product).options(selectinload(Product.shop))
+    if status:
+        q = q.filter(Product.status == status)
+
+    def generate():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "Product ID", "Name", "Slug", "SKU", "Price", "Stock",
+            "Status", "Shop", "Shop Slug", "Category", "Created At"
+        ])
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for p in q.order_by(Product.created_at.desc()).yield_per(100):
+            writer.writerow([
+                str(p.id),
+                p.name,
+                p.slug,
+                p.sku or "",
+                p.price,
+                p.stock_qty,
+                p.status.value if hasattr(p.status, "value") else str(p.status),
+                p.shop.name if p.shop else "",
+                p.shop.slug if p.shop else "",
+                p.category.name if p.category else "",
+                p.created_at.isoformat(),
+            ])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=products_export_{datetime.now().strftime('%Y%m%d')}.csv"},
+    )
+
+
+@router.post(
+    "/orders/bulk-status",
+    response_model=dict,
+    summary="Bulk update order statuses",
+)
+def bulk_update_order_status(
+    order_ids: list[uuid.UUID],
+    new_status: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    from app.models.commerce import OrderGroupStatus
+    try:
+        target_status = OrderGroupStatus(new_status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
+
+    updated = db.query(OrderGroup).filter(
+        OrderGroup.id.in_(order_ids)
+    ).update({OrderGroup.status: target_status}, synchronize_session=False)
+    db.commit()
+    return {"updated": updated}
+
+
+@router.post(
+    "/products/import",
+    response_model=dict,
+    summary="Import products from CSV (admin)",
+)
+async def import_products_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="File must be CSV")
+
+    content = await file.read()
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8")))
+    required = {"name", "slug", "price", "shop_id", "category_id"}
+    if not required.issubset(set(reader.fieldnames or [])):
+        raise HTTPException(status_code=400, detail=f"CSV must contain columns: {', '.join(required)}")
+
+    created = 0
+    errors = []
+    for i, row in enumerate(reader, start=2):
+        try:
+            shop = db.query(Shop).filter(Shop.id == row["shop_id"]).first()
+            if not shop:
+                errors.append(f"Row {i}: Shop {row['shop_id']} not found")
+                continue
+
+            category = db.query(Category).filter(Category.id == row["category_id"]).first()
+            if not category:
+                errors.append(f"Row {i}: Category {row['category_id']} not found")
+                continue
+
+            # Check if slug already exists for this shop
+            existing = db.query(Product).filter(
+                Product.slug == row["slug"],
+                Product.shop_id == shop.id,
+            ).first()
+            if existing:
+                errors.append(f"Row {i}: Product with slug '{row['slug']}' already exists for this shop")
+                continue
+
+            product = Product(
+                shop_id=shop.id,
+                category_id=category.id,
+                name=row["name"],
+                slug=row["slug"],
+                description=row.get("description", ""),
+                price=row["price"],
+                compare_price=row.get("compare_price") or None,
+                sku=row.get("sku") or None,
+                stock_qty=int(row.get("stock_qty", 0)),
+                status=row.get("status", "draft"),
+            )
+            db.add(product)
+            created += 1
+        except Exception as exc:
+            errors.append(f"Row {i}: {exc}")
+
+    db.commit()
+    return {"created": created, "errors": errors}
