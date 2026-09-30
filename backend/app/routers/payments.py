@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.dependencies.auth import get_current_active_user
 from app.dependencies.database import get_db
+from app.core.limiter import limiter
 from app.models.user import User
 from app.models.commerce import OrderGroup, OrderGroupStatus, OrderStatus
 from app.models.payment import PaymentIntent, Payment, PaymentStatus
@@ -86,7 +87,9 @@ def _mark_order_paid(db: Session, order_group_id: uuid.UUID) -> None:
     fleet_service.auto_dispatch_group(db, order_group)
 
 @router.post("/mpesa/stk-push", response_model=StkPushResponse, status_code=201)
+@limiter.limit("5/minute")
 def mpesa_stk_push(
+    request: Request,
     payload: StkPushRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -418,7 +421,9 @@ def mpesa_status_by_order(
 
 
 @router.post("/paystack/initialize", response_model=PaystackInitResponse, status_code=201)
+@limiter.limit("5/minute")
 def paystack_initialize(
+    request: Request,
     payload: PaystackInitRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),

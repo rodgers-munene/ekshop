@@ -1,5 +1,5 @@
 from decimal import Decimal
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 import uuid
 
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.commerce import Cart, CartItem, UserAddress, OrderGroup, Order, OrderItem
 from app.models.catalog import Product
 from app.models.shop import Shop
+from app.core.limiter import limiter
 from app.schemas.commerce import (
     CartRead,
     CartItemRead,
@@ -236,7 +237,9 @@ def preview_delivery_fee(
     status_code=status.HTTP_201_CREATED,
     summary="Checkout: convert cart into orders",
 )
+@limiter.limit("10/minute")
 def checkout(
+    request: Request,
     payload: CheckoutCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -451,7 +454,9 @@ def get_order(
     response_model=OrderRead,
     summary="Seller updates the status of an order",
 )
+@limiter.limit("30/minute")
 def update_order_status(
+    request: Request,
     order_id: uuid.UUID,
     payload: OrderStatusUpdate,
     db: Session = Depends(get_db),
@@ -509,7 +514,9 @@ def update_order_status(
     response_model=OrderRead,
     summary="Buyer cancels an order and stock is restored",
 )
+@limiter.limit("10/minute")
 def cancel_order(
+    request: Request,
     order_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
