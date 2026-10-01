@@ -456,6 +456,72 @@ class MarginLeakageMetrics(BaseModel):
     trend: List[MarginLeakageTrendPoint]
 
 
+class RevenueBucket(BaseModel):
+    label: str
+    orders: int
+    # Paid checkouts only: goods sold (GMV) plus delivery fees make up total.
+    gmv: str
+    delivery_fee: str
+    total: str
+
+
+class StatusCount(BaseModel):
+    status: str
+    count: int
+
+
+class WeekdayAverageRow(BaseModel):
+    label: str
+    # Average paid orders per day, Monday first.
+    averages: List[float]
+
+
+class TopMerchantRow(BaseModel):
+    shop_id: str
+    name: str
+    slug: str
+    county: Optional[str] = None
+    orders: int
+    buyers: int
+    gmv: str
+    average_order_value: str
+    # This shop's slice of all GMV in the range.
+    share_pct: float
+    last_order_at: Optional[datetime] = None
+
+
+class TopBuyerRow(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    phone: Optional[str] = None
+    orders: int
+    gmv: str
+    delivery_fee: str
+    total: str
+    average_order_value: str
+    share_pct: float
+    last_order_at: Optional[datetime] = None
+
+
+class TopAccounts(BaseModel):
+    gmv_total: str
+    merchants: List[TopMerchantRow]
+    buyers: List[TopBuyerRow]
+
+
+class RevenueBreakdown(BaseModel):
+    daily: List[RevenueBucket]
+    top: TopAccounts
+    monthly: List[RevenueBucket]
+    yearly: List[RevenueBucket]
+    checkout_status: List[StatusCount]
+    payment_status: List[StatusCount]
+    weekday_overall: List[float]
+    weekday_by_month: List[WeekdayAverageRow]
+    weekday_by_year: List[WeekdayAverageRow]
+
+
 class RealTimeMetrics(BaseModel):
     active_sessions: int
     active_users: int

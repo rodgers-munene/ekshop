@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Store, Users, FolderTree, Truck, GalleryHorizontal, Tag, Banknote, FlaskConical, Bell, BarChart3, ClipboardList, Package } from "lucide-react";
+import { LayoutDashboard, Store, Users, FolderTree, Truck, GalleryHorizontal, Tag, Banknote, FlaskConical, Bell, BarChart3, ClipboardList, Package, Wallet } from "lucide-react";
 
 const LINKS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin/revenue", label: "Revenue", icon: Wallet },
   { href: "/admin/sellers", label: "Sellers", icon: Store },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },

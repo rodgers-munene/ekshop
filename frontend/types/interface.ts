@@ -700,6 +700,71 @@ export interface MarginLeakageMetrics {
   trend: MarginLeakageTrendPoint[];
 }
 
+export interface RevenueBucket {
+  label: string;
+  orders: number;
+  gmv: string;
+  delivery_fee: string;
+  total: string;
+}
+
+export interface StatusCount {
+  status: string;
+  count: number;
+}
+
+export interface WeekdayAverageRow {
+  label: string;
+  /** Average paid orders per day, Monday first. */
+  averages: number[];
+}
+
+export interface TopMerchantRow {
+  shop_id: string;
+  name: string;
+  slug: string;
+  county: string | null;
+  orders: number;
+  buyers: number;
+  gmv: string;
+  average_order_value: string;
+  /** This shop's slice of all GMV in the range. */
+  share_pct: number;
+  last_order_at: string | null;
+}
+
+export interface TopBuyerRow {
+  user_id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  orders: number;
+  gmv: string;
+  delivery_fee: string;
+  total: string;
+  average_order_value: string;
+  share_pct: number;
+  last_order_at: string | null;
+}
+
+export interface TopAccounts {
+  gmv_total: string;
+  merchants: TopMerchantRow[];
+  buyers: TopBuyerRow[];
+}
+
+export interface RevenueBreakdown {
+  daily: RevenueBucket[];
+  top: TopAccounts;
+  monthly: RevenueBucket[];
+  yearly: RevenueBucket[];
+  checkout_status: StatusCount[];
+  payment_status: StatusCount[];
+  weekday_overall: number[];
+  weekday_by_month: WeekdayAverageRow[];
+  weekday_by_year: WeekdayAverageRow[];
+}
+
 export interface RealTimeMetrics {
   active_sessions: number;
   active_users: number;

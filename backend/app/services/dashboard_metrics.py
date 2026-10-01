@@ -6,18 +6,20 @@ reports). Metrics that would need new subsystems (rider accept/reject flow,
 delivery cost tracking, post-delivery ratings, a POS integration) are
 intentionally left out — see the implementation plan for why.
 """
-from datetime import datetime, timedelta, timezone
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from typing import List, Optional
 
-from sqlalchemy import Numeric, cast, desc, distinct, func
+from sqlalchemy import Date, Numeric, cast, desc, distinct, func
 from sqlalchemy.orm import Session
 
 from app.models.analytics import UserEvent, EventType, IssueReport
 from app.models.catalog import Product
 from app.models.commerce import Cart, CartItem, Order, OrderGroup, OrderGroupStatus, OrderItem, OrderStatus
 from app.models.delivery import Delivery, DeliveryAgent, DeliveryAgentStatus, DeliveryStatus
+from app.models.payment import Payment
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole
 
@@ -1022,3 +1024,271 @@ def get_churn_risks_insight(db: Session, since: datetime, until: Optional[dateti
         }
         for first_name, last_name, email, last_order_at in rows
     ]
+
+
+# ── Revenue breakdown (daily / monthly / yearly, weekday demand) ────────────
+
+KENYA_TZ = "Africa/Nairobi"
+
+
+def _month_start(d: date) -> date:
+    return d.replace(day=1)
+
+
+def _add_months(d: date, months: int) -> date:
+    index = d.year * 12 + d.month - 1 + months
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def _weekday_averages(counts: dict, start: date, end: date) -> List[float]:
+    """Average paid orders per calendar day for each weekday (Mon..Sun) in [start, end].
+
+    Days with no orders count as zero, so a quiet Sunday pulls the Sunday
+    average down instead of being skipped.
+    """
+    totals = [0] * 7
+    days = [0] * 7
+    d = start
+    while d <= end:
+        totals[d.weekday()] += counts.get(d, 0)
+        days[d.weekday()] += 1
+        d += timedelta(days=1)
+    return [round(totals[i] / days[i], 2) if days[i] else 0.0 for i in range(7)]
+
+
+def kenya_today() -> date:
+    return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=3))).date()
+
+
+def _bucket(orders: int, gmv: Decimal, fee: Decimal, label: str) -> dict:
+    return {
+        "label": label,
+        "orders": orders,
+        "gmv": str(gmv.quantize(Decimal("0.01"))),
+        "delivery_fee": str(fee.quantize(Decimal("0.01"))),
+        "total": str((gmv + fee).quantize(Decimal("0.01"))),
+    }
+
+
+def _paid_daily_rows(db: Session, start: Optional[date] = None, end: Optional[date] = None) -> list:
+    """Paid checkouts per Kenyan calendar day, optionally limited to [start, end]."""
+    local_day = cast(func.timezone(KENYA_TZ, OrderGroup.created_at), Date)
+    query = db.query(
+        local_day.label("day"),
+        func.count(OrderGroup.id).label("orders"),
+        func.coalesce(func.sum(cast(OrderGroup.subtotal, Numeric)), 0).label("gmv"),
+        func.coalesce(func.sum(cast(func.coalesce(OrderGroup.delivery_fee, "0"), Numeric)), 0).label("delivery_fee"),
+    ).filter(OrderGroup.status == OrderGroupStatus.paid)
+    if start:
+        query = query.filter(local_day >= start)
+    if end:
+        query = query.filter(local_day <= end)
+    return query.group_by(local_day).all()
+
+
+def _daily_buckets(by_day: dict, start: date, end: date) -> List[dict]:
+    """One row per day from end back to start, with zero rows for days without orders."""
+    daily = []
+    d = end
+    while d >= start:
+        row = by_day.get(d)
+        daily.append(
+            _bucket(
+                int(row.orders) if row else 0,
+                Decimal(row.gmv) if row else Decimal("0"),
+                Decimal(row.delivery_fee) if row else Decimal("0"),
+                d.isoformat(),
+            )
+        )
+        d -= timedelta(days=1)
+    return daily
+
+
+def get_daily_revenue(db: Session, start: date, end: date) -> List[dict]:
+    rows = _paid_daily_rows(db, start, end)
+    return _daily_buckets({row.day: row for row in rows}, start, end)
+
+
+def _money(value) -> str:
+    return str(Decimal(value or 0).quantize(Decimal("0.01")))
+
+
+def get_top_accounts(db: Session, start: date, end: date, limit: int = 5) -> dict:
+    """Top merchants and buyers by GMV from paid checkouts in [start, end] (Kenyan days)."""
+    local_day = cast(func.timezone(KENYA_TZ, OrderGroup.created_at), Date)
+    in_range = (
+        OrderGroup.status == OrderGroupStatus.paid,
+        local_day >= start,
+        local_day <= end,
+    )
+
+    gmv_total = (
+        db.query(func.coalesce(func.sum(cast(OrderGroup.subtotal, Numeric)), 0)).filter(*in_range).scalar()
+    )
+    gmv_total = Decimal(gmv_total or 0)
+
+    def share(gmv) -> float:
+        return round(float(Decimal(gmv) / gmv_total * 100), 1) if gmv_total else 0.0
+
+    shop_gmv = func.sum(cast(Order.subtotal, Numeric))
+    merchant_rows = (
+        db.query(
+            Shop.id,
+            Shop.name,
+            Shop.slug,
+            Shop.county,
+            func.count(Order.id).label("orders"),
+            func.count(distinct(Order.buyer_id)).label("buyers"),
+            shop_gmv.label("gmv"),
+            func.max(OrderGroup.created_at).label("last_order_at"),
+        )
+        .join(Order, Order.shop_id == Shop.id)
+        .join(OrderGroup, OrderGroup.id == Order.group_id)
+        .filter(*in_range)
+        .group_by(Shop.id, Shop.name, Shop.slug, Shop.county)
+        .order_by(shop_gmv.desc())
+        .limit(limit)
+        .all()
+    )
+
+    buyer_gmv = func.sum(cast(OrderGroup.subtotal, Numeric))
+    buyer_rows = (
+        db.query(
+            User.id,
+            User.first_name,
+            User.last_name,
+            User.email,
+            User.phone,
+            func.count(OrderGroup.id).label("orders"),
+            buyer_gmv.label("gmv"),
+            func.sum(cast(func.coalesce(OrderGroup.delivery_fee, "0"), Numeric)).label("delivery_fee"),
+            func.max(OrderGroup.created_at).label("last_order_at"),
+        )
+        .join(OrderGroup, OrderGroup.buyer_id == User.id)
+        .filter(*in_range)
+        .group_by(User.id, User.first_name, User.last_name, User.email, User.phone)
+        .order_by(buyer_gmv.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "gmv_total": _money(gmv_total),
+        "merchants": [
+            {
+                "shop_id": str(r.id),
+                "name": r.name,
+                "slug": r.slug,
+                "county": r.county,
+                "orders": r.orders,
+                "buyers": r.buyers,
+                "gmv": _money(r.gmv),
+                "average_order_value": _money(Decimal(r.gmv or 0) / r.orders if r.orders else 0),
+                "share_pct": share(r.gmv or 0),
+                "last_order_at": r.last_order_at,
+            }
+            for r in merchant_rows
+        ],
+        "buyers": [
+            {
+                "user_id": str(r.id),
+                "name": f"{r.first_name} {r.last_name}".strip(),
+                "email": r.email,
+                "phone": r.phone,
+                "orders": r.orders,
+                "gmv": _money(r.gmv),
+                "delivery_fee": _money(r.delivery_fee),
+                "total": _money(Decimal(r.gmv or 0) + Decimal(r.delivery_fee or 0)),
+                "average_order_value": _money(Decimal(r.gmv or 0) / r.orders if r.orders else 0),
+                "share_pct": share(r.gmv or 0),
+                "last_order_at": r.last_order_at,
+            }
+            for r in buyer_rows
+        ],
+    }
+
+
+def get_revenue_breakdown(db: Session) -> dict:
+    """Paid checkouts bucketed by Kenyan calendar day, month and year.
+
+    GMV is goods sold (order group subtotal) and delivery fee is what buyers
+    paid for delivery; the two add up to the total collected.
+    """
+    rows = _paid_daily_rows(db)
+    by_day = {row.day: row for row in rows}
+    today = kenya_today()
+    daily = _daily_buckets(by_day, today - timedelta(days=29), today)
+    top = get_top_accounts(db, today - timedelta(days=29), today)
+
+    month_sums: dict = defaultdict(lambda: [0, Decimal("0"), Decimal("0")])
+    year_sums: dict = defaultdict(lambda: [0, Decimal("0"), Decimal("0")])
+    for row in rows:
+        for key, sums in ((_month_start(row.day), month_sums), (row.day.year, year_sums)):
+            sums[key][0] += int(row.orders)
+            sums[key][1] += Decimal(row.gmv)
+            sums[key][2] += Decimal(row.delivery_fee)
+
+    first_day = min(by_day) if by_day else today
+    this_month = _month_start(today)
+    months = [_add_months(this_month, -i) for i in range(12)]
+    monthly = [
+        _bucket(*month_sums[m], m.strftime("%Y-%m"))
+        for m in months
+        if m >= _month_start(first_day)
+    ]
+    yearly = [
+        _bucket(*year_sums[y], str(y))
+        for y in range(today.year, first_day.year - 1, -1)
+    ]
+
+    order_counts = {d: int(row.orders) for d, row in by_day.items()}
+    weekday_by_month = [
+        {
+            "label": m.strftime("%Y-%m"),
+            "averages": _weekday_averages(
+                order_counts,
+                max(m, first_day),
+                min(_add_months(m, 1) - timedelta(days=1), today),
+            ),
+        }
+        for m in months
+        if m >= _month_start(first_day)
+    ]
+    weekday_by_year = [
+        {
+            "label": str(y),
+            "averages": _weekday_averages(
+                order_counts,
+                max(date(y, 1, 1), first_day),
+                min(date(y, 12, 31), today),
+            ),
+        }
+        for y in range(today.year, max(first_day.year, today.year - 4) - 1, -1)
+    ]
+
+    checkout_status = [
+        {"status": status.value if hasattr(status, "value") else str(status), "count": count}
+        for status, count in db.query(OrderGroup.status, func.count(OrderGroup.id))
+        .group_by(OrderGroup.status)
+        .order_by(func.count(OrderGroup.id).desc())
+        .all()
+    ]
+    payment_status = [
+        {"status": status.value if hasattr(status, "value") else str(status), "count": count}
+        for status, count in db.query(Payment.status, func.count(Payment.id))
+        .group_by(Payment.status)
+        .order_by(func.count(Payment.id).desc())
+        .all()
+    ]
+
+    return {
+        "daily": daily,
+        "top": top,
+        "monthly": monthly,
+        "yearly": yearly,
+        "checkout_status": checkout_status,
+        "payment_status": payment_status,
+        "weekday_overall": _weekday_averages(order_counts, first_day, today) if by_day else [0.0] * 7,
+        "weekday_by_month": weekday_by_month if by_day else [],
+        "weekday_by_year": weekday_by_year if by_day else [],
+    }

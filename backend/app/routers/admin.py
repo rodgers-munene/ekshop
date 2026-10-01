@@ -1,6 +1,6 @@
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -70,9 +70,12 @@ from app.schemas.admin import (
     RealTimeMetrics,
     RecentOrderListResponse,
     RecentOrderRow,
+    RevenueBreakdown,
+    RevenueBucket,
     SalesDemandMetrics,
     ShopListResponse,
     SupplyDemandRow,
+    TopAccounts,
     UserListResponse,
 )
 from app.schemas.commerce import OrderRead
@@ -607,6 +610,42 @@ def get_priority_acquisition(
 ):
     since, until = _period_bounds(period, days)
     return dashboard_metrics.get_priority_acquisition(db, since, until)
+
+
+@router.get("/metrics/revenue-breakdown", response_model=RevenueBreakdown)
+def get_revenue_breakdown(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    return dashboard_metrics.get_revenue_breakdown(db)
+
+
+def _check_date_range(start: date, end: date) -> None:
+    if end < start:
+        raise HTTPException(status_code=400, detail="End date must be on or after the start date.")
+    if (end - start).days > 366:
+        raise HTTPException(status_code=400, detail="Pick a range of one year or less.")
+
+
+@router.get("/metrics/revenue-daily", response_model=List[RevenueBucket])
+def get_revenue_daily(
+    start: date = Query(...),
+    end: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Paid revenue per Kenyan calendar day for an inclusive date range."""
+    _check_date_range(start, end)
+    return dashboard_metrics.get_daily_revenue(db, start, end)
+
+
+@router.get("/metrics/top-accounts", response_model=TopAccounts)
+def get_top_accounts(
+    start: date = Query(...),
+    end: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Top 5 merchants and buyers by GMV for an inclusive date range."""
+    _check_date_range(start, end)
+    return dashboard_metrics.get_top_accounts(db, start, end)
 
 
 @router.get("/metrics/real-time", response_model=RealTimeMetrics)
