@@ -5,6 +5,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     DATABASE_URL: str
+    # Per gunicorn worker. Supabase's session pooler (port 5432) caps clients
+    # at 15 across everything, so 2 workers x 5 leaves room for migrations.
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 0
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_DAYS: int = 15

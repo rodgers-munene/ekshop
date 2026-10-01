@@ -34,7 +34,17 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
-        run: alembic upgrade head
+        # The running app holds session-pooler slots (port 5432, max 15), so
+        # migrate through the transaction pooler (6543), which has its own
+        # limit. Alembic runs in one transaction, so that is safe for DDL.
+        run: |
+          export DATABASE_URL="${DATABASE_URL/pooler.supabase.com:5432/pooler.supabase.com:6543}"
+          for attempt in 1 2 3; do
+            alembic upgrade head && exit 0
+            echo "Migration attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
+          exit 1
 
   build-and-deploy:
     needs: migrate
