@@ -68,6 +68,28 @@ class Settings(BaseSettings):
     #   python -c "import secrets; print(secrets.token_urlsafe(32))"
     DELIVERY_OTP_PEPPER: str | None = None
 
+    # --- Road distance (§3.2 of the technical specification) ------------------
+    # Pricing MUST use road distance, not straight-line/geodesic: road distance
+    # runs 20-40% longer in built-up areas, so a geodesic quote systematically
+    # undercharges. The provider is pluggable and self-hosted by default.
+    #
+    #   osrm           -- OSRM, self-hosted. No per-request cost, no vendor
+    #                     lock-in, needs an instance someone operates.
+    #   straight_line  -- Haversine ONLY. Permitted for radius scans and fraud
+    #                     detection, NOT for a customer-facing price.
+    DISTANCE_PROVIDER: str = "osrm"
+    OSRM_BASE_URL: str = "http://localhost:5000"
+    OSRM_TIMEOUT_SECONDS: float = 3.0
+    # Road distance between two fixed coordinates does not change, so this cache
+    # is effectively free. Keyed on coordinates rounded to ~11 m.
+    DISTANCE_CACHE_TTL_SECONDS: int = 86400
+    # Coordinate rounding for the cache key. 5 decimal places is ~1.1 m.
+    DISTANCE_COORD_PRECISION: int = 5
+    # When the road provider fails, fall back to straight-line rather than
+    # failing the quote -- but the result is marked approximate so it can never
+    # be presented as a firm price by accident.
+    DISTANCE_ALLOW_STRAIGHT_LINE_FALLBACK: bool = True
+
     ALERT_MIN_GROSS_MARGIN_PCT: float = 90.0
     ALERT_MAX_MPESA_LATENCY_SECONDS: float = 2.0
     ALERT_MAX_HOSTING_COST_PER_ORDER: float = 20.0
