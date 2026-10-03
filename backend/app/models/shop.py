@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey, Integer, Float
+from sqlalchemy import Column, String, DateTime, Boolean, Enum, ForeignKey, Integer, Float, Numeric
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -43,6 +43,22 @@ class Shop(Base):
     # Prep time management
     prep_time_minutes = Column(Integer, default=30, nullable=False)
     max_prep_time_minutes = Column(Integer, default=60, nullable=False)
+
+    # --- Delivery subsidy settings (spec §10.1, Appendix B.1) ----------------
+    # A merchant subsidy is a contribution *towards fulfilment*, never a product
+    # discount: it must not reduce the order subtotal or appear as a sale. It
+    # changes who bears the delivery cost, not the total delivery revenue.
+    delivery_subsidy_enabled = Column(Boolean, default=False, nullable=False, server_default="0")
+    # A fixed amount the merchant always contributes...
+    delivery_subsidy_amount = Column(Numeric(12, 2), nullable=False, server_default="0")
+    # ...and/or a threshold rule: at or above this basket value the merchant
+    # covers up to `maximum_delivery_subsidy`, which can zero the customer's
+    # payment entirely (§10.2).
+    free_delivery_threshold = Column(Numeric(12, 2))
+    maximum_delivery_subsidy = Column(Numeric(12, 2))
+    # Caps the merchant's total exposure; the engine must not exceed it.
+    weekly_subsidy_budget = Column(Numeric(12, 2))
+
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 

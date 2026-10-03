@@ -30,6 +30,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -59,14 +60,6 @@ class FulfillmentMode(str, enum.Enum):
     self_ = "self"      # the merchant's own rider ("I'll deliver myself")
     pickup = "pickup"    # customer collects from the merchant; no rider, no fee
     partner = "partner"  # external courier (3PL) via partner_fleets
-
-
-class FulfillmentPayer(str, enum.Enum):
-    """Who bears the delivery fee."""
-
-    customer = "customer"
-    merchant = "merchant"
-    split = "split"
 
 
 class FulfillmentStatus(str, enum.Enum):
@@ -127,9 +120,20 @@ class Fulfillment(Base):
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, unique=True)
 
     mode = Column(Enum(FulfillmentMode, native_enum=False), nullable=False)
-    payer = Column(Enum(FulfillmentPayer, native_enum=False), default=FulfillmentPayer.customer, nullable=False)
-    # For FulfillmentPayer.split: what fraction of the fee the customer bears.
-    payer_split_pct = Column(Numeric(5, 2))
+
+    # Who bears the fee, per spec §10 and Appendix B.1. Subsidies change *who
+    # pays*, never the total: contribution is always computed on
+    # `delivery_price_gross`, never on what the customer hands over.
+    #
+    # This replaces the earlier `payer` enum + `payer_split_pct` pair, which
+    # could only express one payer or a two-way percentage and therefore could
+    # not represent the three-way split the specification requires.
+    merchant_subsidy = Column(Numeric(12, 2), nullable=False, server_default="0")
+    ekshop_subsidy = Column(Numeric(12, 2), nullable=False, server_default="0")
+    # The gross computed price: what the delivery is worth before subsidies.
+    delivery_price_gross = Column(Numeric(12, 2))
+    # What the buyer actually hands over = MAX(0, gross - subsidies).
+    customer_payment = Column(Numeric(12, 2))
 
     # Merchant-supplied rider, for mode=self. Recorded on the fulfillment (not
     # the job) because it describes the merchant's capability, not one attempt.
@@ -238,7 +242,20 @@ class DeliveryJob(Base):
     pickup_lng = Column(Numeric(9, 6))
     drop_lat = Column(Numeric(9, 6))
     drop_lng = Column(Numeric(9, 6))
-    distance_km = Column(Numeric(10, 2))
+
+    # Two distances, not one (spec §4). The customer is priced on the
+    # merchant->customer leg only; the rider is paid for the whole movement
+    # including their trip to collect. Keeping them apart is what stops a rider
+    # who travelled to the merchant being silently underpaid.
+    merchant_to_customer_km = Column(Numeric(10, 2))
+    rider_to_merchant_km = Column(Numeric(10, 2))
+    # How each figure was obtained. §3.2 forbids pricing on straight-line, so a
+    # quote built on an approximate distance must be detectable after the fact.
+    distance_source = Column(String(20))
+    distance_is_approximate = Column(Boolean, nullable=False, server_default="0")
+    # OSRM's duration estimate, in seconds. Feeds the §14 SLA rules and the §13
+    # batching test.
+    estimated_duration_seconds = Column(Integer)
 
     quoted_fee = Column(Numeric(12, 2))
     # Ops may override a job that is stuck; always logged, never silent.

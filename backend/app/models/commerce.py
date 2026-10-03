@@ -3,7 +3,7 @@ import enum
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, DateTime, Boolean, Enum, ForeignKey,
-    Integer, Text, UniqueConstraint, CheckConstraint, Index, Float
+    Integer, Text, UniqueConstraint, CheckConstraint, Index, Float, Numeric
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -28,6 +28,20 @@ class OrderStatus(str, enum.Enum):
     delivered = "delivered"
     cancelled = "cancelled"
     refunded = "refunded"
+
+
+class ServiceLevel(str, enum.Enum):
+    """Delivery service level (spec §9).
+
+    STANDARD uses normal pricing, PRIORITY is higher-priced with restricted
+    batching and high dispatch priority, EXPRESS is highest-priced with
+    batching disabled. The multipliers themselves are configuration (§15), not
+    code, so they can be changed without a deployment.
+    """
+
+    standard = "standard"
+    priority = "priority"
+    express = "express"
 
 
 class ReturnStatus(str, enum.Enum):
@@ -188,6 +202,24 @@ class Order(Base):
     tax_amount = Column(String(20), default="0.00")
     total = Column(String(20), nullable=False)
     notes = Column(Text)
+
+    # Delivery pricing inputs (technical specification §3.1, §7, §9).
+    # `package_weight_kg` drives the weight multiplier and `service_level` the
+    # service multiplier. Both are snapshotted here rather than read from the
+    # product at pricing time, so editing a product later cannot rewrite the
+    # economics of an order that has already been quoted -- §17 requires
+    # historical calculations to be retained exactly as they were made.
+    package_weight_kg = Column(Numeric(8, 3))
+    service_level = Column(
+        Enum(ServiceLevel, native_enum=False),
+        default=ServiceLevel.standard,
+        nullable=False,
+        server_default="standard",
+    )
+    # §14: once checkout is confirmed the customer-facing price is locked. Stored
+    # rather than recomputed so it cannot drift if the schedule changes.
+    delivery_price_locked = Column(Boolean, nullable=False, server_default="0")
+
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 

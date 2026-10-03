@@ -9,7 +9,7 @@ from app.models.order_notifications import OrderNotificationRecipient
 from app.models.subscription import SubscriptionPlan, Subscription
 from app.models.messaging import Conversation, Message
 from app.models.fulfillment import (
-    Fulfillment, FulfillmentMode, FulfillmentPayer, FulfillmentStatus,
+    Fulfillment, FulfillmentMode, FulfillmentStatus,
     DeliveryJob, DeliveryJobType, DeliveryJobStatus,
     DeliveryAssignment, AssignmentStatus, DeliveryJobEvent,
     FulfillmentSettlement, JobSettlement,
@@ -30,7 +30,7 @@ __all__ = [
     "OrderNotificationRecipient",
     "SubscriptionPlan", "Subscription",
     "Conversation", "Message",
-    "Fulfillment", "FulfillmentMode", "FulfillmentPayer", "FulfillmentStatus",
+    "Fulfillment", "FulfillmentMode", "FulfillmentStatus",
     "DeliveryJob", "DeliveryJobType", "DeliveryJobStatus",
     "DeliveryAssignment", "AssignmentStatus", "DeliveryJobEvent",
     "FulfillmentSettlement", "JobSettlement",

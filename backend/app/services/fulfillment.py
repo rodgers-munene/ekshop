@@ -48,7 +48,6 @@ from app.models.fulfillment import (
     DeliveryJobType,
     Fulfillment,
     FulfillmentMode,
-    FulfillmentPayer,
     FulfillmentSettlement,
     JobSettlement,
 )
@@ -467,8 +466,8 @@ def create_fulfillment(
     order_id: uuid.UUID,
     *,
     mode: FulfillmentMode,
-    payer: FulfillmentPayer = FulfillmentPayer.customer,
-    payer_split_pct: Optional[Decimal] = None,
+    merchant_subsidy: Decimal = Decimal("0"),
+    ekshop_subsidy: Decimal = Decimal("0"),
     self_rider_name: Optional[str] = None,
     self_rider_phone: Optional[str] = None,
     quoted_fee: Optional[Decimal] = None,
@@ -477,6 +476,12 @@ def create_fulfillment(
 
     mode=self requires a rider name and phone (PRD 5.3) -- a self-delivery
     with nobody named cannot produce a trackable timeline.
+
+    Subsidies follow spec §10 / Appendix B.1: the merchant and Ekshop may each
+    contribute toward the delivery, and the customer pays the remainder. A
+    subsidy changes *who pays*, never the total -- `delivery_price_gross` stays
+    the full computed price and contribution is always computed on the gross,
+    so a fully-subsidised delivery still shows the real cost of serving it.
 
     No OTP is issued here. A delivery code is only useful moments before the
     rider arrives, and the code expires in 30 minutes, so issuing one when the
@@ -488,8 +493,10 @@ def create_fulfillment(
         raise FulfillmentError(
             "Self-delivery requires the merchant's rider name and phone"
         )
-    if payer == FulfillmentPayer.split and payer_split_pct is None:
-        raise FulfillmentError("A split payer requires payer_split_pct")
+    merchant_subsidy = _decimal(merchant_subsidy, "merchant_subsidy")
+    ekshop_subsidy = _decimal(ekshop_subsidy, "ekshop_subsidy")
+    if merchant_subsidy < 0 or ekshop_subsidy < 0:
+        raise FulfillmentError("A subsidy cannot be negative")
 
     existing = db.query(Fulfillment).filter(Fulfillment.order_id == order_id).first()
     if existing:
@@ -502,8 +509,8 @@ def create_fulfillment(
     fulfillment = Fulfillment(
         order_id=order_id,
         mode=mode,
-        payer=payer,
-        payer_split_pct=payer_split_pct,
+        merchant_subsidy=merchant_subsidy,
+        ekshop_subsidy=ekshop_subsidy,
         self_rider_name=self_rider_name,
         self_rider_phone=self_rider_phone,
         quoted_fee=quoted_fee,
@@ -518,7 +525,11 @@ def create_fulfillment(
         job,
         "JOB_CREATED",
         actor_role="merchant",
-        payload={"mode": mode.value, "payer": payer.value},
+        payload={
+            "mode": mode.value,
+            "merchant_subsidy": str(merchant_subsidy),
+            "ekshop_subsidy": str(ekshop_subsidy),
+        },
     )
     db.add(job)
     db.commit()

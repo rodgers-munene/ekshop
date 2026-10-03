@@ -17,7 +17,6 @@ from app.models.fulfillment import (
     DeliveryJobStatus,
     DeliveryJobType,
     FulfillmentMode,
-    FulfillmentPayer,
     FulfillmentStatus,
 )
 
@@ -131,8 +130,14 @@ class FulfillmentRead(ORMModel):
     # Derived from the current job, never stored. Present in the response so a
     # client can render state without reimplementing the state machine.
     status: FulfillmentStatus
-    payer: FulfillmentPayer
-    payer_split_pct: Optional[Decimal]
+    # Subsidy split (spec §10, B.1). `delivery_price_gross` is the full computed
+    # price; `customer_payment` is what the buyer actually hands over. They are
+    # different numbers and conflating them is how a subsidy ends up looking
+    # like lost revenue.
+    merchant_subsidy: Decimal
+    ekshop_subsidy: Decimal
+    delivery_price_gross: Optional[Decimal]
+    customer_payment: Optional[Decimal]
     self_rider_name: Optional[str]
     self_rider_phone: Optional[str]
     quoted_fee: Optional[Decimal]
@@ -163,8 +168,10 @@ class FulfillmentCreate(BaseModel):
 
     order_id: UUID
     mode: FulfillmentMode = FulfillmentMode.ekshop
-    payer: FulfillmentPayer = FulfillmentPayer.customer
-    payer_split_pct: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    # Subsidies, per spec §10.1. Both default to zero, so the default behaviour
+    # is unchanged: the customer bears the whole delivery price.
+    merchant_subsidy: Decimal = Field(default=Decimal("0"), ge=0)
+    ekshop_subsidy: Decimal = Field(default=Decimal("0"), ge=0)
     self_rider_name: Optional[str] = Field(default=None, max_length=150)
     self_rider_phone: Optional[str] = Field(default=None, max_length=20)
     quoted_fee: Optional[Decimal] = Field(default=None, ge=0)
@@ -200,8 +207,6 @@ class FulfillmentCreate(BaseModel):
             raise ValueError(
                 "Self-delivery requires the merchant's rider name and phone"
             )
-        if self.payer == FulfillmentPayer.split and self.payer_split_pct is None:
-            raise ValueError("A split payer requires payer_split_pct")
         return self
 
 
