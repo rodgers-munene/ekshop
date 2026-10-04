@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ClipboardList, Store, CreditCard } from "lucide-react";
+import { LayoutDashboard, Package, ClipboardList, Store, CreditCard, Truck } from "lucide-react";
 
 const LINKS = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/products", label: "Products", icon: Package },
   { href: "/dashboard/orders", label: "Orders", icon: ClipboardList },
+  // Deliveries sits next to Orders because that is where a merchant starts:
+  // an order is what they are fulfilling.
+  { href: "/dashboard/fulfillments", label: "Deliveries", icon: Truck },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
   { href: "/dashboard/settings", label: "Shop Settings", icon: Store },
 ];
