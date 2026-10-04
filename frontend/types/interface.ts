@@ -289,6 +289,280 @@ export interface RouteOptimizationResponse {
   stops: RouteStop[];
 }
 
+// ── Fulfillment (one per order; many delivery jobs beneath it) ────────────────
+// Mirrors app/schemas/fulfillment.py and app/schemas/pricing_admin.py. Field
+// names are the backend's snake_case and money is a string, matching the rest of
+// this file.
+
+export type FulfillmentMode = "ekshop" | "self" | "pickup" | "partner";
+
+/**
+ * Derived on the backend from the current job, never stored. The server is the
+ * only authority on this -- recomputing it here is how a client and the database
+ * end up disagreeing about whether a parcel is delivered.
+ */
+export type FulfillmentStatus =
+  | "pending"
+  | "assigned"
+  | "picked_up"
+  | "in_transit"
+  | "delivered"
+  | "collected"
+  | "cancelled"
+  | "returned"
+  | "failed";
+
+export type DeliveryJobType = "forward" | "retry" | "return";
+
+export type DeliveryJobStatus =
+  | "created"
+  | "dispatch_requested"
+  | "offered"
+  | "accepted"
+  | "at_pickup"
+  | "picked_up"
+  | "in_transit"
+  | "delivered"
+  | "failed"
+  | "cancelled"
+  | "settled"
+  | "returned";
+
+export type AssignmentStatus = "queued" | "offered" | "accepted" | "declined" | "expired" | "cancelled";
+
+export interface JobEventRead {
+  id: string;
+  event_type: string;
+  to_status?: string | null;
+  actor_user_id?: string | null;
+  actor_agent_id?: string | null;
+  actor_role?: string | null;
+  payload?: Record<string, unknown> | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface AssignmentRead {
+  id: string;
+  job_id: string;
+  agent_id: string;
+  wave: number;
+  status: AssignmentStatus;
+  payout_estimate?: string | null;
+  distance_km?: string | null;
+  offered_at?: string | null;
+  expires_at?: string | null;
+  responded_at?: string | null;
+  decline_reason?: string | null;
+}
+
+export interface DeliveryJobRead {
+  id: string;
+  fulfillment_id: string;
+  /** Safe to hand to a third-party courier; carries no internal identifiers. */
+  external_reference: string;
+  /** 1, 2, 3... A retry or return is a new job, never a reused one. */
+  attempt: number;
+  job_type: DeliveryJobType;
+  status: DeliveryJobStatus;
+  agent_id?: string | null;
+  distance_km?: string | null;
+  merchant_to_customer_km?: string | null;
+  rider_to_merchant_km?: string | null;
+  distance_source?: string | null;
+  distance_is_approximate?: boolean;
+  quoted_fee?: string | null;
+  failure_code?: string | null;
+  failure_reason?: string | null;
+  otp_expires_at?: string | null;
+  otp_verified_at?: string | null;
+  override_reason?: string | null;
+  created_at: string;
+  dispatch_requested_at?: string | null;
+  accepted_at?: string | null;
+  at_pickup_at?: string | null;
+  picked_up_at?: string | null;
+  in_transit_at?: string | null;
+  delivered_at?: string | null;
+  settled_at?: string | null;
+  failed_at?: string | null;
+  closed_at?: string | null;
+}
+
+export interface DeliveryJobDetail extends DeliveryJobRead {
+  events: JobEventRead[];
+  assignments: AssignmentRead[];
+}
+
+export interface FulfillmentRead {
+  id: string;
+  order_id: string;
+  mode: FulfillmentMode;
+  status: FulfillmentStatus;
+  /**
+   * Subsidy split. `delivery_price_gross` is what the delivery is worth;
+   * `customer_payment` is what the buyer hands over. They differ whenever a
+   * merchant or Ekshop subsidy applies, and showing only the latter makes a
+   * fully-subsidised delivery look like revenue of zero.
+   */
+  merchant_subsidy: string;
+  ekshop_subsidy: string;
+  delivery_price_gross?: string | null;
+  customer_payment?: string | null;
+  self_rider_name?: string | null;
+  self_rider_phone?: string | null;
+  quoted_fee?: string | null;
+  close_reason?: string | null;
+  created_at: string;
+  confirmed_at?: string | null;
+  closed_at?: string | null;
+  settled_at?: string | null;
+}
+
+export interface FulfillmentSettlementRead {
+  id: string;
+  fulfillment_id: string;
+  job_id?: string | null;
+  fee_collected: string;
+  rider_payout: string;
+  incentive_paid: string;
+  payment_fee: string;
+  partner_cost: string;
+  waiting_fee: string;
+  contribution: string;
+  margin_pct?: string | null;
+  currency: string;
+  settled_at?: string | null;
+}
+
+export interface FulfillmentDetail extends FulfillmentRead {
+  jobs: DeliveryJobDetail[];
+  settlement?: FulfillmentSettlementRead | null;
+}
+
+export interface FulfillmentListResponse {
+  items: FulfillmentRead[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface IssueOtpResponse {
+  otp: string;
+  expires_at: string;
+}
+
+// ── Pricing (§16 response shape) ──────────────────────────────────────────────
+
+/**
+ * HEALTHY / POSITIVE_LOW_MARGIN / LOSS_MAKING.
+ * LOSS_MAKING is a recommendation, never an automatic rejection: the backend
+ * deliberately does not refuse an order, it returns a decision for a person.
+ */
+export type PricingStatus = "HEALTHY" | "POSITIVE_LOW_MARGIN" | "LOSS_MAKING";
+
+export type PricingAction =
+  | "NORMAL"
+  | "OPTIONAL_INCENTIVE"
+  | "MERCHANT_SUBSIDY"
+  | "BASKET_BUILDING"
+  | "BATCHING"
+  | "ALTERNATIVE_FULFILMENT"
+  | "CUSTOMER_PAYS_ACTUAL"
+  | "EKS_HOP_LOGISTICS_UNAVAILABLE"
+  | "MANUAL_QUOTE";
+
+export interface PricingDistance {
+  rider_to_merchant_km: string;
+  merchant_to_customer_km: string;
+  total_km: string;
+}
+
+export interface PricingCustomer {
+  base_price: string;
+  weight_multiplier: string;
+  surge_multiplier: string;
+  service_multiplier: string;
+  delivery_price: string;
+  merchant_subsidy: string;
+  ekshop_subsidy: string;
+  amount_to_pay: string;
+}
+
+export interface PricingRider {
+  base_fare: string;
+  distance_payout: string;
+  waiting_payout: string;
+  chargeable_wait_minutes: string;
+  total_payout: string;
+}
+
+export interface PricingProfitability {
+  payment_cost: string;
+  expected_exception_cost: string;
+  expected_delivery_cost: string;
+  delivery_contribution: string;
+  contribution_pct?: string | null;
+  delivery_basket_ratio: string;
+  minimum_economic_price: string;
+  status: PricingStatus;
+}
+
+export interface PricingResponse {
+  order_id: string;
+  pricing_version: string;
+  /**
+   * True when the distance was not a real road distance. §3.2 forbids pricing on
+   * straight-line, so a quote with this set must not be presented to a customer
+   * as firm.
+   */
+  distance_is_approximate: boolean;
+  /** Over the weight where §7 defines no formula, so no price exists. */
+  requires_manual_quote: boolean;
+  distance: PricingDistance;
+  customer: PricingCustomer;
+  rider: PricingRider;
+  profitability: PricingProfitability;
+  recommendation: { action: PricingAction; reason: string };
+  calculated_at: string;
+}
+
+export interface PricingParameterRead {
+  key: string;
+  value: string;
+  value_type: "money" | "rate" | "integer" | "boolean" | "json";
+  description?: string | null;
+  spec_reference?: string | null;
+  /** A commercial decision rather than a rate: these need a human, not a tweak. */
+  is_commercial_decision: boolean;
+  updated_at: string;
+}
+
+export interface PricingParameterListResponse {
+  items: PricingParameterRead[];
+  placeholder_count: number;
+  pricing_version: string;
+}
+
+export interface PricingCalculationRead {
+  id: string;
+  order_id: string;
+  fulfillment_id?: string | null;
+  pricing_version: string;
+  reason: string;
+  customer_delivery_price: string;
+  customer_amount_paid: string;
+  rider_total_payout: string;
+  expected_contribution: string;
+  contribution_pct?: string | null;
+  pricing_status: string;
+  pricing_decision: string;
+  distance_source?: string | null;
+  distance_is_approximate: boolean;
+  requires_manual_quote: boolean;
+  created_at: string;
+}
+
 // Messaging
 export interface Conversation {
   id: string;
