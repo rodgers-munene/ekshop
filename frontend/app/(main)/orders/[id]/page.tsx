@@ -4,7 +4,7 @@ import { serverFetch, ServerFetchError } from "@/lib/server-api";
 import { OrderGroup } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import PaymentStatusCheck from "./PaymentStatusCheck";
-import DeliveryTracker from "./DeliveryTracker";
+import DeliveryPanel from "./DeliveryPanel";
 import CancelOrderButton from "./CancelOrderButton";
 import MessageSellerButton from "@/components/MessageSellerButton";
 
@@ -95,7 +95,7 @@ export default async function OrderDetailPage({ params }: Props) {
                   </div>
                 ))}
               </div>
-              <DeliveryTracker orderId={order.id} />
+              <DeliveryPanel orderId={order.id} />
               {order.shop?.id && <MessageSellerButton shopId={order.shop.id} />}
             </div>
           ))}

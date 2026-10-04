@@ -158,6 +158,14 @@ def _http_error(exc: fs.FulfillmentError) -> HTTPException:
 @router.get("", response_model=FulfillmentListResponse, summary="List fulfillments")
 def list_fulfillments(
     status_filter: Optional[str] = Query(default=None, alias="status"),
+    order_id: Optional[uuid.UUID] = Query(
+        default=None,
+        description=(
+            "Restrict to one order. The customer order page needs this: "
+            "filtering a page of results client-side silently returns nothing "
+            "once a buyer has more orders than one page holds."
+        ),
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -173,6 +181,10 @@ def list_fulfillments(
         query = query.join(Order, Fulfillment.order_id == Order.id).join(
             Order.shop
         ).filter(Order.shop.has(seller_id=user.id))
+    if order_id is not None:
+        # The ownership filter above still applies, so this cannot be used to read
+        # another merchant's fulfillment.
+        query = query.filter(Fulfillment.order_id == order_id)
     if status_filter:
         # status is derived in Python, so it cannot be filtered in SQL. Page
         # through the caller's own rows and filter here; the volume per seller
