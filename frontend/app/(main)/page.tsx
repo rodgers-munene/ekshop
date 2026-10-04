@@ -292,7 +292,7 @@ export default async function HomePage() {
       <section className="px-4 md:px-6 py-4">
         <div className="rounded-xl bg-navy text-white px-6 md:px-10 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
           <div>
-            <span className="inline-block text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 bg-amber text-ink rounded-full mb-2">
+            <span className="inline-block text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 bg-amber text-white rounded-full mb-2">
               Exclusive
             </span>
             <h2 className="text-2xl md:text-3xl font-extrabold mb-2">

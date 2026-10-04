@@ -69,11 +69,11 @@ export default function Footer() {
       <div className="border-t border-white/10">
         <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col items-center gap-3">
           <Image
-            src="/logo.webp"
+            src="/logo.png"
             alt="Ekshop"
-            width={100}
-            height={34}
-            className="object-contain h-9 w-auto rounded-full opacity-90"
+            width={36}
+            height={36}
+            className="object-contain h-9 w-auto opacity-90"
           />
           <div className="flex items-center justify-center gap-4">
             <InstallAppButton />

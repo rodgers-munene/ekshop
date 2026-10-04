@@ -57,7 +57,7 @@ export default async function OrderDetailPage({ params }: Props) {
               <div key={s} className="flex items-center">
                 <div className="flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    i <= stepIndex ? "bg-amber text-ink" : "bg-surface text-muted"
+                    i <= stepIndex ? "bg-amber text-white" : "bg-surface text-muted"
                   }`}>
                     {i < stepIndex ? "✓" : i + 1}
                   </div>

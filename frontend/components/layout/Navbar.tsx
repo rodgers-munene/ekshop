@@ -133,11 +133,11 @@ export default function Navbar() {
         {/* Logo */}
         <Link href="/" className="shrink-0">
           <Image
-            src="/logo.webp"
+            src="/logo.png"
             alt="Ekshop"
-            width={120}
-            height={40}
-            className="object-contain h-8 md:h-11 w-auto rounded-full"
+            width={44}
+            height={44}
+            className="object-contain h-8 md:h-11 w-auto"
           />
         </Link>
 
@@ -174,7 +174,7 @@ export default function Navbar() {
             <button
               type="submit"
               aria-label="Search"
-              className="px-4 md:px-5 flex items-center justify-center bg-amber hover:bg-amber-hover text-ink transition-colors shrink-0"
+              className="px-4 md:px-5 flex items-center justify-center bg-amber hover:bg-amber-hover text-white transition-colors shrink-0"
             >
               <Search size={18} />
             </button>
@@ -296,7 +296,7 @@ export default function Navbar() {
           <Link href="/cart" className="relative flex items-center">
             <ShoppingCart size={22} className="md:w-6.5 md:h-6.5" />
             {mounted && totalItems() > 0 && (
-              <span className="absolute -top-2 -right-2 bg-amber text-ink text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+              <span className="absolute -top-2 -right-2 bg-amber text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                 {totalItems()}
               </span>
             )}
