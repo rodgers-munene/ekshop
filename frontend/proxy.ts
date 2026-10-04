@@ -15,6 +15,11 @@ const PROTECTED_PAGES = [
   // /investor/*, so this page must be guarded here too or an anonymous
   // visit lands on an empty "could not load" shell.
   "/ir-f1c04c9098",
+  // The rider portal. It has its own cookie (`ekshop_agent_token`) and is guarded
+  // by its own layout, but leaving it out of this list meant the proxy never ran
+  // its refresh logic for agent routes -- so an expired rider token left the app
+  // in a half-signed-in state instead of being renewed or cleared.
+  "/agent",
 ];
 const AUTH_PAGES = ["/login", "/register"];
 const PROTECTED_API_PREFIXES = [
@@ -27,6 +32,13 @@ const PROTECTED_API_PREFIXES = [
   "/api/conversations",
   "/api/admin",
   "/api/delivery",
+  // Fulfillment, pricing and agent routes. These were missing, so the proxy
+  // skipped them entirely and they relied on each route handler checking its own
+  // cookie. The handlers still check -- defence in depth -- but a route that
+  // forgot one would have been reachable with no token at all.
+  "/api/fulfillments",
+  "/api/pricing",
+  "/api/agent",
 ];
 
 const COOKIE_OPTS = {
