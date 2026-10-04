@@ -8,11 +8,11 @@ async function getToken() {
   return cookieStore.get("ekshop_token")?.value;
 }
 
-export async function GET(_: Request, { params }: { params: Promise<{ conversationId: string }> }) {
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const token = await getToken();
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
-  const { conversationId } = await params;
+  const { id: conversationId } = await params;
   const res = await fetch(`${BASE_URL}/conversations/${conversationId}/messages`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
@@ -21,11 +21,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ conversati
   return NextResponse.json(data, { status: res.status });
 }
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ conversationId: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const token = await getToken();
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
-  const { conversationId } = await params;
+  const { id: conversationId } = await params;
   const body = await req.json();
 
   const res = await fetch(`${BASE_URL}/conversations/${conversationId}/messages`, {
