@@ -14,7 +14,8 @@ Every state change goes through `app.services.fulfillment`, which owns the
 transition rules. Nothing here writes `job.status` directly.
 """
 import uuid
-from typing import Optional
+from datetime import datetime, timezone
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -453,6 +454,37 @@ def get_my_job(
     return DeliveryJobDetail.model_validate(job)
 
 
+@router.get(
+    "/offers/me",
+    response_model=List[AssignmentRead],
+    summary="Open offers for the calling rider",
+)
+def my_offers(
+    include_expired: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+) -> List[AssignmentRead]:
+    """Every offer addressed to the calling rider, newest wave first.
+
+    Without this the dispatch loop cannot close: a merchant can offer a job, but
+    a rider has no way to discover that they were offered one. The old
+    `delivery_offers` flow had an equivalent listing; this is its replacement for
+    the fulfillment structure.
+
+    Expiry is applied by the caller of the respond endpoint, not here: a stale
+    offer is still a real record of what dispatch tried, and this listing is the
+    record. Riders see `include_expired` if they want the history.
+    """
+    query = db.query(DeliveryAssignment).filter(DeliveryAssignment.agent_id == agent.id)
+    if not include_expired:
+        query = query.filter(
+            DeliveryAssignment.status.in_(
+                [AssignmentStatus.offered, AssignmentStatus.accepted]
+            )
+        )
+    return query.order_by(DeliveryAssignment.created_at.desc()).all()
+
+
 @router.post(
     "/jobs/{job_id}/respond",
     response_model=AssignmentRead,
@@ -475,6 +507,16 @@ def respond_to_offer(
     )
     if not assignment:
         raise HTTPException(status_code=404, detail="No offer for this rider")
+    if (
+        assignment.status == AssignmentStatus.offered
+        and assignment.expires_at is not None
+        and assignment.expires_at < datetime.now(timezone.utc)
+    ):
+        # Mark it expired rather than letting a rider accept a window that has
+        # already closed. Dispatch may have moved on to another rider.
+        fs.respond_to_assignment(db, assignment, AssignmentStatus.expired)
+        db.commit()
+        raise HTTPException(status_code=409, detail="This offer has expired")
     try:
         updated = fs.respond_to_assignment(
             db, assignment, payload.status, decline_reason=payload.decline_reason
