@@ -48,7 +48,7 @@ function TrendChart({ points }: { points: MarginLeakageTrendPoint[] }) {
       <p className="text-xs font-medium text-muted mb-2">GMV vs Net profit trend</p>
       <div className="relative h-40 w-full">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
-          <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" className="text-amber" />
+          <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gold" />
           <path d={profitPath} fill="none" stroke="currentColor" strokeWidth="1.5" className="text-success" />
         </svg>
         <div className="flex items-center gap-4 mt-2 text-xs text-muted">
@@ -109,7 +109,7 @@ export default function RevenueLeakageMonitor({ data }: { data: MarginLeakageMet
         </div>
         <div className="card p-4">
           <p className="text-xs text-muted">Platform commission</p>
-          <p className="text-lg font-bold mt-1 text-amber">KES {commission.toLocaleString()}</p>
+          <p className="text-lg font-bold mt-1 text-gold">KES {commission.toLocaleString()}</p>
           <p className="text-xs text-muted">{data.commission_rate_pct}%</p>
         </div>
         <div className="card p-4">

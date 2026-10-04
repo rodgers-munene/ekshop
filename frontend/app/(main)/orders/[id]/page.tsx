@@ -9,7 +9,7 @@ import CancelOrderButton from "./CancelOrderButton";
 import MessageSellerButton from "@/components/MessageSellerButton";
 
 const STATUS_STYLE: Record<string, string> = {
-  pending_payment: "bg-amber/15 text-amber",
+  pending_payment: "bg-amber/15 text-gold",
   paid:            "bg-info/10 text-info",
   processing:      "bg-info/10 text-info",
   shipped:         "bg-progress/10 text-progress",
@@ -38,7 +38,7 @@ export default async function OrderDetailPage({ params }: Props) {
     <div className="w-full max-w-4xl mx-auto px-4 md:px-6 py-6">
       {/* Header */}
       <div className="flex items-center gap-3 mb-2">
-        <Link href="/orders" className="text-xs text-muted hover:text-amber underline">← Orders</Link>
+        <Link href="/orders" className="text-xs text-muted hover:text-gold underline">← Orders</Link>
       </div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Order #{group.id.slice(0, 8).toUpperCase()}</h1>
@@ -57,7 +57,7 @@ export default async function OrderDetailPage({ params }: Props) {
               <div key={s} className="flex items-center">
                 <div className="flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    i <= stepIndex ? "bg-amber text-white" : "bg-surface text-muted"
+                    i <= stepIndex ? "bg-amber text-ink" : "bg-surface text-muted"
                   }`}>
                     {i < stepIndex ? "✓" : i + 1}
                   </div>
@@ -116,8 +116,8 @@ export default async function OrderDetailPage({ params }: Props) {
             <span>Total</span>
             <span className="text-ink">{formatKES(group.total)}</span>
           </div>
-          <Link href={`/invoices/${group.id}`} className="text-xs text-amber underline mt-1">Download invoice</Link>
-          <Link href={`/receipts/${group.id}`} className="text-xs text-amber underline mt-1">Download receipt</Link>
+          <Link href={`/invoices/${group.id}`} className="text-xs text-gold underline mt-1">Download invoice</Link>
+          <Link href={`/receipts/${group.id}`} className="text-xs text-gold underline mt-1">Download receipt</Link>
           <CancelOrderButton orderId={group.id} status={group.status} />
           <p className="text-xs text-muted pt-1">
             Placed {new Date(group.created_at).toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" })}

@@ -30,7 +30,7 @@ export default function DashboardHeader({ user, shop }: { user: User; shop: Shop
                 </span>
               )}
               <span className="flex items-center gap-1">
-                <Star size={11} className="text-amber" fill="currentColor" />
+                <Star size={11} className="text-gold" fill="currentColor" />
                 {parseFloat(shop.rating_avg || "0").toFixed(1)} ({shop.rating_count})
               </span>
             </div>
@@ -40,7 +40,7 @@ export default function DashboardHeader({ user, shop }: { user: User; shop: Shop
         <div className="flex items-center gap-4 shrink-0">
           <Link
             href={`/shops/${shop.slug}`}
-            className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-amber transition-colors"
+            className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-gold transition-colors"
           >
             <ArrowLeft size={15} />
             Back to shop

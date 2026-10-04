@@ -6,7 +6,7 @@ import { formatKES } from "@/lib/utils";
 import MessageSellerButton from "@/components/MessageSellerButton";
 
 const STATUS_STYLE: Record<string, string> = {
-  pending_payment: "bg-amber/15 text-amber",
+  pending_payment: "bg-amber/15 text-gold",
   paid:            "bg-info/10 text-info",
   processing:      "bg-info/10 text-info",
   shipped:         "bg-progress/10 text-progress",

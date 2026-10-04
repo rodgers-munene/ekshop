@@ -11,7 +11,7 @@ const LIMIT = 20;
 
 const STATUS_STYLE: Record<string, string> = {
   active: "bg-success/10 text-success",
-  pending: "bg-amber/15 text-amber",
+  pending: "bg-amber/15 text-gold",
   suspended: "bg-danger/10 text-danger",
 };
 

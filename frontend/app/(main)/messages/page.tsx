@@ -53,7 +53,7 @@ export default function MessagesPage() {
                 <p className="text-sm text-muted truncate">{c.last_message_body ?? "No messages yet"}</p>
               </div>
               {c.unread_count > 0 && (
-                <span className="shrink-0 bg-amber text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="shrink-0 bg-amber text-ink text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {c.unread_count}
                 </span>
               )}

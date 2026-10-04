@@ -58,7 +58,7 @@ export default function FlashDeals({ deals }: { deals: Promotion[] }) {
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <h2 className="flex items-center gap-2 text-lg font-extrabold">
-            <Zap size={20} className="text-amber fill-current" />
+            <Zap size={20} className="text-gold fill-current" />
             Flash Deals
           </h2>
           <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ export default function FlashDeals({ deals }: { deals: Promotion[] }) {
         </div>
 
         <div className="mt-4 text-right">
-          <Link href="/products" className="text-xs text-amber hover:underline">
+          <Link href="/products" className="text-xs text-gold hover:underline">
             Shop all flash deals →
           </Link>
         </div>

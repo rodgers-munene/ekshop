@@ -61,7 +61,7 @@ export default async function DashboardProductsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link href={`/dashboard/products/${product.slug}/edit`} className="text-amber text-sm underline underline-offset-2">
+                    <Link href={`/dashboard/products/${product.slug}/edit`} className="text-gold text-sm underline underline-offset-2">
                       Edit
                     </Link>
                   </td>

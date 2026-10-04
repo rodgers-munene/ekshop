@@ -30,7 +30,7 @@ export default function DeliveryTracker({ orderId }: { orderId: string }) {
   return (
     <div className="px-4 py-3 border-t border-border bg-surface/50">
       <div className="flex items-center gap-2 mb-2 text-sm font-medium">
-        <Truck size={15} className="text-amber" />
+        <Truck size={15} className="text-gold" />
         Delivery
         {delivery.tracking_number && (
           <span className="text-xs text-muted font-normal">· Tracking #{delivery.tracking_number}</span>

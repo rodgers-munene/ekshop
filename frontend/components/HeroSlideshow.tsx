@@ -29,7 +29,7 @@ export default function HeroSlideshow({ slides, fallbackImageUrl }: HeroSlidesho
 
   return (
     <section
-      className="relative h-[200px] sm:h-[300px] md:h-[420px] overflow-hidden"
+      className="on-dark relative h-[200px] sm:h-[300px] md:h-[420px] overflow-hidden"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -74,7 +74,7 @@ export default function HeroSlideshow({ slides, fallbackImageUrl }: HeroSlidesho
               Kenya&apos;s Marketplace
             </span>
             <h1 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4 text-white">
-              Everything you need, <span className="text-amber">delivered.</span>
+              Everything you need, <span className="text-gold">delivered.</span>
             </h1>
             <p className="text-white/80 text-sm mb-6 max-w-xs">
               Thousands of verified sellers. One seamless experience.

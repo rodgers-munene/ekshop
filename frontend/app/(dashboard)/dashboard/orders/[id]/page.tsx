@@ -20,7 +20,7 @@ export default async function DashboardOrderDetailPage({ params }: Props) {
 
   return (
     <div className="max-w-3xl">
-      <Link href="/dashboard/orders" className="text-xs text-muted hover:text-amber underline">← Orders</Link>
+      <Link href="/dashboard/orders" className="text-xs text-muted hover:text-gold underline">← Orders</Link>
 
       <div className="flex items-center justify-between mt-2 mb-6">
         <h1 className="text-2xl font-bold">Order #{order.id.slice(0, 8).toUpperCase()}</h1>

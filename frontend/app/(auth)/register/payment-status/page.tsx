@@ -94,7 +94,7 @@ function PaymentStatusPageInner() {
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-sm text-center">
         <span className="text-2xl font-bold">
-          EK<span className="text-amber">SHOP</span>
+          EK<span className="text-gold">SHOP</span>
         </span>
 
         {status === "checking" || status === "pending" ? (

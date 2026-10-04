@@ -57,7 +57,7 @@ export default function AgentLoginPage() {
       {/* Left: decorative panel */}
       <div className="hidden lg:flex w-1/2 bg-navy text-white flex-col justify-between p-12">
         <span className="text-2xl font-bold">
-          EK<span className="text-amber">SHOP</span>
+          EK<span className="text-gold">SHOP</span>
         </span>
         <div>
           <h1 className="text-5xl font-bold leading-tight mb-4">

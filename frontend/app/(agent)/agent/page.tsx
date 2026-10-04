@@ -128,7 +128,7 @@ export default function AgentHomePage() {
           className="block card p-5 mb-6 hover:border-amber transition-colors"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-amber uppercase tracking-wide">Next stop</span>
+            <span className="text-xs font-semibold text-gold uppercase tracking-wide">Next stop</span>
             <span className="text-xs text-muted">Arrive in ~25 min</span>
           </div>
           <h2 className="text-lg font-bold mb-1">
@@ -181,8 +181,8 @@ export default function AgentHomePage() {
               </div>
                 <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                   delivery.status === "assigned" ? "bg-info/10 text-info" :
-                  delivery.status === "picked" ? "bg-amber/10 text-amber" :
-                  delivery.status === "in_transit" ? "bg-amber/10 text-amber" :
+                  delivery.status === "picked" ? "bg-amber/10 text-gold" :
+                  delivery.status === "in_transit" ? "bg-amber/10 text-gold" :
                   "bg-surface text-muted"
                 }`}>
                   {STATUS_LABELS[delivery.status as keyof typeof STATUS_LABELS] ?? delivery.status}

@@ -14,6 +14,7 @@ import { Product, Category, ProductListResponse, PaginatedResponse, ShopSummary,
 import ProductRail from "@/components/ProductRail";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import DealsCardSlideshow from "@/components/DealsCardSlideshow";
+import Marquee from "@/components/Marquee";
 
 export default async function HomePage() {
   const cookieStore = await cookies();
@@ -73,8 +74,22 @@ export default async function HomePage() {
     .filter((rail): rail is { category: Category; products: Product[] } => rail !== null)
     .slice(0, 4);
 
+  const marqueeItems = [
+    "Free returns within 7 days",
+    "Pay safely with M-Pesa",
+    "Nationwide delivery across Kenya",
+    "100% verified sellers",
+    "Shop today's flash deals",
+    "New products added daily",
+    "Top-rated picks from real buyers",
+    "24/7 customer support",
+  ];
+
   return (
     <div className="w-full">
+
+      {/* ── Promo marquee (right → left) ───────────────────── */}
+      <Marquee items={marqueeItems} />
 
       {/* ── Full-bleed hero ─────────────────────────────────── */}
       <HeroSlideshow slides={heroSlides} fallbackImageUrl={featuredProduct?.images?.[0]?.url} />
@@ -106,14 +121,14 @@ export default async function HomePage() {
                           />
                         ) : null}
                       </div>
-                      <span className="text-[11px] text-muted truncate group-hover:text-amber">
+                      <span className="text-[11px] text-muted truncate group-hover:text-gold">
                         {category.name}
                       </span>
                     </Link>
                   );
                 })}
               </div>
-              <Link href="/products" className="text-xs text-amber hover:underline mt-3">
+              <Link href="/products" className="text-xs text-gold hover:underline mt-3">
                 See more categories
               </Link>
             </div>
@@ -124,7 +139,7 @@ export default async function HomePage() {
             <div className="card p-4 flex flex-col">
               <h3 className="font-bold text-sm mb-3">Today&apos;s Deals</h3>
               <DealsCardSlideshow deals={curatedDeals} />
-              <Link href="/products" className="text-xs text-amber hover:underline mt-3">
+              <Link href="/products" className="text-xs text-gold hover:underline mt-3">
                 Shop all deals
               </Link>
             </div>
@@ -144,7 +159,7 @@ export default async function HomePage() {
                   Top Deal
                 </span>
               </Link>
-              <Link href="/products" className="text-xs text-amber hover:underline mt-3">
+              <Link href="/products" className="text-xs text-gold hover:underline mt-3">
                 Shop all deals
               </Link>
             </div>
@@ -173,14 +188,14 @@ export default async function HomePage() {
                           />
                         ) : null}
                       </div>
-                      <span className="text-[11px] text-muted truncate group-hover:text-amber">
+                      <span className="text-[11px] text-muted truncate group-hover:text-gold">
                         {category.name}
                       </span>
                     </Link>
                   );
                 })}
               </div>
-              <Link href="/products" className="text-xs text-amber hover:underline mt-3">
+              <Link href="/products" className="text-xs text-gold hover:underline mt-3">
                 Explore all categories
               </Link>
             </div>
@@ -200,7 +215,7 @@ export default async function HomePage() {
                   />
                 )}
               </Link>
-              <Link href="/products" className="text-xs text-amber hover:underline mt-3">
+              <Link href="/products" className="text-xs text-gold hover:underline mt-3">
                 View new arrivals
               </Link>
             </div>
@@ -219,7 +234,7 @@ export default async function HomePage() {
             { icon: RotateCcw, label: "Easy Returns", desc: "Shop with confidence" },
           ].map(({ icon: Icon, label, desc }) => (
             <div key={label} className="flex items-start gap-3">
-              <Icon size={22} className="text-amber shrink-0 mt-0.5" />
+              <Icon size={22} className="text-gold shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold leading-tight">{label}</p>
                 <p className="text-xs text-muted mt-0.5">{desc}</p>
@@ -253,12 +268,12 @@ export default async function HomePage() {
                         {decodeHtml(shop.name)}
                       </span>
                       {shop.is_verified && (
-                        <BadgeCheck size={14} className="text-amber shrink-0" />
+                        <BadgeCheck size={14} className="text-gold shrink-0" />
                       )}
                     </div>
                     {parseFloat(shop.rating_avg) > 0 && (
                       <div className="flex items-center justify-center gap-1 mt-1 text-xs text-muted">
-                        <Star size={11} className="fill-current text-amber" />
+                        <Star size={11} className="fill-current text-gold" />
                         <span>
                           {parseFloat(shop.rating_avg).toFixed(1)} ({shop.rating_count})
                         </span>
@@ -276,7 +291,7 @@ export default async function HomePage() {
       <section className="px-4 md:px-6 py-4">
         <div className="rounded-xl bg-navy text-white px-6 md:px-10 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
           <div>
-            <span className="inline-block text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 bg-amber text-white rounded-full mb-2">
+            <span className="inline-block text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 bg-amber text-ink rounded-full mb-2">
               Exclusive
             </span>
             <h2 className="text-2xl md:text-3xl font-extrabold mb-2">
@@ -329,7 +344,7 @@ export default async function HomePage() {
                         />
                       ) : null}
                     </div>
-                    <span className="text-sm font-medium text-center group-hover:text-amber transition-colors">
+                    <span className="text-sm font-medium text-center group-hover:text-gold transition-colors">
                       {category.name}
                     </span>
                   </Link>

@@ -285,7 +285,7 @@ export default function CheckoutClient({ addresses, buyNow }: { addresses: UserA
         <div className="card w-full max-w-sm p-8 flex flex-col items-center text-center">
           {unresolved ? (
             <>
-              <AlertTriangle size={40} className="text-amber mb-4" />
+              <AlertTriangle size={40} className="text-gold mb-4" />
               <h2 className="text-2xl font-extrabold mb-2">We couldn&apos;t confirm your payment</h2>
               <p className="text-muted text-sm mb-2">
                 The prompt may have been cancelled, timed out, or could still be processing. Refresh to check the
@@ -311,12 +311,12 @@ export default function CheckoutClient({ addresses, buyNow }: { addresses: UserA
             </>
           ) : (
             <>
-              <Smartphone size={40} className="text-amber mb-4" />
+              <Smartphone size={40} className="text-gold mb-4" />
               <h2 className="text-2xl font-extrabold mb-2">Check your phone</h2>
               <p className="text-muted text-sm mb-2">
                 Enter your M-Pesa PIN on the prompt sent to {phone} to complete your payment of {formatKES(total)}.
               </p>
-              <p className="text-amber text-sm font-medium">Processing... ({secondsRemaining}s)</p>
+              <p className="text-gold text-sm font-medium">Processing... ({secondsRemaining}s)</p>
             </>
           )}
         </div>
@@ -401,7 +401,7 @@ export default function CheckoutClient({ addresses, buyNow }: { addresses: UserA
                 })
               )}
               {effectiveSelectedAddress && !effectiveSelectedAddress.lat && (
-                <button type="button" onClick={() => setMapOpen(true)} className="flex items-center gap-2 text-xs text-amber hover:underline pt-1">
+                <button type="button" onClick={() => setMapOpen(true)} className="flex items-center gap-2 text-xs text-gold hover:underline pt-1">
                   <MapPin size={14} /> Pin delivery location on map
                 </button>
               )}

@@ -73,7 +73,7 @@ export default function TermsPage() {
           <h2 className="font-semibold text-base mb-2">7. Returns and refunds</h2>
           <p>
             Returns, exchanges, and refunds are handled in accordance with our{" "}
-            <Link href="/refund-policy" className="text-amber underline underline-offset-2">Refund Policy</Link>.
+            <Link href="/refund-policy" className="text-gold underline underline-offset-2">Refund Policy</Link>.
           </p>
         </section>
 

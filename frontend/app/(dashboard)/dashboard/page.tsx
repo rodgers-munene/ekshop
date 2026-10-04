@@ -99,7 +99,7 @@ export default async function DashboardOverviewPage() {
         <div className="lg:col-span-2 card overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <p className="text-sm font-semibold">Recent orders</p>
-            <Link href="/dashboard/orders" className="text-xs text-amber underline underline-offset-2">View all</Link>
+            <Link href="/dashboard/orders" className="text-xs text-gold underline underline-offset-2">View all</Link>
           </div>
           {recentOrders.length === 0 ? (
             <p className="text-sm text-muted px-4 py-6">No orders yet.</p>

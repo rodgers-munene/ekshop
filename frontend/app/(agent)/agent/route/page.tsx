@@ -107,7 +107,7 @@ export default function AgentRoutePage() {
           {stops.map((stop, idx) => (
             <div key={stop.delivery_id ?? idx} className="flex gap-4 py-4">
               <div className="flex flex-col items-center">
-                <div className="w-8 h-8 rounded-full bg-surface-2 border-2 border-amber text-amber text-xs font-bold flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-surface-2 border-2 border-amber text-gold text-xs font-bold flex items-center justify-center">
                   {idx + 1}
                 </div>
                 {idx < stops.length - 1 && <div className="w-0.5 flex-1 bg-border mt-2" />}

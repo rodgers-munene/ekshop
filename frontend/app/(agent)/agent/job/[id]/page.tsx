@@ -18,8 +18,8 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-surface text-muted",
   assigned: "bg-info/10 text-info",
-  picked: "bg-amber/10 text-amber",
-  in_transit: "bg-amber/10 text-amber",
+  picked: "bg-amber/10 text-gold",
+  in_transit: "bg-amber/10 text-gold",
   delivered: "bg-success/10 text-success",
   cancelled: "bg-danger/10 text-danger",
 };

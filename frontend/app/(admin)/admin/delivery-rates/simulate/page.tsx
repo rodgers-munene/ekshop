@@ -61,7 +61,7 @@ export default function DeliverySimulatorPage() {
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
-        <Link href="/admin/delivery-rates" className="text-xs text-muted hover:text-amber underline">
+        <Link href="/admin/delivery-rates" className="text-xs text-muted hover:text-gold underline">
           ← Delivery Rates
         </Link>
       </div>
@@ -71,7 +71,7 @@ export default function DeliverySimulatorPage() {
         changes across them, side by side with today&apos;s live cart-total fee. Nothing here charges
         real buyers — it&apos;s a dry run against real seller locations. Once the geo numbers look
         right, flip &quot;Use county/region pricing&quot; on in{" "}
-        <Link href="/admin/delivery-rates" className="underline hover:text-amber">Delivery Rates</Link> to
+        <Link href="/admin/delivery-rates" className="underline hover:text-gold">Delivery Rates</Link> to
         make it live at checkout immediately.
       </p>
 
@@ -82,7 +82,7 @@ export default function DeliverySimulatorPage() {
             {counties.map((c) => (
               <span
                 key={c}
-                className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-amber/15 text-amber"
+                className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-amber/15 text-gold"
               >
                 {c}
                 <button

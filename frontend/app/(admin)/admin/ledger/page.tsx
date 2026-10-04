@@ -10,11 +10,11 @@ const ENTRY_STYLE: Record<string, string> = {
   earning: "bg-success/10 text-success",
   b2c_payout: "bg-danger/10 text-danger",
   reversal: "bg-info/10 text-info",
-  adjustment: "bg-amber/15 text-amber",
+  adjustment: "bg-amber/15 text-gold",
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-amber/15 text-amber",
+  pending: "bg-amber/15 text-gold",
   succeeded: "bg-success/10 text-success",
   failed: "bg-danger/10 text-danger",
 };
