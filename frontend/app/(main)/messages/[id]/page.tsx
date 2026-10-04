@@ -79,7 +79,7 @@ export default function ConversationPage() {
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-[75%] rounded-lg px-4 py-2 text-sm ${
-                  mine ? "bg-amber text-ink" : "bg-surface text-ink border border-border"
+                  mine ? "bg-amber text-white" : "bg-surface text-ink border border-border"
                 }`}
               >
                 {m.body}

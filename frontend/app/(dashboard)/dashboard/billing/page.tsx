@@ -101,7 +101,7 @@ export default async function BillingPage() {
                     key={option}
                     type="button"
                     className={`px-4 py-2 text-sm rounded-md transition-colors ${
-                      (option === "annual" ? isAnnual : !isAnnual) ? "bg-amber text-ink font-semibold" : "text-muted"
+                      (option === "annual" ? isAnnual : !isAnnual) ? "bg-amber text-white font-semibold" : "text-muted"
                     }`}
                   >
                     {option === "monthly" ? "Monthly" : "Yearly"}
