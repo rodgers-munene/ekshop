@@ -180,7 +180,18 @@ def _otp_pepper() -> str:
 
 
 def verify_otp(job: DeliveryJob, otp: str) -> bool:
+    """Check a delivery code, refusing anything expired.
+
+    Expiry is enforced *here* rather than left to the caller. `transition_job`
+    does check it separately, but a second caller that forgets would otherwise
+    accept a code 31 minutes after it was minted -- and the whole point of the
+    code is that it is only valid while the rider is standing at the door.
+    `is_otp_expired` stays available for callers that want to check early and
+    report a different message.
+    """
     if not job.otp_hash or not otp:
+        return False
+    if is_otp_expired(job):
         return False
     return hmac.compare_digest(job.otp_hash, hash_otp(otp))
 

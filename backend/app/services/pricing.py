@@ -124,12 +124,15 @@ class PricingConfig:
         }
     )
 
-    # §8 surge. The customer never sees more than `customer_surge_cap`; beyond
-    # that the pressure is expressed as a rider incentive instead (B.2).
+    # §8 surge bands: <=1 -> 1.00, >1..2 -> 1.15, >2..3 -> 1.30, >3 -> 1.50.
+    # The customer never sees more than `customer_surge_cap`; beyond that the
+    # pressure is expressed as a rider incentive instead (B.2).
     surge_bands: tuple[SurgeBand, ...] = (
         SurgeBand(Decimal("1"), Decimal("1.00")),
         SurgeBand(Decimal("2"), Decimal("1.15")),
         SurgeBand(Decimal("3"), Decimal("1.30")),
+        # §8's ">3 -> 1.50" has no upper bound, so this band is open-ended.
+        SurgeBand(None, Decimal("1.50")),
     )
     customer_surge_cap: Decimal = Decimal("1.30")
     max_customer_price: Optional[Decimal] = Decimal("500")  # D#1

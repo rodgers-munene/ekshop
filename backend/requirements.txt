@@ -61,3 +61,6 @@ geopy==2.5.0
 shapely==2.0.3
 H3==4.3.1
 pyshp==3.1.6
+# Test suite. There was no test infrastructure in this project at all, which is
+# how 4 tables and 18 columns shipped without a migration.
+pytest==9.1.1
