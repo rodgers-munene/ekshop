@@ -50,9 +50,12 @@ const POLL_INTERVAL_MS = 4000;
 // and let the buyer trigger a check manually via "Refresh Status" instead.
 const POLL_TIMEOUT_MS = 20000;
 
-export default function CheckoutClient({ addresses: initialAddresses }: { addresses: UserAddress[] }) {
+export default function CheckoutClient({ addresses: initialAddresses, buyNow }: { addresses: UserAddress[]; buyNow: boolean }) {
   const router = useRouter();
-  const { items, totalPrice, clearCart } = useCartStore();
+  const { items: cartItems, buyNowItem, clearCart, clearBuyNow } = useCartStore();
+  // "Buy Now" checks out just that one product and leaves the cart alone.
+  const items = buyNow ? (buyNowItem ? [buyNowItem] : []) : cartItems;
+  const finishPurchase = buyNow ? clearBuyNow : clearCart;
   const [step, setStep] = useState<Step>("review");
   // Held in state rather than read straight from the prop so completing an
   // address in place updates the list without a round trip through the server.
@@ -79,7 +82,7 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
   const [mapOpen, setMapOpen] = useState(false);
   const [pinSaving, setPinSaving] = useState(false);
 
-  const subtotal = totalPrice();
+  const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
   const total = subtotal + deliveryFee;
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId) ?? null;
@@ -179,7 +182,7 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
 
           if (res.ok && data.status === "success") {
             clearInterval(timer);
-            clearCart();
+            finishPurchase();
             toast.success("Payment confirmed!");
             router.push(`/orders/${orderGroupId}`);
             return;
@@ -315,7 +318,7 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.status === "success") {
-        clearCart();
+        finishPurchase();
         toast.success("Payment confirmed!");
         router.push(`/orders/${orderGroupId}`);
         return;
@@ -398,7 +401,11 @@ export default function CheckoutClient({ addresses: initialAddresses }: { addres
               <h2 className="font-semibold">1. Your Items</h2>
               <div className="flex items-center gap-3">
                 {items[0]?.shop_id && <MessageSellerButton shopId={items[0].shop_id} />}
-                <button onClick={() => router.push("/cart")} className="text-xs text-muted underline">Edit cart</button>
+                {buyNow && items[0] ? (
+                  <button onClick={() => router.push(`/products/${items[0].product_slug}`)} className="text-xs text-muted underline">Change</button>
+                ) : (
+                  <button onClick={() => router.push("/cart")} className="text-xs text-muted underline">Edit cart</button>
+                )}
               </div>
             </div>
             <div className="divide-y divide-border">
