@@ -32,6 +32,7 @@ export default async function AgentLayout({ children }: { children: React.ReactN
       <nav className="sticky bottom-0 bg-bg/95 backdrop-blur border-t border-border">
         <div className="max-w-3xl mx-auto flex items-center justify-around py-2">
           <NavItem href="/agent" icon="home" label="Home" />
+          <NavItem href="/agent/offers" icon="offers" label="Offers" />
           <NavItem href="/agent/deliveries" icon="deliveries" label="Deliveries" />
           <NavItem href="/agent/route" icon="route" label="Route" />
           <NavItem href="/agent/earnings" icon="earnings" label="Earnings" />
@@ -44,6 +45,8 @@ export default async function AgentLayout({ children }: { children: React.ReactN
 function NavItem({ href, icon, label }: { href: string; icon: string; label: string }) {
   const icons: Record<string, string> = {
     home: "M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10",
+    // A parcel with an arrow, for the offer inbox.
+    offers: "M12 2l3 3-3 3-3-3 3-3zM4 9h16v10H4V9zM4 13h16",
     deliveries: "M4 5h16v13H4zM4 9h16M8 5v4M16 5v4",
     route: "M12 2a10 10 0 100 20 10 10 0 000-20zM12 8v4l3 3",
     earnings: "M12 2v20M17 6H9.5a2.5 2.5 0 000 5h5a2.5 2.5 0 010 5H7",
