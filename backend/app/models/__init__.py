@@ -14,6 +14,9 @@ from app.models.fulfillment import (
     DeliveryAssignment, AssignmentStatus, DeliveryJobEvent,
     FulfillmentSettlement, JobSettlement,
 )
+from app.models.pricing_config import (
+    PricingParameter, ParameterValueType, PricingCalculation,
+)
 from app.models.analytics import (
     UserEvent, ProductScore, UserPreference, SearchTerm,
     HeroSlide, Promotion, WeeklyAnalytics, IssueReport, ProductRequest,
@@ -34,6 +37,7 @@ __all__ = [
     "DeliveryJob", "DeliveryJobType", "DeliveryJobStatus",
     "DeliveryAssignment", "AssignmentStatus", "DeliveryJobEvent",
     "FulfillmentSettlement", "JobSettlement",
+    "PricingParameter", "ParameterValueType", "PricingCalculation",
     "UserEvent", "ProductScore", "UserPreference", "SearchTerm",
     "HeroSlide", "Promotion", "WeeklyAnalytics", "IssueReport", "ProductRequest",
 ]
