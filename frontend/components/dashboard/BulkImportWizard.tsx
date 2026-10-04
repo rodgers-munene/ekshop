@@ -64,7 +64,7 @@ function Counter({
   const tones = {
     plain: "text-ink",
     good: "text-success",
-    warn: "text-amber",
+    warn: "text-gold",
     bad: "text-danger",
   };
   return (
@@ -97,7 +97,7 @@ function RowTable({ rows, showError }: { rows: ProductImportRow[]; showError?: b
               <td className="px-3 py-2">
                 {row.name || <span className="text-muted">—</span>}
                 {row.matched_product_id && (
-                  <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber/15 text-amber">
+                  <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber/15 text-gold">
                     already listed
                   </span>
                 )}
@@ -265,7 +265,7 @@ export default function BulkImportWizard({ categories }: { categories: Category[
           >
             {uploading ? (
               <>
-                <Loader2 size={28} className="text-amber animate-spin" />
+                <Loader2 size={28} className="text-gold animate-spin" />
                 <span className="font-semibold text-sm">Reading your spreadsheet…</span>
                 <span className="text-xs text-muted">Large files take a few seconds.</span>
               </>
@@ -318,7 +318,7 @@ export default function BulkImportWizard({ categories }: { categories: Category[
           {done ? (
             <CheckCircle2 size={22} className="text-success shrink-0 mt-0.5" />
           ) : (
-            <Loader2 size={22} className="text-amber shrink-0 mt-0.5 animate-spin" />
+            <Loader2 size={22} className="text-gold shrink-0 mt-0.5 animate-spin" />
           )}
           <div>
             <h2 className="font-bold">
@@ -427,7 +427,7 @@ export default function BulkImportWizard({ categories }: { categories: Category[
           <button
             type="button"
             onClick={() => setShowProblems((s) => !s)}
-            className="mt-3 text-xs text-amber underline underline-offset-2"
+            className="mt-3 text-xs text-gold underline underline-offset-2"
           >
             {showProblems ? "Hide" : "See"} what&apos;s wrong with the{" "}
             {preview.invalid_rows.toLocaleString()} skipped{" "}

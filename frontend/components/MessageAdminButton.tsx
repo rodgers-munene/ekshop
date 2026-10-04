@@ -38,7 +38,7 @@ export default function MessageAdminButton() {
     <button
       onClick={startConversation}
       disabled={loading}
-      className="text-xs text-amber underline underline-offset-2 disabled:opacity-50"
+      className="text-xs text-gold underline underline-offset-2 disabled:opacity-50"
       type="button"
     >
       {loading ? "Opening…" : "Message support"}

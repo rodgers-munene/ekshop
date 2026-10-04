@@ -101,7 +101,7 @@ export default function FlashDeals({ deals }: { deals: Promotion[] }) {
     <CardRail
       title={
         <span className="flex items-center gap-2">
-          <Zap size={18} className="text-amber fill-current" />
+          <Zap size={18} className="text-gold fill-current" />
           Flash Deals
         </span>
       }

@@ -56,7 +56,7 @@ export default async function RatingsPage({ searchParams }: Props) {
               key={label}
               className="inline-flex items-center gap-1.5 text-xs bg-white/10 rounded-full px-3 py-1.5"
             >
-              <Icon size={13} className="text-amber" />
+              <Icon size={13} className="text-gold" />
               {label}
             </span>
           ))}

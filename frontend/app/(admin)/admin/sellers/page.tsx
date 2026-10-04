@@ -14,7 +14,7 @@ type Filter = "pending" | "active" | "suspended" | "all";
 const LIMIT = 20;
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-amber/15 text-amber",
+  pending: "bg-amber/15 text-gold",
   active: "bg-success/10 text-success",
   suspended: "bg-danger/10 text-danger",
 };
@@ -110,11 +110,11 @@ export default function AdminSellersPage() {
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="font-medium truncate group-hover:text-amber transition-colors">
+                      <p className="font-medium truncate group-hover:text-gold transition-colors">
                         {shop.name}
                       </p>
                       {shop.is_verified && <BadgeCheck size={14} className="text-info shrink-0" />}
-                      {shop.is_featured && <Star size={13} className="text-amber fill-current shrink-0" />}
+                      {shop.is_featured && <Star size={13} className="text-gold fill-current shrink-0" />}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-muted">
                       {shop.status && (
@@ -141,7 +141,7 @@ export default function AdminSellersPage() {
                   )}
                   <ActionButton
                     pendingLabel="Saving…"
-                    className={shop.is_featured ? "border-amber! text-amber! hover:bg-amber/5!" : ""}
+                    className={shop.is_featured ? "border-amber! text-gold! hover:bg-amber/5!" : ""}
                     onAction={() => feature(shop.id, shop.is_featured)}
                   >
                     {shop.is_featured ? "Unfeature" : "Feature"}
@@ -157,7 +157,7 @@ export default function AdminSellersPage() {
                   {shop.seller_id && <MessageUserButton userId={shop.seller_id} userName={shop.name} />}
                   <Link
                     href={`/admin/sellers/${shop.id}`}
-                    className="hidden md:inline-flex items-center text-xs font-medium py-1.5 px-3 rounded-md text-amber hover:bg-amber/5"
+                    className="hidden md:inline-flex items-center text-xs font-medium py-1.5 px-3 rounded-md text-gold hover:bg-amber/5"
                   >
                     View details
                   </Link>

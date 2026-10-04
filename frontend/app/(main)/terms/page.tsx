@@ -166,7 +166,7 @@ export default function TermsPage() {
           <p>
             All requests for item returns, exchange tickets, broken product declarations, or financial refunds must
             strictly adhere to the operational rules embedded inside our official, separate{" "}
-            <Link href="/refund-policy" className="text-amber underline underline-offset-2">Refund Policy</Link>{" "}
+            <Link href="/refund-policy" className="text-gold underline underline-offset-2">Refund Policy</Link>{" "}
             framework. Claims must be filed within our standard window via Ekshop customer support channels to preserve
             eligibility for secure escrow hold interventions.
           </p>
@@ -178,7 +178,7 @@ export default function TermsPage() {
             Ekshop takes user data privacy seriously. All practices regarding data gathering, profile collection, storage
             architectures, tracking cookies, and marketing opt-ins are managed under strict compliance with the Kenyan
             Data Protection Act, 2019, as described in our{" "}
-            <Link href="/privacy" className="text-amber underline underline-offset-2">Privacy Policy</Link>. By
+            <Link href="/privacy" className="text-gold underline underline-offset-2">Privacy Policy</Link>. By
             interacting with the Platform, you acknowledge that your contact details, physical delivery address, and
             tracking data will be securely processed and shared exclusively with relevant parties (such as logistics
             Riders and processing Sellers) solely to the extent required to execute and fulfill your orders.

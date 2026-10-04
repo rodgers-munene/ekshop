@@ -7,7 +7,7 @@ export default function ChoosePlanPage() {
       <div className="max-w-4xl mx-auto px-6 py-16">
         <div className="text-center mb-12">
           <span className="text-2xl font-bold">
-            EK<span className="text-amber">SHOP</span>
+            EK<span className="text-gold">SHOP</span>
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold mt-6 mb-3">Choose your seller plan</h1>
           <p className="text-muted">
@@ -22,7 +22,7 @@ export default function ChoosePlanPage() {
               className={`card p-8 flex flex-col ${plan.highlight ? "ring-2 ring-amber" : ""}`}
             >
               {plan.highlight && (
-                <span className="self-start text-xs font-semibold uppercase tracking-wide text-amber mb-3">
+                <span className="self-start text-xs font-semibold uppercase tracking-wide text-gold mb-3">
                   Most popular
                 </span>
               )}
@@ -35,7 +35,7 @@ export default function ChoosePlanPage() {
               <ul className="space-y-2 mb-8 flex-1">
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-2 text-sm">
-                    <span className="text-amber mt-0.5">✓</span>
+                    <span className="text-gold mt-0.5">✓</span>
                     <span>{feature}</span>
                   </li>
                 ))}
@@ -52,7 +52,7 @@ export default function ChoosePlanPage() {
 
         <p className="text-center text-sm text-muted mt-10">
           Already have an account?{" "}
-          <Link href="/login" className="text-amber underline underline-offset-2">Sign in</Link>
+          <Link href="/login" className="text-gold underline underline-offset-2">Sign in</Link>
         </p>
       </div>
     </div>

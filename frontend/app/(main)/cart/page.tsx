@@ -115,7 +115,7 @@ export default function CartPage() {
                   </div>
                   <Link
                     href={`/products/${item.product_slug}`}
-                    className="font-semibold text-sm leading-tight hover:text-amber transition-colors line-clamp-2"
+                    className="font-semibold text-sm leading-tight hover:text-gold transition-colors line-clamp-2"
                   >
                     {decodeHtml(item.product_name)}
                   </Link>
@@ -205,7 +205,7 @@ export default function CartPage() {
                   <button
                     type="button"
                     onClick={() => setMapOpen(true)}
-                    className="flex items-center gap-2 text-xs text-amber hover:underline pt-1"
+                    className="flex items-center gap-2 text-xs text-gold hover:underline pt-1"
                   >
                     Pin delivery location on map
                   </button>

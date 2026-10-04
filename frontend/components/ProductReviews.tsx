@@ -10,7 +10,7 @@ import { useAuthStore } from "@/store/authStore";
 
 function Stars({ value, size = 14 }: { value: number; size?: number }) {
   return (
-    <div className="flex items-center text-amber">
+    <div className="flex items-center text-gold">
       {Array.from({ length: 5 }).map((_, i) => (
         <Star key={i} size={size} className={i < value ? "fill-current" : "fill-none"} />
       ))}
@@ -85,7 +85,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
                 <Star
                   size={22}
                   className={`transition-colors ${
-                    i < (hover || rating) ? "fill-current text-amber" : "fill-none text-muted"
+                    i < (hover || rating) ? "fill-current text-gold" : "fill-none text-muted"
                   }`}
                 />
               </button>
@@ -110,7 +110,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
       ) : (
         <div className="border border-dashed border-border rounded-lg p-4 mb-6 text-center">
           <p className="text-sm text-muted mb-2">
-            <Link href="/login" className="text-amber underline underline-offset-2">
+            <Link href="/login" className="text-gold underline underline-offset-2">
               Sign in
             </Link>{" "}
             to rate this product.

@@ -305,7 +305,7 @@ function DealRow({
           <button
             onClick={onRunToday}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-md border border-amber text-amber hover:bg-amber/5 disabled:opacity-60 disabled:cursor-wait transition-all active:scale-95"
+            className="inline-flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-md border border-amber text-gold hover:bg-amber/5 disabled:opacity-60 disabled:cursor-wait transition-all active:scale-95"
           >
             <RotateCcw size={13} className={busy ? "animate-spin" : ""} />
             {busy ? "Adding…" : "Run again today"}

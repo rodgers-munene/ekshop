@@ -59,14 +59,14 @@ function ResetPasswordInner() {
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <Link href="/" className="text-2xl font-bold inline-block mb-8">
-          EK<span className="text-amber">SHOP</span>
+          EK<span className="text-gold">SHOP</span>
         </Link>
 
         {!token ? (
           <>
             <h1 className="text-2xl font-bold mb-2">Invalid reset link</h1>
             <p className="text-muted text-sm mb-6">This link is missing its token. Request a new one.</p>
-            <Link href="/forgot-password" className="text-amber underline underline-offset-2 text-sm">
+            <Link href="/forgot-password" className="text-gold underline underline-offset-2 text-sm">
               Request a new link
             </Link>
           </>

@@ -59,7 +59,7 @@ export default function PlanPicker({
             type="button"
             onClick={() => setInterval(option)}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              interval === option ? "bg-amber text-white font-semibold" : "text-muted"
+              interval === option ? "bg-amber text-ink font-semibold" : "text-muted"
             }`}
           >
             {option === "monthly" ? "Billed monthly" : "Billed annually"}

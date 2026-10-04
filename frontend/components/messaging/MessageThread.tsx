@@ -103,7 +103,7 @@ export default function MessageThread({ apiBase, conversationId, orderId }: Prop
           <div key={msg.id} className={`flex ${msg.is_mine ? "justify-end" : "justify-start"}`}>
             <div
               className={`rounded-lg px-3 py-2 text-sm max-w-[80%] ${
-                msg.is_mine ? "bg-amber text-white" : "bg-surface border border-border"
+                msg.is_mine ? "bg-amber text-ink" : "bg-surface border border-border"
               }`}
             >
               {!msg.is_mine && (

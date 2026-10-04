@@ -30,7 +30,7 @@ export default function RefundPolicyPage() {
           <ul className="list-disc pl-5 space-y-1 mt-2">
             <li>
               <strong>Self-Service Cancellation:</strong> Buyers may initiate a cancellation directly through their{" "}
-              <Link href="/orders" className="text-amber underline underline-offset-2">Orders</Link> page on the
+              <Link href="/orders" className="text-gold underline underline-offset-2">Orders</Link> page on the
               Platform.
             </li>
             <li>
@@ -160,7 +160,7 @@ export default function RefundPolicyPage() {
           <p>
             For claims, return authorizations, ongoing disputes, or questions about this policy, contact our support
             desk at <span className="text-muted">supportteam@ekshop.store</span>, or use &quot;Contact Support&quot; on
-            the <Link href="/messages" className="text-amber underline underline-offset-2">Messages</Link> page while
+            the <Link href="/messages" className="text-gold underline underline-offset-2">Messages</Link> page while
             signed in. Please include your order number.
           </p>
         </section>

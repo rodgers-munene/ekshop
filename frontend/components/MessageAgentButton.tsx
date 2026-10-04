@@ -31,7 +31,7 @@ export default function MessageAgentButton({ agentId, agentName }: { agentId: st
     <button
       onClick={startConversation}
       disabled={loading}
-      className="text-xs text-amber underline underline-offset-2 disabled:opacity-50"
+      className="text-xs text-gold underline underline-offset-2 disabled:opacity-50"
       type="button"
     >
       {loading ? "Starting…" : `Message ${agentName ? agentName.split(" ")[0] : "agent"}`}

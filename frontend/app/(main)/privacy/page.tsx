@@ -74,7 +74,7 @@ export default function PrivacyPage() {
             <li>
               <strong>Fraud prevention and compliance:</strong> detecting and stopping unauthorized activity, payment
               fraud, bots, and serious violations of our{" "}
-              <Link href="/terms" className="text-amber underline underline-offset-2">Terms of Service</Link>.
+              <Link href="/terms" className="text-gold underline underline-offset-2">Terms of Service</Link>.
             </li>
           </ul>
         </section>
@@ -130,7 +130,7 @@ export default function PrivacyPage() {
           <p>
             Under Section 26 of the Kenya Data Protection Act, 2019, you have the rights below. You can exercise them
             from your{" "}
-            <Link href="/account" className="text-amber underline underline-offset-2">account settings</Link> or by
+            <Link href="/account" className="text-gold underline underline-offset-2">account settings</Link> or by
             sending a request to our data protection team:
           </p>
           <ul className="list-disc pl-5 space-y-1 mt-2">

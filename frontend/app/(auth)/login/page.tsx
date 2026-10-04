@@ -108,7 +108,7 @@ function LoginPageInner() {
       {/* Left: decorative panel */}
       <div className="hidden lg:flex w-1/2 bg-navy text-white flex-col justify-between p-12">
         <span className="text-2xl font-bold">
-          EK<span className="text-amber">SHOP</span>
+          EK<span className="text-gold">SHOP</span>
         </span>
         <div>
           <h1 className="text-5xl font-bold leading-tight mb-4">
@@ -127,7 +127,7 @@ function LoginPageInner() {
           <h2 className="text-3xl font-bold mb-1">Sign in</h2>
           <p className="text-muted text-sm mb-8">
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-amber underline underline-offset-2">
+            <Link href="/register" className="text-gold underline underline-offset-2">
               Create one
             </Link>
           </p>
@@ -143,7 +143,7 @@ function LoginPageInner() {
                 type="button"
                 onClick={() => resendVerification(unverifiedEmail)}
                 disabled={resending}
-                className="text-amber underline underline-offset-2 text-xs disabled:opacity-50"
+                className="text-gold underline underline-offset-2 text-xs disabled:opacity-50"
               >
                 {resending ? "Sending…" : "Send me a new link"}
               </button>
@@ -170,7 +170,7 @@ function LoginPageInner() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium">Password</label>
-                <Link href="/forgot-password" className="text-xs text-amber underline underline-offset-2">
+                <Link href="/forgot-password" className="text-xs text-gold underline underline-offset-2">
                   Forgot password?
                 </Link>
               </div>

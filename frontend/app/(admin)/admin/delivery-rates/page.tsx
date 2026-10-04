@@ -210,7 +210,7 @@ export default function AdminDeliveryRatesPage() {
                 <h2 className="font-semibold text-sm mb-1">Live pricing model</h2>
                 <p className="text-xs text-muted mb-4">
                   What checkout charges right now. Check any change in the{" "}
-                  <Link href="/admin/delivery-rates/simulate" className="underline hover:text-amber">
+                  <Link href="/admin/delivery-rates/simulate" className="underline hover:text-gold">
                     Delivery Fee Simulator
                   </Link>{" "}
                   first — it prices every active seller against the counties you pick.
@@ -236,7 +236,7 @@ export default function AdminDeliveryRatesPage() {
                             }`}
                           />
                           <span className="text-sm font-medium">{label}</span>
-                          {active && <span className="text-xs text-amber font-medium">Live</span>}
+                          {active && <span className="text-xs text-gold font-medium">Live</span>}
                         </span>
                         <span className="block text-xs text-muted mt-1 pl-5.5">{hint}</span>
                       </button>
@@ -336,28 +336,28 @@ export default function AdminDeliveryRatesPage() {
 
           <ol className="space-y-2.5 text-sm mb-5">
             <li className="flex gap-2">
-              <span className="font-semibold text-amber shrink-0">1.</span>
+              <span className="font-semibold text-gold shrink-0">1.</span>
               <span>
                 Each seller in the cart is matched to a <span className="font-medium">distance band</span>,
                 using the finest detail both ends share — ward, then sub-county, then county, then region.
               </span>
             </li>
             <li className="flex gap-2">
-              <span className="font-semibold text-amber shrink-0">2.</span>
+              <span className="font-semibold text-gold shrink-0">2.</span>
               <span>
                 The cart is charged <span className="font-medium">one journey</span>: the single most
                 expensive leg. Extra sellers nearer than that add nothing.
               </span>
             </li>
             <li className="flex gap-2">
-              <span className="font-semibold text-amber shrink-0">3.</span>
+              <span className="font-semibold text-gold shrink-0">3.</span>
               <span>
                 Cart weight above the free allowance adds a{" "}
                 <span className="font-medium">per-kg surcharge</span>, itself capped.
               </span>
             </li>
             <li className="flex gap-2">
-              <span className="font-semibold text-amber shrink-0">4.</span>
+              <span className="font-semibold text-gold shrink-0">4.</span>
               <span>
                 The result is held between the <span className="font-medium">minimum and maximum</span> fee
                 and rounded up to the nearest 5.

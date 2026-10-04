@@ -241,7 +241,7 @@ export default function AutomationSettingsPage() {
         <button
           onClick={save}
           disabled={saving}
-          className="px-4 py-2 text-sm font-medium bg-amber text-white rounded-md hover:bg-amber/90 disabled:opacity-60"
+          className="px-4 py-2 text-sm font-medium bg-amber text-ink rounded-md hover:bg-amber/90 disabled:opacity-60"
         >
           {saving ? "Saving..." : "Save settings"}
         </button>

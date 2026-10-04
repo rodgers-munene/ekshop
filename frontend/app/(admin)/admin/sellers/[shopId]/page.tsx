@@ -20,7 +20,7 @@ import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
 import ActionButton from "@/components/admin/ActionButton";
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-amber/15 text-amber",
+  pending: "bg-amber/15 text-gold",
   active: "bg-success/10 text-success",
   suspended: "bg-danger/10 text-danger",
 };
@@ -84,7 +84,7 @@ export default function AdminSellerDetailPage({ params }: { params: Promise<{ sh
     return (
       <div className="card p-10 text-center">
         <p className="text-sm text-muted mb-4">Could not load this seller.</p>
-        <Link href="/admin/sellers" className="text-amber text-sm underline underline-offset-2">
+        <Link href="/admin/sellers" className="text-gold text-sm underline underline-offset-2">
           Back to sellers
         </Link>
       </div>
@@ -119,7 +119,7 @@ export default function AdminSellerDetailPage({ params }: { params: Promise<{ sh
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h1 className="text-xl font-bold break-words">{decodeHtml(shop.name)}</h1>
                 {shop.is_verified && <BadgeCheck size={16} className="text-info shrink-0" />}
-                {shop.is_featured && <Star size={15} className="text-amber fill-current shrink-0" />}
+                {shop.is_featured && <Star size={15} className="text-gold fill-current shrink-0" />}
               </div>
               <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted">
                 {shop.status && (
@@ -196,12 +196,12 @@ export default function AdminSellerDetailPage({ params }: { params: Promise<{ sh
               <Field
                 label="Email"
                 icon={Mail}
-                value={<a href={`mailto:${owner.email}`} className="hover:text-amber break-all">{owner.email}</a>}
+                value={<a href={`mailto:${owner.email}`} className="hover:text-gold break-all">{owner.email}</a>}
               />
               <Field
                 label="Phone"
                 icon={Phone}
-                value={owner.phone ? <a href={`tel:${owner.phone}`} className="hover:text-amber">{owner.phone}</a> : null}
+                value={owner.phone ? <a href={`tel:${owner.phone}`} className="hover:text-gold">{owner.phone}</a> : null}
               />
               <Field label="Signed up" icon={Calendar} value={date(owner.created_at)} />
               <Field label="Last login" icon={Calendar} value={date(owner.last_login_at)} />
@@ -241,7 +241,7 @@ export default function AdminSellerDetailPage({ params }: { params: Promise<{ sh
                   <span className="capitalize">
                     {subscription.status.replace("_", " ")}
                     {subscription.awaiting_first_payment && (
-                      <span className="ml-1.5 text-[10px] uppercase tracking-wide text-amber font-semibold">
+                      <span className="ml-1.5 text-[10px] uppercase tracking-wide text-gold font-semibold">
                         unpaid
                       </span>
                     )}

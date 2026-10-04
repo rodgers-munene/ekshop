@@ -198,7 +198,7 @@ function RegisterPageInner() {
       {/* Left panel */}
       <div className="hidden lg:flex w-1/2 bg-navy text-white flex-col justify-between p-12">
         <span className="text-2xl font-bold">
-          EK<span className="text-amber">SHOP</span>
+          EK<span className="text-gold">SHOP</span>
         </span>
         <div>
           <h1 className="text-5xl font-bold leading-tight mb-4">
@@ -234,7 +234,7 @@ function RegisterPageInner() {
           <h2 className="text-3xl font-bold mb-1">Create account</h2>
           <p className="text-muted text-sm mb-6">
             Already have one?{" "}
-            <Link href="/login" className="text-amber underline underline-offset-2">Sign in</Link>
+            <Link href="/login" className="text-gold underline underline-offset-2">Sign in</Link>
           </p>
 
           {/* Role toggle */}
@@ -258,7 +258,7 @@ function RegisterPageInner() {
           {role === "seller" && selectedPlan && (
             <p className="text-xs text-muted mb-6">
               Plan: <strong>{selectedPlan.name}</strong> (KES {selectedPlan.price.toLocaleString()}/month).{" "}
-              <Link href="/register/plan" className="text-amber underline underline-offset-2">Change plan</Link>
+              <Link href="/register/plan" className="text-gold underline underline-offset-2">Change plan</Link>
             </p>
           )}
 
@@ -350,8 +350,8 @@ function RegisterPageInner() {
 
             <p className="text-xs text-muted">
               By creating an account, you agree to Ekshop&apos;s{" "}
-              <Link href="/terms" className="text-amber underline underline-offset-2">Terms of Service</Link> and{" "}
-              <Link href="/privacy" className="text-amber underline underline-offset-2">Privacy Policy</Link>.
+              <Link href="/terms" className="text-gold underline underline-offset-2">Terms of Service</Link> and{" "}
+              <Link href="/privacy" className="text-gold underline underline-offset-2">Privacy Policy</Link>.
             </p>
 
             <button

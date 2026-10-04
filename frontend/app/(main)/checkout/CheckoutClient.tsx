@@ -347,7 +347,7 @@ export default function CheckoutClient({ addresses: initialAddresses, buyNow }: 
         <div className="card w-full max-w-sm p-8 flex flex-col items-center text-center">
           {unresolved ? (
             <>
-              <AlertTriangle size={40} className="text-amber mb-4" />
+              <AlertTriangle size={40} className="text-gold mb-4" />
               <h2 className="text-2xl font-extrabold mb-2">We couldn&apos;t confirm your payment</h2>
               <p className="text-muted text-sm mb-2">
                 The prompt may have been cancelled, timed out, or could still be processing. Refresh to check the
@@ -373,12 +373,12 @@ export default function CheckoutClient({ addresses: initialAddresses, buyNow }: 
             </>
           ) : (
             <>
-              <Smartphone size={40} className="text-amber mb-4" />
+              <Smartphone size={40} className="text-gold mb-4" />
               <h2 className="text-2xl font-extrabold mb-2">Check your phone</h2>
               <p className="text-muted text-sm mb-2">
                 Enter your M-Pesa PIN on the prompt sent to {phone} to complete your payment of {formatKES(total)}.
               </p>
-              <p className="text-amber text-sm font-medium">Processing... ({secondsRemaining}s)</p>
+              <p className="text-gold text-sm font-medium">Processing... ({secondsRemaining}s)</p>
             </>
           )}
         </div>
@@ -450,7 +450,7 @@ export default function CheckoutClient({ addresses: initialAddresses, buyNow }: 
                         {addr.first_name} {addr.last_name}
                         {addr.label && <span className="text-xs text-muted ml-1">({addr.label})</span>}
                         {!isAddressComplete(addr) && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-amber bg-amber/15 rounded-full px-2 py-0.5 ml-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-gold bg-amber/15 rounded-full px-2 py-0.5 ml-2">
                             Incomplete
                           </span>
                         )}
@@ -468,7 +468,7 @@ export default function CheckoutClient({ addresses: initialAddresses, buyNow }: 
                 ))
               )}
               {selectedAddress && !selectedAddress.lat && (
-                <button type="button" onClick={() => setMapOpen(true)} className="flex items-center gap-2 text-xs text-amber hover:underline pt-1">
+                <button type="button" onClick={() => setMapOpen(true)} className="flex items-center gap-2 text-xs text-gold hover:underline pt-1">
                   <MapPin size={14} /> Pin delivery location on map
                 </button>
               )}
@@ -476,7 +476,7 @@ export default function CheckoutClient({ addresses: initialAddresses, buyNow }: 
               {selectedAddress && addressIncomplete && (
                 <div className="rounded-lg border border-amber bg-amber/10 p-4">
                   <div className="flex gap-2.5">
-                    <AlertTriangle size={18} className="text-amber shrink-0 mt-0.5" />
+                    <AlertTriangle size={18} className="text-gold shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold">This address is missing its ward</p>
                       <p className="text-xs text-muted mt-1 leading-relaxed">
@@ -531,7 +531,7 @@ export default function CheckoutClient({ addresses: initialAddresses, buyNow }: 
                 <span className="text-muted">Delivery</span>
                 <span>
                   {addressIncomplete
-                    ? <span className="text-amber italic">Add your ward</span>
+                    ? <span className="text-gold italic">Add your ward</span>
                     : feeLoading
                       ? <span className="text-muted italic">Calculating…</span>
                       : feeFailed
@@ -570,7 +570,7 @@ export default function CheckoutClient({ addresses: initialAddresses, buyNow }: 
               {loading ? "Processing..." : "Pay →"}
             </button>
             {addressIncomplete && (
-              <p className="text-xs text-amber text-center -mt-2">
+              <p className="text-xs text-gold text-center -mt-2">
                 Add the ward to your delivery address to continue.
               </p>
             )}

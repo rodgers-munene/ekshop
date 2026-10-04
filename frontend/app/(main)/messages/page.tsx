@@ -104,7 +104,7 @@ export default function MessagesPage() {
           </div>
           <p className="text-xs text-muted mt-6">
             Prefer email?{" "}
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-amber underline underline-offset-2">
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-gold underline underline-offset-2">
               {SUPPORT_EMAIL}
             </a>
           </p>

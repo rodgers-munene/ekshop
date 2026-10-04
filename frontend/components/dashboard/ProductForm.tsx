@@ -390,7 +390,7 @@ export default function ProductForm({
             </div>
           ))}
 
-          <label className="flex flex-col items-center justify-center gap-1 aspect-square rounded border-2 border-dashed border-border text-muted cursor-pointer hover:border-amber hover:text-amber transition-colors">
+          <label className="flex flex-col items-center justify-center gap-1 aspect-square rounded border-2 border-dashed border-border text-muted cursor-pointer hover:border-amber hover:text-gold transition-colors">
             <ImagePlus size={20} />
             <span className="text-[11px] font-medium">Add photo</span>
             <input
@@ -407,7 +407,7 @@ export default function ProductForm({
         </div>
 
         {photoCount === 0 && (
-          <p className="text-xs text-amber mt-3">Listings with photos sell far more — add at least one.</p>
+          <p className="text-xs text-gold mt-3">Listings with photos sell far more — add at least one.</p>
         )}
       </div>
 
@@ -557,7 +557,7 @@ export default function ProductForm({
             </div>
           ))}
 
-          <button type="button" onClick={addVariantRow} className="text-amber text-sm underline underline-offset-2">
+          <button type="button" onClick={addVariantRow} className="text-gold text-sm underline underline-offset-2">
             + Add variant
           </button>
         </div>

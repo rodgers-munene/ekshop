@@ -26,8 +26,8 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-surface text-muted",
   assigned: "bg-info/10 text-info",
-  picked: "bg-amber/10 text-amber",
-  in_transit: "bg-amber/10 text-amber",
+  picked: "bg-amber/10 text-gold",
+  in_transit: "bg-amber/10 text-gold",
   delivered: "bg-success/10 text-success",
   cancelled: "bg-danger/10 text-danger",
 };
@@ -142,7 +142,7 @@ function ItemLine({ item }: { item: OrderItem }) {
       <div className="min-w-0">
         <p className="text-sm font-medium text-ink break-words">{item.product_snapshot.name}</p>
         {multiple && (
-          <p className="text-xs text-amber font-medium mt-0.5">
+          <p className="text-xs text-gold font-medium mt-0.5">
             Take {item.quantity} of this whole item — everything the name lists, {item.quantity} times.
           </p>
         )}

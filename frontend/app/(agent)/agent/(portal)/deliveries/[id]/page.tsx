@@ -330,7 +330,7 @@ export default function AgentDeliveryDetailPage() {
                     onClick={() => setReportReason(reason)}
                     className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                       reportReason === reason
-                        ? "bg-amber text-white border-amber"
+                        ? "bg-amber text-ink border-amber"
                         : "border-border hover:border-amber"
                     }`}
                   >

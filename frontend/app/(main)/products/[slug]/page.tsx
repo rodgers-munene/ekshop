@@ -153,11 +153,11 @@ export default async function ProductDetailPage({ params }: Props) {
       <div className="w-full mx-auto px-4 md:px-6 py-4">
         {/* Breadcrumb */}
         <div className="py-3 text-xs text-muted flex gap-2">
-          <Link href="/" className="hover:text-amber">
+          <Link href="/" className="hover:text-gold">
             Home
           </Link>
           <span>/</span>
-          <Link href="/products" className="hover:text-amber">
+          <Link href="/products" className="hover:text-gold">
             Products
           </Link>
           <span>/</span>
@@ -182,11 +182,11 @@ export default async function ProductDetailPage({ params }: Props) {
             {product.shop && (
               <Link
                 href={`/shops/${product.shop.slug}`}
-                className="text-xs text-muted hover:text-amber transition-colors"
+                className="text-xs text-muted hover:text-gold transition-colors"
               >
                 {decodeHtml(product.shop.name)}
                 {product.shop.is_verified && (
-                  <span className="ml-1 text-amber">✓</span>
+                  <span className="ml-1 text-gold">✓</span>
                 )}
               </Link>
             )}

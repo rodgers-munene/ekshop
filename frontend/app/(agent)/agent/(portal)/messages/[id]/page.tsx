@@ -31,7 +31,7 @@ export default function AgentConversationPage() {
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
-        <Link href="/agent/messages" className="text-xs text-muted hover:text-amber underline">← Messages</Link>
+        <Link href="/agent/messages" className="text-xs text-muted hover:text-gold underline">← Messages</Link>
         <h1 className="font-semibold truncate">{conversation.title}</h1>
       </div>
       <div className="card p-5">

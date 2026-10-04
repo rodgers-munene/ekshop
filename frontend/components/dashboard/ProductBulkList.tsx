@@ -10,7 +10,7 @@ import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-success/10 text-success",
-  draft: "bg-amber/15 text-amber",
+  draft: "bg-amber/15 text-gold",
   paused: "bg-surface text-muted",
 };
 
@@ -157,7 +157,7 @@ export default function ProductBulkList({
           <button
             type="button"
             onClick={() => setAllMatching(true)}
-            className="text-xs text-amber underline underline-offset-2"
+            className="text-xs text-gold underline underline-offset-2"
           >
             Select all {total.toLocaleString()} matching
           </button>
@@ -169,7 +169,7 @@ export default function ProductBulkList({
               setAllMatching(false);
               setSelected(new Set());
             }}
-            className="text-xs text-amber underline underline-offset-2"
+            className="text-xs text-gold underline underline-offset-2"
           >
             Clear selection
           </button>
@@ -255,7 +255,7 @@ export default function ProductBulkList({
                   <StatusPill status={product.status} />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Link href={`/dashboard/products/${product.slug}/edit`} className="text-amber text-sm underline underline-offset-2">
+                  <Link href={`/dashboard/products/${product.slug}/edit`} className="text-gold text-sm underline underline-offset-2">
                     Edit
                   </Link>
                 </td>

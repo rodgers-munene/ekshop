@@ -40,7 +40,7 @@ export default function CardRail({
           {viewAllHref && (
             <Link
               href={viewAllHref}
-              className="text-sm text-amber hover:underline hover:underline-offset-2 ml-auto"
+              className="text-sm text-gold hover:underline hover:underline-offset-2 ml-auto"
             >
               {viewAllLabel}
             </Link>

@@ -120,7 +120,7 @@ function WeekdayTable({ rows, periodLabel }: { rows: WeekdayAverageRow[]; period
               {r.averages.map((v, i) => (
                 <td
                   key={i}
-                  className={`py-2 px-3 text-right tabular-nums ${best > 0 && v === best ? "font-bold text-amber" : ""}`}
+                  className={`py-2 px-3 text-right tabular-nums ${best > 0 && v === best ? "font-bold text-gold" : ""}`}
                 >
                   {v.toFixed(2)}
                 </td>

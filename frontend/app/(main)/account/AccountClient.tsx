@@ -244,7 +244,7 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
             ))}
 
             {!showAddrForm ? (
-              <button onClick={() => setShowAddrForm(true)} className="w-full py-3 rounded-lg border-2 border-dashed border-border text-sm text-muted hover:text-amber hover:border-amber transition-colors">
+              <button onClick={() => setShowAddrForm(true)} className="w-full py-3 rounded-lg border-2 border-dashed border-border text-sm text-muted hover:text-gold hover:border-amber transition-colors">
                 + Add New Address
               </button>
             ) : (
