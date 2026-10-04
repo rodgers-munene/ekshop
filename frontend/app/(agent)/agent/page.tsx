@@ -2,23 +2,39 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Delivery } from "@/types/interface";
 import MessageAdminButton from "@/components/MessageAdminButton";
-
-type AgentStatus = "available" | "busy" | "offline";
-
-const STATUS_LABELS: Record<AgentStatus, string> = {
-  available: "Available",
-  busy: "Busy",
-  offline: "Offline",
-};
+import {
+  agentStatusLabel,
+  isOnline,
+  nextAgentStatus,
+  statusLabel,
+  statusStyle,
+  type AgentStatus,
+} from "@/lib/agent-status";
 
 export default function AgentHomePage() {
-  const [status, setStatus] = useState<AgentStatus>("available");
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+
+  // The rider's real availability comes from the server. It used to be a local
+  // constant, so the screen claimed "Available" regardless of what dispatch
+  // actually thought. The query is the source of truth and is re-read after every
+  // change, rather than mirrored into component state by an effect.
+  const { data: remoteStatus } = useQuery({
+    queryKey: ["agent-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/agent/auth/status");
+      if (!res.ok) throw new Error();
+      return (await res.json()) as { status: AgentStatus };
+    },
+    refetchInterval: 30000,
+  });
+
+  const status: AgentStatus = remoteStatus?.status ?? "inactive";
 
   const { data: deliveries = [] } = useQuery({
     queryKey: ["agent-deliveries"],
@@ -45,18 +61,10 @@ export default function AgentHomePage() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/agent/deliveries")
-      .then((r) => r.json())
-      .then((data: Delivery[]) => {
-        const active = data.filter((d) => d.status !== "delivered" && d.status !== "cancelled");
-        if (active.length > 0) {
-          setStatus("busy");
-        }
-      })
-      .catch(() => {});
-  }, []);
-
+  // This used to re-fetch the delivery list purely to set a local "busy" status
+  // when anything was active. The server already reports `busy`, so the guess was
+  // both redundant and wrong -- and it duplicated the request the query above
+  // already makes. `active` is derived from that query instead.
   const active = deliveries.filter((d) => d.status !== "delivered" && d.status !== "cancelled");
   const completed = deliveries.filter((d) => d.status === "delivered");
   const next = active[0];
@@ -64,17 +72,30 @@ export default function AgentHomePage() {
   async function toggleStatus() {
     setLoading(true);
     try {
-      const newStatus = status === "available" ? "offline" : "available";
-      const res = await fetch("/api/agent/auth", {
-        method: "POST",
+      const newStatus = nextAgentStatus(status);
+      // Was POSTing `{action:"status"}` to `/api/agent/auth`, which only handles
+      // login and logout -- every toggle came back 401 and the rider could never
+      // come online. It also sent "available"/"offline", which the backend's
+      // DeliveryAgentStatus does not define. `PATCH /api/agent/auth/status` with
+      // the real enum is the endpoint and vocabulary that exist.
+      const res = await fetch("/api/agent/auth/status", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "status", status: newStatus }),
+        body: JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) throw new Error();
-      setStatus(newStatus);
-      toast.success(newStatus === "available" ? "You're now available" : "You're now offline");
-    } catch {
-      toast.error("Could not update status");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // The backend refuses to go online without approved KYC, verified
+        // equipment and a shared location. Say which, rather than a generic
+        // failure the rider cannot act on.
+        throw new Error(data.detail ?? "Could not update status");
+      }
+      queryClient.invalidateQueries({ queryKey: ["agent-status"] });
+      toast.success(
+        newStatus === "active" ? "You're now available" : "You're now offline"
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update status");
     } finally {
       setLoading(false);
     }
@@ -94,13 +115,13 @@ export default function AgentHomePage() {
           onClick={toggleStatus}
           disabled={loading}
           className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition-colors disabled:opacity-50 ${
-            status === "available"
+            isOnline(status)
               ? "border-success text-success bg-success/10"
               : "border-border text-muted bg-surface"
           }`}
         >
-          <span className={`w-2 h-2 rounded-full ${status === "available" ? "bg-success" : "bg-muted"}`} />
-          {STATUS_LABELS[status]}
+          <span className={`w-2 h-2 rounded-full ${isOnline(status) ? "bg-success" : "bg-muted"}`} />
+          {agentStatusLabel(status)}
         </button>
         <MessageAdminButton />
       </div>
@@ -179,13 +200,8 @@ export default function AgentHomePage() {
                   <p className="text-xs text-muted">{delivery.order?.buyer_name}</p>
                 </div>
               </div>
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  delivery.status === "assigned" ? "bg-info/10 text-info" :
-                  delivery.status === "picked" ? "bg-amber/10 text-amber" :
-                  delivery.status === "in_transit" ? "bg-amber/10 text-amber" :
-                  "bg-surface text-muted"
-                }`}>
-                  {STATUS_LABELS[delivery.status as keyof typeof STATUS_LABELS] ?? delivery.status}
+                <span className={`text-xs font-medium px-2 py-1 rounded-full ${statusStyle(delivery.status)}`}>
+                  {statusLabel(delivery.status)}
                 </span>
                 {delivery.distance_km != null && delivery.duration_min != null && (
                   <span className="text-xs text-muted ml-2">

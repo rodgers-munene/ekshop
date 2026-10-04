@@ -6,23 +6,15 @@ import { toast } from "sonner";
 import { Delivery } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import MessageThread from "@/components/messaging/MessageThread";
+import {
+  DELIVERY_TRANSITIONS,
+  OTP_LENGTH,
+  requiresOtpFor,
+  statusLabel,
+  statusStyle,
+} from "@/lib/agent-status";
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Pending",
-  assigned: "Assigned",
-  picked: "Picked up",
-  in_transit: "In transit",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
-};
-
-const DELIVERY_TRANSITIONS: Record<string, string[]> = {
-  assigned: ["picked", "cancelled"],
-  picked: ["in_transit"],
-  in_transit: ["delivered", "cancelled"],
-};
-
-export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ deliveryId: string }> }) {
+export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const queryClient = useQueryClient();
   const [showConfirm, setShowConfirm] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -35,10 +27,10 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
   const [reportText, setReportText] = useState("");
 
   const { data: delivery, isLoading } = useQuery({
-    queryKey: ["agent-delivery"],
+    queryKey: ["agent-delivery", params],
     queryFn: async () => {
-      const { deliveryId } = await params;
-      const res = await fetch(`/api/agent/deliveries/${deliveryId}`);
+      const { id } = await params;
+      const res = await fetch(`/api/agent/deliveries/${id}`);
       if (!res.ok) throw new Error();
       return res.json() as Promise<Delivery>;
     },
@@ -47,19 +39,31 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
 
   const updateStatus = useMutation({
     mutationFn: async (status: string) => {
-      const { deliveryId } = await params;
-      const res = await fetch(`/api/agent/deliveries/${deliveryId}/status`, {
+      const { id } = await params;
+      // The backend requires `otp_code` to move to delivered and rejects the
+      // request without it. It used to be collected in this form and silently
+      // dropped on the floor, so confirming a delivery always failed with a 400.
+      const body: Record<string, unknown> = { status };
+      if (notes.trim()) body.notes = notes.trim();
+      if (otp.trim()) body.otp_code = otp.trim();
+
+      const res = await fetch(`/api/agent/deliveries/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, notes }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
-      return res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Surface the backend's own message: "OTP code is required" and "OTP has
+        // expired" need very different responses from the rider.
+        throw new Error(data.detail ?? "Failed to update delivery");
+      }
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agent-deliveries"] });
       queryClient.invalidateQueries({ queryKey: ["agent-delivery"] });
-      toast.success(`Marked as ${STATUS_LABELS[delivery?.status ?? ""] ?? "updated"}`);
+      toast.success(`Marked as ${statusLabel(delivery?.status ?? "")}`);
       setShowConfirm(false);
       setRecipientName("");
       setOtp("");
@@ -67,13 +71,15 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
       setPhotoTaken(false);
       setSigTaken(false);
     },
-    onError: () => toast.error("Failed to update delivery"),
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const submitReport = useMutation({
     mutationFn: async () => {
-      const { deliveryId } = await params;
-      const res = await fetch(`/api/agent/deliveries/${deliveryId}/issue`, {
+      const { id } = await params;
+      // The proxy handles POST /issue on the collection route itself; there is no
+      // nested `issue/` segment, so the old `/issue` suffix was a guaranteed 404.
+      const res = await fetch(`/api/agent/deliveries/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: reportReason, notes: reportText }),
@@ -109,12 +115,8 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
           <p className="font-mono text-xs text-muted">{delivery.tracking_number}</p>
           <h1 className="text-2xl font-bold">{order?.shop?.name ?? "Order"}</h1>
         </div>
-        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-          delivery.status === "delivered" ? "bg-success/10 text-success" :
-          delivery.status === "cancelled" ? "bg-danger/10 text-danger" :
-          "bg-info/10 text-info"
-        }`}>
-          {STATUS_LABELS[delivery.status] ?? delivery.status}
+        <span className={`text-xs font-medium px-2 py-1 rounded-full ${statusStyle(delivery.status)}`}>
+          {statusLabel(delivery.status)}
         </span>
       </div>
 
@@ -204,22 +206,31 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
           {nextStatuses.map((status) => (
             <button
               key={status}
+              type="button"
               onClick={() => {
-                if (status === "delivered" && !showConfirm) {
-                  setShowConfirm(true);
-                  return;
-                }
-                updateStatus.mutate(status);
-              }}
-              disabled={updateStatus.isPending}
-              className={`flex-1 py-3 rounded-lg font-medium text-sm disabled:opacity-50 ${
-                status === "cancelled"
-                  ? "border border-danger text-danger hover:bg-danger/10"
-                  : "btn-accent"
-              }`}
-            >
-              {updateStatus.isPending ? "..." : `Mark ${STATUS_LABELS[status]}`}
-            </button>
+                  // Delivering always opens the confirmation modal first: the
+                  // backend requires the customer's code, so a one-click
+                  // "delivered" could only ever fail.
+                  if (requiresOtpFor(status) && !showConfirm) {
+                    setShowConfirm(true);
+                    return;
+                  }
+                  if (requiresOtpFor(status) && otp.trim().length !== OTP_LENGTH) {
+                    setShowConfirm(true);
+                    toast.error(`Enter the ${OTP_LENGTH}-digit code from the customer`);
+                    return;
+                  }
+                  updateStatus.mutate(status);
+                }}
+                disabled={updateStatus.isPending}
+                className={`flex-1 py-3 rounded-lg font-medium text-sm disabled:opacity-50 ${
+                  status === "cancelled"
+                    ? "border border-danger text-danger hover:bg-danger/10"
+                    : "btn-accent"
+                }`}
+              >
+                {updateStatus.isPending ? "..." : `Mark ${statusLabel(status)}`}
+              </button>
           ))}
         </div>
       )}
@@ -240,16 +251,22 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
                 />
               </div>
               <div>
-                <label className="block text-xs text-muted mb-1">OTP / PIN from customer</label>
+                <label className="block text-xs text-muted mb-1">
+                  Delivery code from the customer
+                </label>
                 <input
                   type="text"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, OTP_LENGTH))}
                   className="input-field"
-                  placeholder="4-digit code"
+                  placeholder={`${OTP_LENGTH}-digit code from the customer's order page`}
                   inputMode="numeric"
-                  maxLength={4}
+                  autoComplete="one-time-code"
+                  maxLength={OTP_LENGTH}
                 />
+                <p className="text-xs text-muted mt-1">
+                  Required. The customer finds this on their order page.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -298,8 +315,14 @@ export default function AgentDeliveryDetailPage({ params }: { params: Promise<{ 
                 Cancel
               </button>
               <button
-                onClick={() => updateStatus.mutate("delivered")}
-                disabled={updateStatus.isPending}
+                onClick={() => {
+                  if (otp.trim().length !== OTP_LENGTH) {
+                    toast.error(`Enter the ${OTP_LENGTH}-digit code from the customer`);
+                    return;
+                  }
+                  updateStatus.mutate("delivered");
+                }}
+                disabled={updateStatus.isPending || otp.trim().length !== OTP_LENGTH}
                 className="flex-1 btn-accent py-3 rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 Confirm delivery

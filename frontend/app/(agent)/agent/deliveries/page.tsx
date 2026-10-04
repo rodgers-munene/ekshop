@@ -7,30 +7,7 @@ import { toast } from "sonner";
 import { Delivery } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import ReadOnlyMap from "@/components/geo/ReadOnlyMap";
-
-const DELIVERY_TRANSITIONS: Record<string, string[]> = {
-  assigned: ["picked", "cancelled"],
-  picked: ["in_transit"],
-  in_transit: ["delivered", "cancelled"],
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Pending",
-  assigned: "Assigned",
-  picked: "Picked up",
-  in_transit: "In transit",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
-};
-
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-surface text-muted",
-  assigned: "bg-info/10 text-info",
-  picked: "bg-amber/10 text-amber",
-  in_transit: "bg-amber/10 text-amber",
-  delivered: "bg-success/10 text-success",
-  cancelled: "bg-danger/10 text-danger",
-};
+import { DELIVERY_TRANSITIONS, statusLabel, statusStyle } from "@/lib/agent-status";
 
 export default function AgentDeliveriesPage() {
   const queryClient = useQueryClient();
@@ -55,7 +32,7 @@ export default function AgentDeliveriesPage() {
         toast.error(data.detail ?? "Failed to update delivery");
         return;
       }
-      toast.success(`Marked as ${STATUS_LABELS[status] ?? status}`);
+      toast.success(`Marked as ${statusLabel(status)}`);
       queryClient.invalidateQueries({ queryKey: ["agent-deliveries"] });
     } catch {
       toast.error("Something went wrong. Try again.");
@@ -130,8 +107,8 @@ function DeliveryCard({
           <p className="font-mono text-xs text-muted">{delivery.tracking_number}</p>
           <p className="font-bold">{order?.shop?.name ?? "Order"}</p>
         </div>
-        <span className={`text-xs font-medium px-2 py-1 rounded-full shrink-0 ${STATUS_STYLES[delivery.status] ?? "bg-surface"}`}>
-          {STATUS_LABELS[delivery.status] ?? delivery.status}
+        <span className={`text-xs font-medium px-2 py-1 rounded-full shrink-0 ${statusStyle(delivery.status)}`}>
+          {statusLabel(delivery.status)}
         </span>
       </div>
 
@@ -182,7 +159,7 @@ function DeliveryCard({
                   : "btn-accent"
               }`}
             >
-              {updating ? "..." : `Mark ${STATUS_LABELS[status]}`}
+              {updating ? "..." : `Mark ${statusLabel(status)}`}
             </button>
           ))}
         </div>
