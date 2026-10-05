@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -84,7 +84,61 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-PERIOD_PATTERN = "^(today|yesterday|week|month)$"
+PERIOD_PATTERN = "^(today|yesterday|week|month|custom)$"
+
+# Longest custom window allowed. A year keeps a single query bounded; an
+# unbounded range on an analytics endpoint is how one admin click becomes a
+# sequential scan over the whole order table.
+MAX_CUSTOM_DAYS = 366
+
+
+def _resolve_window(
+    period: Optional[str],
+    days: int,
+    date_from: Optional[date],
+    date_to: Optional[date],
+) -> tuple[datetime, datetime, str]:
+    """Resolve the requested window to `[since, until)` plus the label to report.
+
+    An explicit `date_from`/`date_to` pair wins over the `period` preset, so a
+    saved link to a specific range keeps working even if the presets change.
+    Both bounds are inclusive as dates: asking for 1st to 3rd returns the whole of
+    the 3rd, not up to midnight on it.
+    """
+    if date_from is not None or date_to is not None:
+        if date_from is not None and date_to is not None:
+            start_date, end_date = date_from, date_to
+        elif date_from is not None:
+            # Only a start: treat `days` as the span forwards from it.
+            start_date, end_date = date_from, date_from + timedelta(days=days - 1)
+        else:
+            # Only an end: treat `days` as the span back from it.
+            start_date, end_date = date_to - timedelta(days=days - 1), date_to
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+        span = (end_date - start_date).days + 1
+        if span > MAX_CUSTOM_DAYS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Date range too wide: {span} days. The maximum is {MAX_CUSTOM_DAYS}.",
+            )
+        since = datetime.combine(start_date, time.min, tzinfo=EAT)
+        until = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=EAT)
+        return since, until, f"{start_date.isoformat()} to {end_date.isoformat()}"
+    since, until = _period_bounds(period, days)
+    return since, until, period or "days"
+
+
+def custom_range_params():
+    """Query parameters for a custom date range.
+
+    A function so every endpoint takes the same pair with the same names and
+    validation, rather than twenty-two endpoints each inventing their own.
+    """
+    return (
+        Query(None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."),
+        Query(None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."),
+    )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -305,10 +359,16 @@ def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOver
 def get_stats_overview(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(14, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, label = _resolve_window(period, days, date_from, date_to)
     prev_since, prev_until = _previous_bounds(since, until)
 
     metrics = _overview_period(db, since, until)
@@ -329,7 +389,7 @@ def get_stats_overview(
     total_orders = lifetime["orders"]
 
     return AdminOverviewRead(
-        period=period or "days",
+        period=label,
         start=since,
         metrics=metrics,
         previous=previous,
@@ -439,10 +499,16 @@ def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
 def get_merchant_metrics(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(7, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_merchant_activity_metrics(db, since, until)
 
 
@@ -450,10 +516,16 @@ def get_merchant_metrics(
 def get_sales_metrics(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_sales_demand_metrics(db, since, until)
 
 
@@ -461,10 +533,16 @@ def get_sales_metrics(
 def get_retention_metrics(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_customer_retention_metrics(db, since, until)
 
 
@@ -472,10 +550,16 @@ def get_retention_metrics(
 def get_operations_metrics(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_operations_delivery_metrics(db, since, until)
 
 
@@ -483,10 +567,16 @@ def get_operations_metrics(
 def get_cart_metrics(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_cart_abandonment_metrics(db, since, until)
 
 
@@ -494,10 +584,16 @@ def get_cart_metrics(
 def get_merchant_master_health(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_merchant_master_health(db, since, until)
 
 
@@ -505,10 +601,16 @@ def get_merchant_master_health(
 def get_order_control_tower(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_order_control_tower(db, since, until)
 
 
@@ -516,10 +618,16 @@ def get_order_control_tower(
 def get_customer_recovery(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_customer_recovery_engine(db, since, until)
 
 
@@ -527,10 +635,16 @@ def get_customer_recovery(
 def get_supply_demand(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_supply_demand_matrix(db, since, until)
 
 
@@ -538,10 +652,16 @@ def get_supply_demand(
 def get_margin_leakage(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_margin_leakage_metrics(db, since, until)
 
 
@@ -549,10 +669,16 @@ def get_margin_leakage(
 def export_margin_leakage_csv(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     metrics = dashboard_metrics.get_margin_leakage_metrics(db, since, until)
     lines = [
         "label,gmv,platform_commission,mpesa_fees,net_profit,gross_margin_pct,aov",
@@ -569,10 +695,16 @@ def export_margin_leakage_csv(
 def export_margin_leakage_pdf(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     metrics = dashboard_metrics.get_margin_leakage_metrics(db, since, until)
     try:
         from fpdf import FPDF
@@ -700,10 +832,16 @@ def update_automation_settings(
 def get_priority_acquisition(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_priority_acquisition(db, since, until)
 
 
@@ -718,10 +856,16 @@ def get_priority_acquisition(
 def get_acquisition_metrics(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_acquisition_metrics(db, since, until)
 
 
@@ -729,10 +873,16 @@ def get_acquisition_metrics(
 def get_behavior_metrics(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_behavior_metrics(db, since, until)
 
 
@@ -740,10 +890,16 @@ def get_behavior_metrics(
 def get_ecommerce_metrics(
     period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
     days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until = _period_bounds(period, days)
+    since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_ecommerce_metrics(db, since, until)
 
 
