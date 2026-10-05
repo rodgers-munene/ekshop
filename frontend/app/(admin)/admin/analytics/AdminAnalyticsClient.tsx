@@ -194,25 +194,13 @@ export default function AdminAnalyticsClient({
           fetch(`/api/admin/metrics/top-merchants?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
           fetch(`/api/admin/metrics/churn-risks?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
         ]);
-        const [mp, sp, rp, op, cp, mmp, opc, cpr, spd, ovp, mlp, mprt, mpacq, mpbeh, mpecom, ptm, pch] = await Promise.all([
-          fetch(`/api/admin/metrics/merchants?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/sales?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/retention?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/operations?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/cart?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/merchant-master-health?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/order-control-tower?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/customer-recovery?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/supply-demand?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/stats/overview?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
-          fetch(`/api/admin/metrics/margin-leakage?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/real-time?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/acquisition?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/behavior?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/ecommerce?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/top-merchants?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/churn-risks?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-        ]);
+        // Only the previous *overview* was ever read. The other sixteen
+        // previous-period responses were fetched on every load and thrown
+        // away -- seventeen round trips through the BFF to FastAPI and back, per
+        // page view, per filter change, computing numbers nothing displayed.
+        const ovp = await fetch(`/api/admin/stats/overview?${prevRangeQuery}`)
+          .then((r) => (r.ok ? r.json() : Promise.resolve(null)))
+          .then((d) => (d && typeof d === "object" && d.metrics ? d : null));
         if (!cancelled) {
           setMerchants(m);
           setSales(s);

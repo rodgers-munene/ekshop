@@ -1,7 +1,16 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Enum, ForeignKey
+from sqlalchemy import (
+    Column,
+    String,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -34,6 +43,29 @@ class Payment(Base):
     raw_response = Column(JSONB)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    # Every money figure on the admin dashboard filters successful payments by
+    # the time the money arrived, and the trend groups that by day. Without these
+    # that is a sequential scan of every payment ever taken, on every stat card,
+    # and it degrades as the table grows.
+    #
+    # The leading index is over `coalesce(paid_at, created_at)` rather than over
+    # either column alone, because a plain index cannot serve a coalesce.
+    __table_args__ = (
+        Index(
+            "ix_payments_money_instant",
+            func.coalesce(paid_at, created_at),
+            postgresql_where=text("status = 'success'"),
+        ),
+        Index(
+            "ix_payments_status_money_instant",
+            "status",
+            func.coalesce(paid_at, created_at),
+        ),
+        # Postgres does not index foreign keys automatically.
+        Index("ix_payments_order_group_id", "order_group_id"),
+        Index("ix_payments_user_id", "user_id"),
+    )
 
     order_group = relationship("OrderGroup", back_populates="payments")
     user = relationship("User")
