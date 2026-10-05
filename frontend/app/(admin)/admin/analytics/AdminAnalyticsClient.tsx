@@ -3,7 +3,28 @@
 import { useEffect, useState } from "react";
 import { formatKES } from "@/lib/utils";
 import StatCard from "@/components/dashboard/StatCard";
-import PeriodFilter, { PeriodKey } from "@/components/dashboard/PeriodFilter";
+import PeriodFilter, {
+  PeriodKey,
+  CustomRange,
+  isoDay,
+} from "@/components/dashboard/PeriodFilter";
+
+/** Whole days between two YYYY-MM-DD strings, inclusive of both ends. */
+function spanDays(from: string, to: string): number {
+  const ms =
+    new Date(`${to}T00:00:00`).getTime() -
+    new Date(`${from}T00:00:00`).getTime();
+  return Math.round(ms / 86_400_000) + 1;
+}
+
+/** Move a YYYY-MM-DD string by whole days, without a timezone round-trip. */
+function shiftDay(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 import StatDrillDown from "@/components/admin/StatDrillDown";
 import RevenueLeakageMonitor from "@/components/admin/RevenueLeakageMonitor";
 import PresencePanel from "@/components/admin/PresencePanel";
@@ -92,6 +113,10 @@ export default function AdminAnalyticsClient({
   overview: AdminOverview | null;
 }) {
   const [period, setPeriod] = useState<PeriodKey>("month");
+  const [custom, setCustom] = useState<CustomRange>({
+    from: isoDay(-29),
+    to: isoDay(),
+  });
   const [section, setSection] = useState<Section>("overview");
   const [refreshing, setRefreshing] = useState(false);
   const [drill, setDrill] = useState<DrillSpec | null>(null);
@@ -120,47 +145,72 @@ export default function AdminAnalyticsClient({
       v && typeof v === "object" && !Array.isArray(v) ? (v as object) : null;
     const asArr = (v: unknown) => (Array.isArray(v) ? v : null);
 
+    // A custom range travels as explicit bounds rather than as a preset, so all
+    // the fetches below are filtered by the same window instead of each one
+    // inventing its own reading of `period`.
+    const rangeQuery =
+      period === "custom"
+        ? `date_from=${custom.from}&date_to=${custom.to}`
+        : `period=${period}`;
+
+    const prevPeriod =
+      period === "month"
+        ? "week"
+        : period === "week"
+          ? "yesterday"
+          : period === "yesterday"
+            ? "today"
+            : "month";
+
+    // For a custom range the comparison window is the equally long span
+    // immediately before it, which is what "previous period" means when the
+    // period is not one of the presets.
+    const span = spanDays(custom.from, custom.to);
+    const prevRangeQuery =
+      period === "custom"
+        ? `date_from=${shiftDay(custom.from, -span)}&date_to=${shiftDay(custom.to, -span)}`
+        : `period=${prevPeriod}`;
+
     async function load() {
       setRefreshing(true);
       try {
         const [m, s, r, o, c, mm, oc, cr, sd, ov, ml, rt, acq, beh, ecom, tm, ch] = await Promise.all([
-          fetch(`/api/admin/metrics/merchants?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/sales?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/retention?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/operations?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/cart?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/merchant-master-health?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/order-control-tower?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/customer-recovery?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/supply-demand?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/stats/overview?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
-          fetch(`/api/admin/metrics/margin-leakage?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/real-time?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/acquisition?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/behavior?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/ecommerce?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/top-merchants?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/churn-risks?period=${period}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/merchants?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/sales?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/retention?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/operations?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/cart?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/merchant-master-health?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/order-control-tower?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/customer-recovery?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/supply-demand?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/stats/overview?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
+          fetch(`/api/admin/metrics/margin-leakage?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/real-time?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/acquisition?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/behavior?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/ecommerce?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/top-merchants?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/churn-risks?${rangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
         ]);
-        const prevPeriod = period === "month" ? "week" : period === "week" ? "yesterday" : period === "yesterday" ? "today" : "month";
         const [mp, sp, rp, op, cp, mmp, opc, cpr, spd, ovp, mlp, mprt, mpacq, mpbeh, mpecom, ptm, pch] = await Promise.all([
-          fetch(`/api/admin/metrics/merchants?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/sales?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/retention?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/operations?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/cart?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/merchant-master-health?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/order-control-tower?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/customer-recovery?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/supply-demand?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/stats/overview?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
-          fetch(`/api/admin/metrics/margin-leakage?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/real-time?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/acquisition?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/behavior?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/ecommerce?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
-          fetch(`/api/admin/metrics/top-merchants?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
-          fetch(`/api/admin/metrics/churn-risks?period=${prevPeriod}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/merchants?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/sales?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/retention?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/operations?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/cart?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/merchant-master-health?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/order-control-tower?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/customer-recovery?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/supply-demand?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/stats/overview?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" && d.metrics ? d : null)),
+          fetch(`/api/admin/metrics/margin-leakage?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/real-time?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/acquisition?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/behavior?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/ecommerce?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => (d && typeof d === "object" ? d : null)),
+          fetch(`/api/admin/metrics/top-merchants?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
+          fetch(`/api/admin/metrics/churn-risks?${prevRangeQuery}`).then((r) => r.ok ? r.json() : Promise.resolve(null)).then((d) => Array.isArray(d) ? d : null),
         ]);
         if (!cancelled) {
           setMerchants(m);
@@ -191,7 +241,7 @@ export default function AdminAnalyticsClient({
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, custom]);
 
   return (
     <div>
@@ -200,7 +250,12 @@ export default function AdminAnalyticsClient({
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-sm text-muted">Pick a window — every stat card updates in place.</p>
         </div>
-        <PeriodFilter value={period} onChange={setPeriod} />
+        <PeriodFilter
+          value={period}
+          onChange={setPeriod}
+          onCustomChange={setCustom}
+          custom={custom}
+        />
       </div>
 
       <div className="flex border-b border-border mb-6 overflow-x-auto">

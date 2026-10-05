@@ -5,7 +5,11 @@ import { formatKES } from "@/lib/utils";
 import StatCard from "@/components/dashboard/StatCard";
 import SalesChart from "@/components/dashboard/SalesChart";
 import TrendChart from "@/components/dashboard/TrendChart";
-import PeriodFilter, { PeriodKey } from "@/components/dashboard/PeriodFilter";
+import PeriodFilter, {
+  PeriodKey,
+  CustomRange,
+  isoDay,
+} from "@/components/dashboard/PeriodFilter";
 import StatDrillDown from "@/components/admin/StatDrillDown";
 import { DrillSpec, ordersSpec, productsSpec, shopsSpec, usersSpec } from "@/components/admin/drillColumns";
 import { AdminOverview } from "@/types/interface";
@@ -30,6 +34,10 @@ function OverviewSkeleton() {
 
 export default function AdminOverviewClient({ initial }: { initial: AdminOverview | null }) {
   const [period, setPeriod] = useState<PeriodKey>("month");
+  const [custom, setCustom] = useState<CustomRange>({
+    from: isoDay(-29),
+    to: isoDay(),
+  });
   const [data, setData] = useState<AdminOverview | null>(initial);
   const [loading, setLoading] = useState(false);
   const [drill, setDrill] = useState<DrillSpec | null>(null);
@@ -37,7 +45,13 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/admin/stats/overview?period=${period}`)
+    // A custom range travels as explicit bounds rather than as `period`, so the
+    // backend can use it verbatim instead of guessing at a preset.
+    const query =
+      period === "custom"
+        ? `date_from=${custom.from}&date_to=${custom.to}`
+        : `period=${period}`;
+    fetch(`/api/admin/stats/overview?${query}`)
       .then((r) => (r.ok ? r.json() : Promise.resolve(null)))
       .then((json) => {
         if (!cancelled && json && typeof json === "object" && json.metrics) {
@@ -50,7 +64,7 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, custom]);
 
   const { metrics: m, previous: p } = data ?? { metrics: {} as AdminOverview["metrics"], previous: {} as AdminOverview["previous"] };
 
@@ -108,7 +122,7 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
             {data ? `${formatDay(data.start)} – today — compared against the same span before` : "Loading overview…"}
           </p>
         </div>
-        <PeriodFilter value={period} onChange={setPeriod} />
+        <PeriodFilter value={period} onChange={setPeriod} onCustomChange={setCustom} custom={custom} />
       </div>
 
       {loading && <OverviewSkeleton />}
