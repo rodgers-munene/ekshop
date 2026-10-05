@@ -628,7 +628,8 @@ export interface AdminStats {
   total_shops: number;
   shops_pending_verification: number;
   total_products: number;
-  /** Paid order groups (baskets), not per-shop orders. */
+  /** Paid order groups (baskets) behind a successful payment, not per-shop
+   * orders. Same basis as the money figures below and as the orders list. */
   total_orders: number;
   orders_7d: number;
   /** Goods value only. */
@@ -641,10 +642,16 @@ export interface AdminStats {
   revenue_total: string | null;
   revenue_7d: string | null;
   commission_rate_configured: boolean;
+  /** Actual payment movement, straight off the payments table. */
+  cash_received_total: string;
+  /** Reported, never netted into the sums above. */
+  refunds_total: string;
   /** Yesterday as a complete calendar day (EAT). */
   orders_yesterday: number;
   gmv_yesterday: string;
   total_transacted_yesterday: string;
+  cash_received_yesterday: string;
+  refunds_yesterday: string;
   mtd: PeriodToDateMetrics;
   ytd: PeriodToDateMetrics;
 }
@@ -675,6 +682,32 @@ export interface AdminTrendPoint {
   revenue_earned: number | null;
   commission_rate_configured: boolean;
   orders: number;
+}
+
+export interface PayerActivity {
+  payment_id: string;
+  order_group_id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  provider: string;
+  provider_ref: string | null;
+  channel: string | null;
+  amount: string;
+  /** When the money landed. */
+  paid_at: string;
+}
+
+export interface PayerActivityRead {
+  period: string;
+  start: string;
+  end: string;
+  total_cash_received: string;
+  payment_count: number;
+  /** Distinct customers, which is not the same as payment_count. */
+  payer_count: number;
+  results: PayerActivity[];
 }
 
 export interface CartAbandonedProduct {
@@ -805,12 +838,14 @@ export interface AdminOverviewTotals {
   shops_pending_verification: number;
   total_products: number;
   total_orders: number;
-  gmv_total: string;
+gmv_total: string;
   total_transacted_total: string;
   /** null when no commission rate is configured. */
   revenue_total: string | null;
   commission_rate_configured: boolean;
-}
+  cash_received_total: string;
+  refunds_total: string;
+  }
 
 export interface PresenceUser {
   user_id: string;

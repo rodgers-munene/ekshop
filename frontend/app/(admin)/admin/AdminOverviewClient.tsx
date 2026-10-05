@@ -5,6 +5,7 @@ import { formatKES } from "@/lib/utils";
 import StatCard from "@/components/dashboard/StatCard";
 import SalesChart from "@/components/dashboard/SalesChart";
 import TrendChart from "@/components/dashboard/TrendChart";
+import PayerActivityPanel from "@/components/admin/PayerActivityPanel";
 import PeriodFilter, {
   PeriodKey,
   CustomRange,
@@ -42,16 +43,19 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
   const [loading, setLoading] = useState(false);
   const [drill, setDrill] = useState<DrillSpec | null>(null);
 
+  // A custom range travels as explicit bounds rather than as `period`, so the
+  // backend can use it verbatim instead of guessing at a preset. One string,
+  // shared by the cards and the payer panel, so the two can never be filtered
+  // by different windows.
+  const rangeQuery =
+    period === "custom"
+      ? `date_from=${custom.from}&date_to=${custom.to}`
+      : `period=${period}`;
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    // A custom range travels as explicit bounds rather than as `period`, so the
-    // backend can use it verbatim instead of guessing at a preset.
-    const query =
-      period === "custom"
-        ? `date_from=${custom.from}&date_to=${custom.to}`
-        : `period=${period}`;
-    fetch(`/api/admin/stats/overview?${query}`)
+    fetch(`/api/admin/stats/overview?${rangeQuery}`)
       .then((r) => (r.ok ? r.json() : Promise.resolve(null)))
       .then((json) => {
         if (!cancelled && json && typeof json === "object" && json.metrics) {
@@ -64,7 +68,7 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
     return () => {
       cancelled = true;
     };
-  }, [period, custom]);
+  }, [rangeQuery]);
 
   const { metrics: m, previous: p } = data ?? { metrics: {} as AdminOverview["metrics"], previous: {} as AdminOverview["previous"] };
 
@@ -163,8 +167,21 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
               hint="Shops awaiting approval"
             />
             <StatCard label="Total products" value={data.totals.total_products} onClick={() => setDrill(productsSpec())} hint="Latest products" />
-            <StatCard label="Paid orders" value={data.totals.total_orders} onClick={() => setDrill(ordersSpec())} hint="Paid order groups (baskets), all time" />
-            {/* Three different numbers that used to share one label. */}
+            <StatCard label="Paid orders" value={data.totals.total_orders} onClick={() => setDrill(ordersSpec())} hint="Baskets behind a successful payment, all time" />
+            {/* The first four numbers used to share one label, and all of them
+                counted orders placed rather than money received. */}
+            <StatCard
+              label="Cash received"
+              value={formatKES(parseFloat(data.totals.cash_received_total))}
+              onClick={() => setDrill(ordersSpec())}
+              hint="Actual payments received, all time"
+            />
+            <StatCard
+              label="Refunds"
+              value={formatKES(parseFloat(data.totals.refunds_total))}
+              onClick={() => setDrill(ordersSpec())}
+              hint="Paid back to customers. Not netted into the figures above."
+            />
             <StatCard
               label="GMV"
               value={formatKES(parseFloat(data.totals.gmv_total))}
@@ -230,11 +247,15 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
               />
               <SalesChart
                 data={data.trend.map((pt) => ({ label: pt.label, value: pt.orders }))}
-                title="Paid orders (last 14 days)"
+                title="Baskets paid (last 14 days)"
                 formatValue={(v) => `${v} order${v === 1 ? "" : "s"}`}
               />
             </div>
           )}
+
+          <div className="mt-4">
+            <PayerActivityPanel rangeQuery={rangeQuery} />
+          </div>
         </>
       )}
 

@@ -128,6 +128,7 @@ export default function TrendChart({
               stroke="currentColor"
               className="text-border"
               strokeWidth="1"
+              vectorEffect="non-scaling-stroke"
             />
             <text
               x={PADDING.left - 6}
@@ -151,6 +152,7 @@ export default function TrendChart({
             stroke="currentColor"
             className="text-muted"
             strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
             strokeDasharray="3 3"
           />
         )}
@@ -171,7 +173,11 @@ export default function TrendChart({
                 d={line}
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                /* 1 user unit, held at 1 physical pixel regardless of the
+                   viewBox scale, so the line never thickens as the chart
+                   resizes. Well under 1mm on any display. */
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
