@@ -8,6 +8,7 @@ import PeriodFilter, {
   CustomRange,
   isoDay,
 } from "@/components/dashboard/PeriodFilter";
+import ChurnOutreachPanel from "@/components/admin/ChurnOutreachPanel";
 
 /** Whole days between two YYYY-MM-DD strings, inclusive of both ends. */
 function spanDays(from: string, to: string): number {
@@ -425,28 +426,8 @@ export default function AdminAnalyticsClient({
             </div>
           )}
           {churnRisks && churnRisks.length > 0 && (
-            <div className="mt-4 p-4 bg-muted/30 rounded">
-              <h3 className="font-bold mb-3">Churn Risks</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-muted border-b">
-                      <th className="text-left py-2 px-3">Buyer</th>
-                      <th className="text-left py-2 px-3">Email</th>
-                      <th className="text-left py-2 px-3">Last order</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {churnRisks.map((row, idx) => (
-                      <tr key={idx} className="border-b last:border-0">
-                        <td className="py-2 px-3 font-medium">{row.first_name} {row.last_name}</td>
-                        <td className="py-2 px-3">{row.email}</td>
-                        <td className="py-2 px-3">{row.last_order_at ? new Date(row.last_order_at).toLocaleDateString() : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="mt-4">
+              <ChurnOutreachPanel insights={churnRisks} />
             </div>
           )}
         </div>

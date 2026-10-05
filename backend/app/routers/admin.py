@@ -40,6 +40,8 @@ from app.schemas.admin import (
     AdminTrendPoint,
     PayerActivity,
     PayerActivityRead,
+    ChurnOutreachRequest,
+    ChurnOutreachResult,
     CartAbandonmentMetrics,
     CustomerRecoveryRow,
     CustomerRetentionMetrics,
@@ -84,6 +86,7 @@ from app.services.dashboard_metrics import (
     get_operations_delivery_metrics,
     get_sales_demand_metrics,
 )
+import html
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1633,6 +1636,130 @@ def get_churn_risks_insight(
 ):
     since, until = _period_bounds(period, 30)
     return dashboard_metrics.get_churn_risks_insight(db, since, until)
+
+
+@router.post("/churn/outreach", response_model=ChurnOutreachResult)
+def send_churn_outreach(
+    payload: ChurnOutreachRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Email selected churn-risk customers a win-back message.
+
+    Email rather than SMS: there is no SMS provider configured anywhere in this
+    service, so a "text these customers" button could only have been a dead end.
+    `User.phone` exists, but nothing can send to it.
+
+    Two guards, both because an admin screen is a stale snapshot:
+
+    - The batch is capped, so this cannot become an accidental mass send.
+    - Every id is re-checked against the churn query at send time. Someone who
+      ordered this morning must not be told they have been away, even if they
+      were on the list when the admin looked at it.
+    """
+    if len(payload.user_ids) > 100:
+        raise HTTPException(
+            status_code=422,
+            detail="At most 100 recipients per batch. Send in batches instead.",
+        )
+
+    # Re-derive the at-risk set now, not from whatever the client sent.
+    since, _until = _period_bounds("month", 30)
+    at_risk = {
+        row["user_id"]: row
+        for row in dashboard_metrics.get_churn_risks_insight(db, since, None)
+    }
+
+    results: List[dict] = []
+    sent = failed = skipped = 0
+
+    for user_id in payload.user_ids:
+        row = at_risk.get(user_id)
+        if row is None:
+            skipped += 1
+            results.append(
+                {
+                    "user_id": user_id,
+                    "status": "skipped",
+                    "reason": "not in churn risk at send time (ordered recently, or not contactable)",
+                }
+            )
+            continue
+
+        if payload.dry_run:
+            results.append(
+                {
+                    "user_id": user_id,
+                    "email": row["email"],
+                    "status": "would_send",
+                    "risk": row["risk"],
+                    "days_idle": row["days_idle"],
+                }
+            )
+            continue
+
+        # Escape the admin-supplied text before it goes anywhere near an email
+        # body, so a name or an ampersand cannot break the markup.
+        safe_subject = html.escape(payload.subject)
+        safe_body = html.escape(payload.body).replace("\n", "<br>")
+        message = f"""
+            <p>Hi {html.escape(row['first_name'])},</p>
+            <p>{safe_body}</p>
+            <p>
+              <a href="{settings.FRONTEND_URL}/products"
+                 style="background:#111;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">
+                Browse what's new
+              </a>
+            </p>
+            <p style="color:#666;font-size:12px">
+              You last ordered from us on {row['last_order_at']}.
+            </p>
+        """
+        try:
+            email_service.send_notification_email(
+                to=row["email"], title=safe_subject, body=message
+            )
+        except Exception as exc:
+            failed += 1
+            # Reported per recipient: a 20-recipient batch where 3 bounced must
+            # not read as a total failure, nor as a total success.
+            logger.error("Churn outreach to %s failed: %s", row["email"], exc)
+            results.append(
+                {
+                    "user_id": user_id,
+                    "email": row["email"],
+                    "status": "failed",
+                    "error": str(exc)[:200],
+                }
+            )
+            continue
+
+        sent += 1
+        results.append(
+            {
+                "user_id": user_id,
+                "email": row["email"],
+                "status": "sent",
+                "risk": row["risk"],
+            }
+        )
+
+    if payload.dry_run:
+        return ChurnOutreachResult(
+            attempted=len(payload.user_ids),
+            sent=0,
+            failed=0,
+            skipped_not_at_risk=skipped,
+            results=results,
+        )
+
+    return ChurnOutreachResult(
+        attempted=len(payload.user_ids),
+        sent=sent,
+        failed=failed,
+        skipped_not_at_risk=skipped,
+        results=results,
+    )
 
 
 # ── Bulk actions / CSV import-export ────────────────────────────────────────────

@@ -1092,10 +1092,33 @@ export interface TopMerchantInsight {
 }
 
 export interface ChurnRiskInsight {
+  user_id: string;
   first_name: string;
   last_name: string;
   email: string;
   last_order_at: string | null;
+  /** Whole days since their last order. */
+  days_idle: number | null;
+  order_count: number;
+  lifetime_value: string;
+  /** "high" | "medium" | "low". */
+  risk: string;
+}
+
+export interface ChurnOutreachResult {
+  attempted: number;
+  sent: number;
+  failed: number;
+  skipped_not_at_risk: number;
+  results: {
+    user_id: string;
+    email?: string;
+    status: string;
+    reason?: string;
+    error?: string;
+    risk?: string;
+    days_idle?: number | null;
+  }[];
 }
 
 export interface OrderNotificationRecipient {

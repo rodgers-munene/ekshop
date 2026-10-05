@@ -21,7 +21,7 @@ from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus
 from app.models.commerce import Cart, CartItem
 from app.models.delivery import Delivery, DeliveryAgent, DeliveryAgentStatus, DeliveryStatus
 from app.models.shop import Shop, ShopStatus
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserStatus, EmailVerification, EmailVerificationPurpose
 
 
 def _hours_between(a: datetime, b: datetime) -> float:
@@ -1081,29 +1081,98 @@ def get_top_merchants_insight(db: Session, since: datetime, until: Optional[date
 
 
 def get_churn_risks_insight(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
+    """Buyers who have gone quiet, worst first.
+
+    "Churn risk" used to mean two different things in two places. The weekly
+    digest listed every buyer whose *account* was older than 60 days, which
+    included people who had ordered that morning -- so the list was labelled
+    churn risk while containing your most active customers. This function's own
+    test is the correct one: the buyer's last order predates the window being
+    looked at.
+
+    Also returns what each customer used to be worth, because "come back" lands
+    very differently on someone who spent KES 40,000 with you and someone who
+    spent KES 300.
+    """
     until = _bound(since, until)
+
     last_order_sq = (
         db.query(
             OrderGroup.buyer_id.label("buyer_id"),
             func.max(OrderGroup.created_at).label("last_order_at"),
+            func.count(OrderGroup.id).label("order_count"),
+            func.sum(cast(OrderGroup.total, Numeric)).label("lifetime_value"),
         )
         .group_by(OrderGroup.buyer_id)
         .subquery()
     )
+    verified_sq = (
+        db.query(EmailVerification.user_id)
+        .filter(
+            EmailVerification.purpose == EmailVerificationPurpose.email_verify,
+            EmailVerification.used_at.isnot(None),
+        )
+        .subquery()
+    )
     rows = (
-        db.query(User.first_name, User.last_name, User.email, last_order_sq.c.last_order_at)
+        db.query(
+            User.id,
+            User.first_name,
+            User.last_name,
+            User.email,
+            User.status,
+            last_order_sq.c.last_order_at,
+            last_order_sq.c.order_count,
+            last_order_sq.c.lifetime_value,
+        )
         .join(last_order_sq, last_order_sq.c.buyer_id == User.id)
-        .filter(User.role == UserRole.buyer, last_order_sq.c.last_order_at < since)
+        .outerjoin(verified_sq, verified_sq.c.user_id == User.id)
+        .filter(
+            User.role == UserRole.buyer,
+            last_order_sq.c.last_order_at < since,
+            # A suspended or never-verified address is not worth emailing, and an
+            # unverified one is very likely to bounce.
+            User.status == UserStatus.active,
+            verified_sq.c.user_id.isnot(None),
+        )
         .order_by(last_order_sq.c.last_order_at.asc())
-        .limit(10)
+        .limit(50)
         .all()
     )
-    return [
-        {
-            "first_name": first_name,
-            "last_name": last_name,
-            "email": email,
-            "last_order_at": last_order_at.isoformat() if last_order_at else None,
-        }
-        for first_name, last_name, email, last_order_at in rows
-    ]
+    now = datetime.now(timezone.utc)
+    results = []
+    for (
+        user_id,
+        first_name,
+        last_name,
+        email,
+        status,
+        last_order_at,
+        order_count,
+        lifetime_value,
+    ) in rows:
+        days_idle = (now - last_order_at).days if last_order_at else None
+        results.append(
+            {
+                "user_id": str(user_id),
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": email,
+                "last_order_at": last_order_at.isoformat() if last_order_at else None,
+                "days_idle": days_idle,
+                "order_count": int(order_count or 0),
+                "lifetime_value": str(
+                    Decimal(lifetime_value or 0).quantize(Decimal("0.01"))
+                ),
+                # Kept so the outreach UI can prioritise by value rather than
+                # emailing everyone with the same template.
+                "risk": (
+                    "high"
+                    if days_idle is not None and days_idle >= 180
+                    else "medium"
+                    if days_idle is not None and days_idle >= 90
+                    else "low"
+                ),
+            }
+        )
+    return results

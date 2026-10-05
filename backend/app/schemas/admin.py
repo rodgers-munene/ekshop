@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.user import UserRead
 from app.schemas.shop import ShopRead
@@ -209,6 +209,50 @@ class PayerActivityRead(BaseModel):
     payment_count: int
     payer_count: int
     results: List[PayerActivity]
+
+
+class ChurnRisk(BaseModel):
+    """A buyer who has gone quiet, with what they were worth.
+
+    `days_idle`, `lifetime_value` and `risk` exist because "churn risk" without a
+    value is not actionable: a reactivation email lands very differently on a
+    customer who spent KES 40,000 and one who spent KES 300.
+    """
+    user_id: str
+    first_name: str
+    last_name: str
+    email: str
+    last_order_at: Optional[str]
+    days_idle: Optional[int]
+    order_count: int
+    lifetime_value: str
+    risk: str
+
+
+class ChurnOutreachRequest(BaseModel):
+    """Send a win-back email to selected churn-risk customers.
+
+    `user_ids` must be non-empty and is bounded, so this cannot be turned into
+    an accidental mass send. The ids are re-validated against the churn query on
+    send: the admin's screen may be hours old, and someone who ordered this
+    morning must not be pitched as lapsed.
+    """
+    user_ids: List[str]
+    subject: str = Field(min_length=3, max_length=150)
+    body: str = Field(min_length=10, max_length=5000)
+    # Resend caps a single send; keep the batch modest and report per-recipient
+    # outcomes rather than a single pass/fail.
+    dry_run: bool = False
+
+
+class ChurnOutreachResult(BaseModel):
+    attempted: int
+    sent: int
+    failed: int
+    skipped_not_at_risk: int
+    # Per-recipient detail, so a partial failure is visible rather than hidden
+    # behind a total.
+    results: List[dict]
 
 
 class UserListResponse(BaseModel):
