@@ -628,10 +628,23 @@ export interface AdminStats {
   total_shops: number;
   shops_pending_verification: number;
   total_products: number;
+  /** Paid order groups (baskets), not per-shop orders. */
   total_orders: number;
   orders_7d: number;
-  revenue_total: string;
-  revenue_7d: string;
+  /** Goods value only. */
+  gmv_total: string;
+  gmv_7d: string;
+  /** Goods + delivery + tax. Money that moved through the platform. */
+  total_transacted_total: string;
+  total_transacted_7d: string;
+  /** Platform commission. null when no rate is configured. */
+  revenue_total: string | null;
+  revenue_7d: string | null;
+  commission_rate_configured: boolean;
+  /** Yesterday as a complete calendar day (EAT). */
+  orders_yesterday: number;
+  gmv_yesterday: string;
+  total_transacted_yesterday: string;
   mtd: PeriodToDateMetrics;
   ytd: PeriodToDateMetrics;
 }
@@ -652,7 +665,15 @@ export interface PeriodToDateMetrics {
 
 export interface AdminTrendPoint {
   label: string;
+  /** Alias of total_transacted, kept for existing consumers. */
   revenue: number;
+  /** Goods value only. */
+  gmv: number;
+  /** Goods + delivery + tax. */
+  total_transacted: number;
+  /** Platform commission. null when no rate is configured. */
+  revenue_earned: number | null;
+  commission_rate_configured: boolean;
   orders: number;
 }
 
@@ -759,7 +780,13 @@ export interface PriorityAcquisitionRow {
 }
 
 export interface AdminOverviewPeriodMetrics {
-  revenue: string;
+  /** Goods value only. */
+  gmv: string;
+  /** Goods + delivery + tax. */
+  total_transacted: string;
+  /** Platform commission. null when no rate is configured. */
+  revenue: string | null;
+  commission_rate_configured: boolean;
   orders: number;
   average_order_value: string;
   new_users: number;
@@ -778,7 +805,32 @@ export interface AdminOverviewTotals {
   shops_pending_verification: number;
   total_products: number;
   total_orders: number;
-  revenue_total: string;
+  gmv_total: string;
+  total_transacted_total: string;
+  /** null when no commission rate is configured. */
+  revenue_total: string | null;
+  commission_rate_configured: boolean;
+}
+
+export interface PresenceUser {
+  user_id: string;
+  role: string;
+  display_name: string;
+  session_id: string;
+  path: string;
+  seconds_active: number;
+}
+
+export interface PresenceSnapshot {
+  active_users: number;
+  active_sessions: number;
+  active_tabs: number;
+  by_role: Record<string, number>;
+  top_paths: { path: string; count: number }[];
+  users: PresenceUser[];
+  ttl_seconds: number;
+  /** "this_api_process" -- presence is per-process, not fleet-wide. */
+  scope: string;
 }
 
 export interface AdminOverview {

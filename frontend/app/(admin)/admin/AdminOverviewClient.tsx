@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatKES } from "@/lib/utils";
 import StatCard from "@/components/dashboard/StatCard";
 import SalesChart from "@/components/dashboard/SalesChart";
+import TrendChart from "@/components/dashboard/TrendChart";
 import PeriodFilter, { PeriodKey } from "@/components/dashboard/PeriodFilter";
 import StatDrillDown from "@/components/admin/StatDrillDown";
 import { DrillSpec, ordersSpec, productsSpec, shopsSpec, usersSpec } from "@/components/admin/drillColumns";
@@ -55,11 +56,18 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
 
   const summary = [
     {
-      label: "Revenue",
-      value: formatKES(m.revenue),
-      prev: parseFloat(p.revenue),
+      label: "Total transacted",
+      value: formatKES(m.total_transacted),
+      prev: parseFloat(p.total_transacted),
       spec: ordersSpec(period),
-      hint: "Recent paid orders",
+      hint: "Goods + delivery + tax in the selected period",
+    },
+    {
+      label: "GMV (goods)",
+      value: formatKES(m.gmv),
+      prev: parseFloat(p.gmv),
+      spec: ordersSpec(period),
+      hint: "Value of goods only",
     },
     {
       label: "Paid orders",
@@ -141,24 +149,74 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
               hint="Shops awaiting approval"
             />
             <StatCard label="Total products" value={data.totals.total_products} onClick={() => setDrill(productsSpec())} hint="Latest products" />
-            <StatCard label="Paid orders" value={data.totals.total_orders} onClick={() => setDrill(ordersSpec())} hint="Paid orders, all time" />
+            <StatCard label="Paid orders" value={data.totals.total_orders} onClick={() => setDrill(ordersSpec())} hint="Paid order groups (baskets), all time" />
+            {/* Three different numbers that used to share one label. */}
             <StatCard
-              label="Revenue (all-time)"
-              value={formatKES(parseFloat(data.totals.revenue_total))}
+              label="GMV"
+              value={formatKES(parseFloat(data.totals.gmv_total))}
               onClick={() => setDrill(ordersSpec())}
-              hint="All paid orders"
+              hint="Value of goods only, all time"
+            />
+            <StatCard
+              label="Total transacted"
+              value={formatKES(parseFloat(data.totals.total_transacted_total))}
+              onClick={() => setDrill(ordersSpec())}
+              hint="Goods + delivery + tax. Money that moved through the platform"
+            />
+            <StatCard
+              label="Platform revenue"
+              value={
+                data.totals.revenue_total == null
+                  ? "Not set"
+                  : formatKES(parseFloat(data.totals.revenue_total))
+              }
+              onClick={() => setDrill(ordersSpec())}
+              hint={
+                data.totals.revenue_total == null
+                  ? "No commission rate configured. Nothing in the data model records one."
+                  : "Commission on goods, all time"
+              }
             />
           </div>
 
           {data.trend.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <SalesChart
-                data={data.trend.map((pt) => ({ label: pt.label, value: pt.revenue }))}
-                title="Revenue (last 14 days)"
+            <div className="grid grid-cols-1 gap-4">
+              <TrendChart
+                points={data.trend.map((pt) => ({ label: pt.label }))}
+                series={[
+                  {
+                    key: "gmv",
+                    label: "GMV (goods)",
+                    color: "text-gold",
+                    values: data.trend.map((pt) => pt.gmv),
+                  },
+                  {
+                    key: "transacted",
+                    label: "Total transacted",
+                    color: "text-info",
+                    values: data.trend.map((pt) => pt.total_transacted),
+                  },
+                  ...(data.totals.revenue_total != null
+                    ? [
+                        {
+                          key: "revenue",
+                          label: "Platform revenue",
+                          color: "text-success",
+                          values: data.trend.map((pt) => pt.revenue_earned),
+                        },
+                      ]
+                    : []),
+                ]}
+                formatValue={(v) => formatKES(v)}
+                footnote={
+                  data.totals.revenue_total == null
+                    ? "Platform revenue is not plotted: no commission rate is configured, and the specification has no commission field to read one from."
+                    : undefined
+                }
               />
               <SalesChart
                 data={data.trend.map((pt) => ({ label: pt.label, value: pt.orders }))}
-                title="Orders (last 14 days)"
+                title="Paid orders (last 14 days)"
                 formatValue={(v) => `${v} order${v === 1 ? "" : "s"}`}
               />
             </div>

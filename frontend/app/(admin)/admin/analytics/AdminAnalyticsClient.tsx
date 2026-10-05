@@ -229,11 +229,38 @@ export default function AdminAnalyticsClient({
             <StatCard label="Pending verification" value={overview.totals.shops_pending_verification} />
             <StatCard label="Total products" value={overview.totals.total_products} />
             <StatCard label="Total orders" value={overview.totals.total_orders} />
-            <StatCard label="GMV" value={formatKES(overview.totals.revenue_total)} />
+            <StatCard label="GMV (goods)" value={formatKES(overview.totals.gmv_total)} />
+            <StatCard
+              label="Total transacted"
+              value={formatKES(overview.totals.total_transacted_total)}
+            />
+            <StatCard
+              label="Platform revenue"
+              value={
+                overview.totals.revenue_total == null
+                  ? "Not set"
+                  : formatKES(overview.totals.revenue_total)
+              }
+            />
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="Period revenue" value={formatKES(overview.metrics.revenue)} />
+            <StatCard
+              label="Period GMV"
+              value={formatKES(overview.metrics.gmv)}
+            />
+            <StatCard
+              label="Period transacted"
+              value={formatKES(overview.metrics.total_transacted)}
+            />
+            <StatCard
+              label="Period revenue"
+              value={
+                overview.metrics.revenue == null
+                  ? "Not set"
+                  : formatKES(overview.metrics.revenue)
+              }
+            />
             <StatCard label="Period orders" value={overview.metrics.orders} />
             <StatCard label="Avg. order value" value={formatKES(overview.metrics.average_order_value)} />
             <StatCard label="New users" value={overview.metrics.new_users} />
@@ -249,7 +276,14 @@ export default function AdminAnalyticsClient({
             <div className="mt-4 p-4 bg-muted/30 rounded">
               <h3 className="font-bold mb-3">Previous Period Comparison</h3>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Prev. revenue" value={formatKES(overviewPrevious?.metrics?.revenue)} />
+                <StatCard
+                  label="Prev. transacted"
+                  value={formatKES(overviewPrevious?.metrics?.total_transacted)}
+                />
+                <StatCard
+                  label="Prev. GMV"
+                  value={formatKES(overviewPrevious?.metrics?.gmv)}
+                />
                 <StatCard label="Prev. orders" value={overviewPrevious?.metrics?.orders ?? "—"} />
                 <StatCard label="Prev. AOV" value={formatKES(overviewPrevious?.metrics?.average_order_value)} />
                 <StatCard label="Prev. new users" value={overviewPrevious?.metrics?.new_users ?? "—"} />
