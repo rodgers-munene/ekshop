@@ -17,7 +17,7 @@ export default function RefundPolicyPage() {
           <h2 className="font-semibold text-base mb-2">1. Order cancellations</h2>
           <p>
             You can cancel an order from your{" "}
-            <Link href="/orders" className="text-amber underline underline-offset-2">Orders</Link> page as long as the
+            <Link href="/orders" className="text-gold underline underline-offset-2">Orders</Link> page as long as the
             Seller has not yet confirmed or shipped it. Once cancelled, any payment already taken is refunded in full
             to your original payment method within 5–10 business days.
           </p>

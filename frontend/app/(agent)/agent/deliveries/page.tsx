@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { Delivery } from "@/types/interface";
 import { formatKES } from "@/lib/utils";
 import ReadOnlyMap from "@/components/geo/ReadOnlyMap";
+// The status vocabulary lives in one place. It used to be duplicated here and in
+// four other pages, which is how the copies drifted.
 import { DELIVERY_TRANSITIONS, statusLabel, statusStyle } from "@/lib/agent-status";
 
 export default function AgentDeliveriesPage() {

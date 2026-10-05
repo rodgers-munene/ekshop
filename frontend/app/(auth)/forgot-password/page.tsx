@@ -41,7 +41,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <Link href="/" className="text-2xl font-bold inline-block mb-8">
-          EK<span className="text-amber">SHOP</span>
+          EK<span className="text-gold">SHOP</span>
         </Link>
 
         {sent ? (
@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
             <p className="text-muted text-sm mb-6">
               If that email is registered, a password reset link is on its way.
             </p>
-            <Link href="/login" className="text-amber underline underline-offset-2 text-sm">Back to sign in</Link>
+            <Link href="/login" className="text-gold underline underline-offset-2 text-sm">Back to sign in</Link>
           </>
         ) : (
           <>
@@ -69,7 +69,7 @@ export default function ForgotPasswordPage() {
               </button>
 
               <p className="text-center text-sm text-muted">
-                <Link href="/login" className="text-amber underline underline-offset-2">Back to sign in</Link>
+                <Link href="/login" className="text-gold underline underline-offset-2">Back to sign in</Link>
               </p>
             </form>
           </>

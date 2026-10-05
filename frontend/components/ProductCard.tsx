@@ -79,7 +79,7 @@ export default function ProductCard({ product }: { product: Product }) {
           onClick={handleQuickAdd}
           disabled={product.stock_qty === 0}
           aria-label="Add to cart"
-          className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-white shadow-md text-ink hover:bg-amber hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-white shadow-md text-ink hover:bg-amber hover:text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={16} />
         </button>
@@ -96,7 +96,7 @@ export default function ProductCard({ product }: { product: Product }) {
 
         {ratingAvg > 0 && (
           <div className="flex items-center gap-1 text-xs text-muted">
-            <div className="flex items-center text-amber">
+            <div className="flex items-center text-gold">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Star
                   key={i}

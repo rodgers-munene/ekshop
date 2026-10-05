@@ -41,7 +41,7 @@ const STATUS_LABELS: Record<FulfillmentStatus, string> = {
 };
 
 const STATUS_STYLES: Record<FulfillmentStatus, string> = {
-  pending: "bg-amber/15 text-amber",
+  pending: "bg-amber/15 text-gold",
   assigned: "bg-info/10 text-info",
   picked_up: "bg-info/10 text-info",
   in_transit: "bg-info/10 text-info",
@@ -139,7 +139,7 @@ export default function DeliveryPanel({
     return (
       <div className="px-4 py-4 border-t border-border bg-surface/50 space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <Truck size={15} className="text-amber" />
+          <Truck size={15} className="text-gold" />
           Delivery
           {legacy.tracking_number && (
             <span className="text-xs text-muted font-normal">
@@ -174,7 +174,7 @@ export default function DeliveryPanel({
   return (
     <div className="px-4 py-4 border-t border-border bg-surface/50 space-y-4">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <Truck size={15} className="text-amber" />
+        <Truck size={15} className="text-gold" />
         Delivery
         {fulfillment?.jobs?.[0]?.external_reference && (
           <span className="text-xs text-muted font-normal">
@@ -203,7 +203,7 @@ export default function DeliveryPanel({
         <div className="card p-4 border-amber">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-medium text-amber mb-1 flex items-center gap-1.5">
+              <p className="text-xs font-medium text-gold mb-1 flex items-center gap-1.5">
                 <PackageCheck size={14} />
                 Your delivery code
               </p>

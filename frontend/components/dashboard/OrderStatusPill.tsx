@@ -1,5 +1,5 @@
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-amber/15 text-amber",
+  pending: "bg-amber/15 text-gold",
   confirmed: "bg-info/10 text-info",
   processing: "bg-info/10 text-info",
   shipped: "bg-progress/10 text-progress",

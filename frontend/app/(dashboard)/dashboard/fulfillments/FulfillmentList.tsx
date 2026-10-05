@@ -32,7 +32,7 @@ const STATUS_LABELS: Record<FulfillmentStatus, string> = {
 };
 
 const STATUS_STYLES: Record<FulfillmentStatus, string> = {
-  pending: "bg-amber/15 text-amber",
+  pending: "bg-amber/15 text-gold",
   assigned: "bg-info/10 text-info",
   picked_up: "bg-info/10 text-info",
   in_transit: "bg-info/10 text-info",
@@ -68,7 +68,7 @@ export default function FulfillmentList() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin text-amber" size={24} />
+        <Loader2 className="animate-spin text-gold" size={24} />
       </div>
     );
   }
@@ -182,7 +182,7 @@ function FulfillmentRow({ fulfillment: f }: { fulfillment: FulfillmentRead }) {
       <td className="px-4 py-3 text-right">
         <Link
           href={`/dashboard/fulfillments/${f.id}`}
-          className="text-amber text-sm underline underline-offset-2"
+          className="text-gold text-sm underline underline-offset-2"
         >
           Manage
         </Link>

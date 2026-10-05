@@ -16,6 +16,11 @@ export interface CartItem {
 
 export interface CartState {
     items: CartItem[];
+    // Single item bought via "Buy Now". Kept apart from `items` so buying
+    // one product straight away leaves the rest of the cart untouched.
+    buyNowItem: CartItem | null;
+    setBuyNowItem: (item: CartItem) => void;
+    clearBuyNow: () => void;
     addItem: (item: CartItem) => void;
     removeItem: (product_id: string, variant_id?: string) => void;
     updateQuantity: (product_id: string, quantity: number, variant_id?: string) => void;
@@ -28,6 +33,7 @@ export const useCartStore = create<CartState>()(
     persist(
         (set, get) => ({
             items: [],
+            buyNowItem: null,
 
             addItem: (item) =>
                 set((state) => {
@@ -68,6 +74,9 @@ export const useCartStore = create<CartState>()(
                 })),
 
             clearCart: () => set({ items: [] }),
+
+            setBuyNowItem: (item) => set({ buyNowItem: item }),
+            clearBuyNow: () => set({ buyNowItem: null }),
 
             totalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
             totalPrice: () => get().items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0),

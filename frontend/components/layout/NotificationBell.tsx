@@ -68,7 +68,7 @@ export default function NotificationBell({ iconClassName = "" }: { iconClassName
           <div className="flex items-center justify-between px-4 py-2 border-b border-border sticky top-0 bg-white">
             <span className="text-sm font-semibold">Notifications</span>
             {unreadCount > 0 && (
-              <button onClick={markAllRead} className="text-xs text-amber hover:underline">
+              <button onClick={markAllRead} className="text-xs text-gold hover:underline">
                 Mark all read
               </button>
             )}

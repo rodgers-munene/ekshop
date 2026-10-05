@@ -425,7 +425,7 @@ export default function ProductForm({
           </div>
         ))}
 
-        <button type="button" onClick={addVariantRow} className="text-amber text-sm underline underline-offset-2">
+        <button type="button" onClick={addVariantRow} className="text-gold text-sm underline underline-offset-2">
           + Add variant
         </button>
       </div>

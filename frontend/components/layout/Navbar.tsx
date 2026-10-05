@@ -132,11 +132,11 @@ export default function Navbar() {
         {/* Logo */}
         <Link href="/" className="shrink-0">
           <Image
-            src="/logo.webp"
+            src="/logo.png"
             alt="Ekshop"
-            width={120}
-            height={40}
-            className="object-contain h-8 md:h-11 w-auto rounded-full"
+            width={44}
+            height={44}
+            className="object-contain h-8 md:h-11 w-auto"
           />
         </Link>
 

@@ -92,7 +92,7 @@ export default function MessageThread({ deliveryId, orderId }: { deliveryId: str
             <div
               className={`rounded-lg px-3 py-2 text-sm max-w-[80%] ${
                 msg.sender_type === "agent"
-                  ? "bg-amber text-white"
+                  ? "bg-amber text-ink"
                   : "bg-surface border border-border"
               }`}
             >

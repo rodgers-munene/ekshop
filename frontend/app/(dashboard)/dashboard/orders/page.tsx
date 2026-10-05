@@ -42,7 +42,7 @@ export default async function DashboardOrdersPage() {
                     <OrderStatusPill status={order.status} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link href={`/dashboard/orders/${order.id}`} className="text-amber text-sm underline underline-offset-2">
+                    <Link href={`/dashboard/orders/${order.id}`} className="text-gold text-sm underline underline-offset-2">
                       View
                     </Link>
                   </td>

@@ -130,7 +130,7 @@ export default function FulfillmentDetailClient() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin text-amber" size={24} />
+        <Loader2 className="animate-spin text-gold" size={24} />
       </div>
     );
   }
@@ -168,7 +168,7 @@ export default function FulfillmentDetailClient() {
           </p>
           <h1 className="text-2xl font-bold">Delivery</h1>
         </div>
-        <span className="text-xs font-medium px-3 py-1.5 rounded-full bg-amber/15 text-amber">
+        <span className="text-xs font-medium px-3 py-1.5 rounded-full bg-amber/15 text-gold">
           {FULFILLMENT_LABELS[f.status] ?? f.status}
         </span>
       </div>
@@ -308,7 +308,7 @@ export default function FulfillmentDetailClient() {
                   <p className="text-xs text-danger mt-1">{j.failure_reason}</p>
                 )}
                 {j.override_reason && (
-                  <p className="text-xs text-amber mt-1">
+                  <p className="text-xs text-gold mt-1">
                     Overridden: {j.override_reason}
                   </p>
                 )}

@@ -42,7 +42,7 @@ function VerifyEmailInner() {
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-sm text-center">
         <Link href="/" className="text-2xl font-bold inline-block mb-8">
-          EK<span className="text-amber">SHOP</span>
+          EK<span className="text-gold">SHOP</span>
         </Link>
 
         {status === "verifying" && (
@@ -78,7 +78,7 @@ function VerifyEmailInner() {
               This link may have expired or already been used. Try signing in; if your
               account still needs verifying, request a new link.
             </p>
-            <Link href="/login" className="text-amber underline underline-offset-2 text-sm">Back to sign in</Link>
+            <Link href="/login" className="text-gold underline underline-offset-2 text-sm">Back to sign in</Link>
           </>
         )}
       </div>

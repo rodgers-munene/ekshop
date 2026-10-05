@@ -150,7 +150,7 @@ export default function OfferInbox() {
                     </p>
                   )}
                 </div>
-                <span className="text-xs text-amber">Open →</span>
+                <span className="text-xs text-gold">Open →</span>
               </Link>
             ))}
           </div>
@@ -246,7 +246,7 @@ function ExpiryPill({
   }
   if (remainingMs < 30_000) {
     return (
-      <span className="text-xs text-amber px-2 py-1 rounded-full bg-amber/15 shrink-0">
+      <span className="text-xs text-gold px-2 py-1 rounded-full bg-amber/15 shrink-0">
         Expiring
       </span>
     );

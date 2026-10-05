@@ -116,7 +116,7 @@ export default function AdminDeliveryRatesPage() {
                         ? "Live: checkout charges buyers based on distance from the seller's county."
                         : "Off: checkout still uses the legacy cart-total-tiered fee, same for every seller."}{" "}
                       Test it first in the{" "}
-                      <Link href="/admin/delivery-rates/simulate" className="underline hover:text-amber">
+                      <Link href="/admin/delivery-rates/simulate" className="underline hover:text-gold">
                         Delivery Fee Simulator
                       </Link>.
                     </p>
@@ -176,19 +176,19 @@ export default function AdminDeliveryRatesPage() {
 
           <ol className="space-y-2.5 text-sm mb-5">
             <li className="flex gap-2">
-              <span className="font-semibold text-amber shrink-0">1.</span>
+              <span className="font-semibold text-gold shrink-0">1.</span>
               <span><span className="font-medium">Same county</span>: buyer and shop are in the exact same county. Cheapest tier.</span>
             </li>
             <li className="flex gap-2">
-              <span className="font-semibold text-amber shrink-0">2.</span>
+              <span className="font-semibold text-gold shrink-0">2.</span>
               <span><span className="font-medium">Same region</span>: different county, but both fall in the same logistics cluster below.</span>
             </li>
             <li className="flex gap-2">
-              <span className="font-semibold text-amber shrink-0">3.</span>
+              <span className="font-semibold text-gold shrink-0">3.</span>
               <span><span className="font-medium">Different region</span>: buyer and shop are in unrelated parts of the country. Most expensive tier.</span>
             </li>
             <li className="flex gap-2">
-              <span className="font-semibold text-amber shrink-0">4.</span>
+              <span className="font-semibold text-gold shrink-0">4.</span>
               <span><span className="font-medium">Unknown origin</span>: fallback when the shop hasn&apos;t set a county at all.</span>
             </li>
           </ol>

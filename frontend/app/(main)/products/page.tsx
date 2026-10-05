@@ -221,7 +221,7 @@ export default async function ProductsPage({ searchParams }: Props) {
               <li>
                 <Link
                   href="/products"
-                  className={`block text-sm py-1 hover:text-amber transition-colors ${!category ? "text-amber font-medium" : "text-ink"}`}
+                  className={`block text-sm py-1 hover:text-gold transition-colors ${!category ? "text-gold font-medium" : "text-ink"}`}
                 >
                   All
                 </Link>
@@ -230,7 +230,7 @@ export default async function ProductsPage({ searchParams }: Props) {
                 <li key={cat.id}>
                   <Link
                     href={`/products?category=${cat.slug}`}
-                    className={`block text-sm py-1 hover:text-amber transition-colors ${category === cat.slug ? "text-amber font-medium" : "text-ink"}`}
+                    className={`block text-sm py-1 hover:text-gold transition-colors ${category === cat.slug ? "text-gold font-medium" : "text-ink"}`}
                   >
                     {cat.name}
                   </Link>
@@ -242,7 +242,7 @@ export default async function ProductsPage({ searchParams }: Props) {
                           <li key={child.id}>
                             <Link
                               href={`/products?category=${child.slug}`}
-                              className="block text-xs py-0.5 text-muted hover:text-amber transition-colors"
+                              className="block text-xs py-0.5 text-muted hover:text-gold transition-colors"
                             >
                               {child.name}
                             </Link>

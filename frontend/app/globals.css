@@ -4,14 +4,16 @@
 :root {
 --bg:          #F4F4F4;
 --ink:         #16191F;
---primary:     #C89B3C;
---primary-hover: #AD8330;
---forest:      #0E3D2B;
+--primary:     #FCD806;
+--primary-hover: #E3C200;
+/* Accent as text: deep gold on light surfaces, logo yellow on dark ones */
+--primary-text: #8A6D00;
+--forest:      #0F1F3D;
 --surface:     #F0F1F2;
 --muted:       #6B7280;
 --border:      #D5D9D9;
---navy:        #0E3D2B;
---navy-light:  #1B5940;
+--navy:        #0F1F3D;
+--navy-light:  #1D3461;
 --danger:      #CC1B1B;
 --info:        #2E6FDE;
 --progress:    #7C3AED;
@@ -25,6 +27,7 @@
   --color-ink:          var(--ink);
   --color-amber:        var(--primary);
   --color-amber-hover:  var(--primary-hover);
+  --color-gold:         var(--primary-text);
   --color-forest:       var(--forest);
   --color-surface:      var(--surface);
   --color-muted:        var(--muted);
@@ -44,6 +47,10 @@
 @keyframes slide-in {
   from { transform: translateX(24px); opacity: 0.6; }
   to   { transform: translateX(0); opacity: 1; }
+}
+
+.bg-navy, .bg-navy-light, .bg-forest, .bg-ink, .on-dark {
+  --primary-text: var(--primary);
 }
 
 body {
@@ -139,8 +146,8 @@ body {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .input-field:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(200, 155, 60, 0.2);
+  border-color: var(--primary-text);
+  box-shadow: 0 0 0 3px rgba(252, 216, 6, 0.35);
 }
 
 .scrollbar-hide {
@@ -149,4 +156,25 @@ body {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* Marquee: seamless right-to-left ticker */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee 32s linear infinite;
+}
+.marquee-wrap:hover .animate-marquee {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
 }

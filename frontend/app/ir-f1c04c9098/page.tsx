@@ -106,7 +106,7 @@ export default async function InvestorBriefingPage({ searchParams }: Props) {
           <button type="submit" className="btn-navy text-sm py-1.5 px-4">Apply</button>
         </form>
         {(year || month) && (
-          <Link href="/ir-f1c04c9098" className="text-xs text-amber underline underline-offset-2">
+          <Link href="/ir-f1c04c9098" className="text-xs text-gold underline underline-offset-2">
             Clear filter
           </Link>
         )}

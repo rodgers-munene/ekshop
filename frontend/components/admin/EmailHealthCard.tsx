@@ -72,7 +72,7 @@ export default function EmailHealthCard() {
           </div>
 
           {!configured && (
-            <p className="rounded-md bg-amber/10 text-amber px-3 py-2 flex items-start gap-2">
+            <p className="rounded-md bg-amber/10 text-gold px-3 py-2 flex items-start gap-2">
               <AlertTriangle size={15} className="mt-0.5 shrink-0" />
               RESEND_API_KEY is not set on the backend, so emails are skipped (logged to the server
               console only). Add it to the backend environment and restart.
@@ -114,7 +114,7 @@ export default function EmailHealthCard() {
           </div>
 
           {status.active_recipient_count === 0 && configured && (
-            <p className="rounded-md bg-amber/10 text-amber px-3 py-2 flex items-start gap-2">
+            <p className="rounded-md bg-amber/10 text-gold px-3 py-2 flex items-start gap-2">
               <AlertTriangle size={15} className="mt-0.5 shrink-0" />
               No active recipients — even with Resend configured, no order emails are sent. Add a
               recipient below and keep it toggled on.
@@ -122,7 +122,7 @@ export default function EmailHealthCard() {
           )}
 
           {configured && !verified && (
-            <p className="rounded-md bg-amber/10 text-amber px-3 py-2 flex items-start gap-2">
+            <p className="rounded-md bg-amber/10 text-gold px-3 py-2 flex items-start gap-2">
               <AlertTriangle size={15} className="mt-0.5 shrink-0" />
               The From domain isn&apos;t shown as verified in Resend. Add the domain and confirm its
               DNS (SPF/DKIM) records, otherwise Resend rejects every send.

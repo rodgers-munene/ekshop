@@ -159,7 +159,7 @@ export default function StatDrillDown({
           <div className="border-t border-border px-5 py-3 bg-bg">
             <Link
               href={href ?? "/admin"}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-amber hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-gold hover:underline"
             >
               {hrefLabel ?? "Open full page"}
               <ArrowUpRight size={14} />

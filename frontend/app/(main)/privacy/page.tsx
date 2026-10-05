@@ -67,7 +67,7 @@ export default function PrivacyPage() {
           <h2 className="font-semibold text-base mb-2">6. Your rights</h2>
           <p>
             You can access, update, or delete your account information from your{" "}
-            <Link href="/account" className="text-amber underline underline-offset-2">account settings</Link>, or by
+            <Link href="/account" className="text-gold underline underline-offset-2">account settings</Link>, or by
             contacting us. Under Kenya&apos;s Data Protection Act, 2019, you have the right to access, correct, and
             request deletion of your personal data, and to object to certain processing.
           </p>

@@ -19,9 +19,12 @@ const POLL_INTERVAL_MS = 4000;
 // and let the buyer trigger a check manually via "Refresh Status" instead.
 const POLL_TIMEOUT_MS = 20000;
 
-export default function CheckoutClient({ addresses }: { addresses: UserAddress[] }) {
+export default function CheckoutClient({ addresses, buyNow }: { addresses: UserAddress[]; buyNow: boolean }) {
   const router = useRouter();
-  const { items, totalPrice, clearCart } = useCartStore();
+  const { items: cartItems, buyNowItem, clearCart, clearBuyNow } = useCartStore();
+  // "Buy Now" checks out just that one product and leaves the cart alone.
+  const items = buyNow ? (buyNowItem ? [buyNowItem] : []) : cartItems;
+  const finishPurchase = buyNow ? clearBuyNow : clearCart;
   const [step, setStep] = useState<Step>("review");
   const [selectedAddressId, setSelectedAddressId] = useState<string>(
     addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? ""
@@ -44,7 +47,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
   const [pinSaving, setPinSaving] = useState(false);
   const [pinOverrides, setPinOverrides] = useState<Record<string, Partial<UserAddress>>>({});
 
-  const subtotal = totalPrice();
+  const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
   const total = subtotal + deliveryFee;
 
   const shopIds = [...new Set(items.map((item) => item.shop_id))];
@@ -115,7 +118,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
 
           if (res.ok && data.status === "success") {
             clearInterval(timer);
-            clearCart();
+            finishPurchase();
             toast.success("Payment confirmed!");
             router.push(`/orders/${orderGroupId}`);
             return;
@@ -250,7 +253,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.status === "success") {
-        clearCart();
+        finishPurchase();
         toast.success("Payment confirmed!");
         router.push(`/orders/${orderGroupId}`);
         return;
@@ -282,7 +285,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
         <div className="card w-full max-w-sm p-8 flex flex-col items-center text-center">
           {unresolved ? (
             <>
-              <AlertTriangle size={40} className="text-amber mb-4" />
+              <AlertTriangle size={40} className="text-gold mb-4" />
               <h2 className="text-2xl font-extrabold mb-2">We couldn&apos;t confirm your payment</h2>
               <p className="text-muted text-sm mb-2">
                 The prompt may have been cancelled, timed out, or could still be processing. Refresh to check the
@@ -308,12 +311,12 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
             </>
           ) : (
             <>
-              <Smartphone size={40} className="text-amber mb-4" />
+              <Smartphone size={40} className="text-gold mb-4" />
               <h2 className="text-2xl font-extrabold mb-2">Check your phone</h2>
               <p className="text-muted text-sm mb-2">
                 Enter your M-Pesa PIN on the prompt sent to {phone} to complete your payment of {formatKES(total)}.
               </p>
-              <p className="text-amber text-sm font-medium">Processing... ({secondsRemaining}s)</p>
+              <p className="text-gold text-sm font-medium">Processing... ({secondsRemaining}s)</p>
             </>
           )}
         </div>
@@ -336,7 +339,11 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
               <h2 className="font-semibold">1. Your Items</h2>
               <div className="flex items-center gap-3">
                 {items[0]?.shop_id && <MessageSellerButton shopId={items[0].shop_id} />}
-                <button onClick={() => router.push("/cart")} className="text-xs text-muted underline">Edit cart</button>
+                {buyNow && items[0] ? (
+                  <button onClick={() => router.push(`/products/${items[0].product_slug}`)} className="text-xs text-muted underline">Change</button>
+                ) : (
+                  <button onClick={() => router.push("/cart")} className="text-xs text-muted underline">Edit cart</button>
+                )}
               </div>
             </div>
             <div className="divide-y divide-border">
@@ -394,7 +401,7 @@ export default function CheckoutClient({ addresses }: { addresses: UserAddress[]
                 })
               )}
               {effectiveSelectedAddress && !effectiveSelectedAddress.lat && (
-                <button type="button" onClick={() => setMapOpen(true)} className="flex items-center gap-2 text-xs text-amber hover:underline pt-1">
+                <button type="button" onClick={() => setMapOpen(true)} className="flex items-center gap-2 text-xs text-gold hover:underline pt-1">
                   <MapPin size={14} /> Pin delivery location on map
                 </button>
               )}

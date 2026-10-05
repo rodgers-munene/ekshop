@@ -15,7 +15,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 const STATUS_STYLE: Record<string, string> = {
-  pending_review: "bg-amber/15 text-amber",
+  pending_review: "bg-amber/15 text-gold",
   approved: "bg-success/10 text-success",
   rejected: "bg-danger/10 text-danger",
 };
@@ -66,7 +66,7 @@ export default function AdminKycPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Rider KYC Review</h1>
         {data && data.pending > 0 && (
-          <span className="text-xs font-medium px-2 py-1 rounded-full bg-amber/15 text-amber">
+          <span className="text-xs font-medium px-2 py-1 rounded-full bg-amber/15 text-gold">
             {data.pending} pending
           </span>
         )}

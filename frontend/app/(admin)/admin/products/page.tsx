@@ -12,7 +12,7 @@ const LIMIT = 20;
 const STATUS_STYLE: Record<string, string> = {
   active: "bg-success/10 text-success",
   draft: "bg-ink/10 text-ink",
-  paused: "bg-amber/15 text-amber",
+  paused: "bg-amber/15 text-gold",
 };
 
 export default function AdminProductsPage() {
@@ -60,7 +60,7 @@ export default function AdminProductsPage() {
               {products.map((product) => (
                 <tr key={product.id} className="hover:bg-surface/50 transition-colors">
                   <td className="px-4 py-3">
-                    <Link href={`/products/${product.id}`} className="font-medium hover:text-amber">
+                    <Link href={`/products/${product.id}`} className="font-medium hover:text-gold">
                       {product.name}
                     </Link>
                   </td>

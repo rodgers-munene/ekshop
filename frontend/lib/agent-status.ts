@@ -24,13 +24,26 @@ export const STATUS_LABELS: Record<string, string> = {
   returned: "Returned",
 };
 
-/** Tailwind classes per status, matching the admin/dashboard pill convention. */
+/**
+ * Tailwind classes per status, matching the admin/dashboard pill convention.
+ *
+ * `text-gold` rather than `text-amber` for the accent: `amber` is the bright
+ * logo yellow (#FCD806), which is unreadable as text on a white card. `gold` is
+ * the deep accent (#8A6D00) introduced for exactly that reason. `bg-amber/15`
+ * stays, because a translucent yellow wash behind dark gold text is the intended
+ * pairing -- the token is right for fills and wrong for type.
+ */
 export const STATUS_STYLES: Record<string, string> = {
   delivered: "bg-success/10 text-success",
-  cancelled: "bg-danger/10 text-danger",
+  cancelled: "bg-surface text-muted",
   failed: "bg-danger/10 text-danger",
-  returned: "bg-info/10 text-info",
+  returned: "bg-surface text-muted",
   in_transit: "bg-info/10 text-info",
+  assigned: "bg-info/10 text-info",
+  picked: "bg-amber/15 text-gold",
+  picked_up: "bg-amber/15 text-gold",
+  at_pickup: "bg-amber/15 text-gold",
+  settled: "bg-success/10 text-success",
 };
 
 export function statusLabel(status: string): string {
@@ -38,7 +51,7 @@ export function statusLabel(status: string): string {
 }
 
 export function statusStyle(status: string): string {
-  return STATUS_STYLES[status] ?? "bg-amber/15 text-amber";
+  return STATUS_STYLES[status] ?? "bg-amber/15 text-gold";
 }
 
 /** Which statuses the rider may advance to from the current one. */

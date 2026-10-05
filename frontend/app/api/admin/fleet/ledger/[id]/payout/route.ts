@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ agentId: string }> }) {
-  const { agentId } = await params;
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: agentId } = await params;
   const cookieStore = await cookies();
   const token = cookieStore.get("ekshop_token")?.value;
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });

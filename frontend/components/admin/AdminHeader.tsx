@@ -24,12 +24,12 @@ export default function AdminHeader({ user }: { user: User }) {
     <header className="bg-navy border-b border-white/10">
       <div className="px-4 md:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-white">
-          <ShieldCheck size={20} className="text-amber" />
+          <ShieldCheck size={20} className="text-gold" />
           <p className="font-bold">Ekshop Admin</p>
         </div>
 
         <div className="flex items-center gap-4 shrink-0">
-          <Link href="/" className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-amber transition-colors">
+          <Link href="/" className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-gold transition-colors">
             <ArrowLeft size={15} />
             Back to site
           </Link>

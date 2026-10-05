@@ -104,7 +104,7 @@ export default async function ShopPage({ params }: Props) {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-white">{decodeHtml(shop.name)}</h1>
-              {shop.is_verified && <BadgeCheck size={18} className="text-amber" />}
+              {shop.is_verified && <BadgeCheck size={18} className="on-dark text-gold" />}
             </div>
             <div className="flex items-center gap-3 mt-1 text-white/80 text-xs">
               {parseFloat(shop.rating_avg) > 0 && (

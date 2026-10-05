@@ -149,7 +149,7 @@ export default function AgentHomePage() {
           className="block card p-5 mb-6 hover:border-amber transition-colors"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-amber uppercase tracking-wide">Next stop</span>
+            <span className="text-xs font-semibold text-gold uppercase tracking-wide">Next stop</span>
             <span className="text-xs text-muted">Arrive in ~25 min</span>
           </div>
           <h2 className="text-lg font-bold mb-1">
@@ -200,7 +200,7 @@ export default function AgentHomePage() {
                   <p className="text-xs text-muted">{delivery.order?.buyer_name}</p>
                 </div>
               </div>
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${statusStyle(delivery.status)}`}>
+<span className={`text-xs font-medium px-2 py-1 rounded-full ${statusStyle(delivery.status)}`}>
                   {statusLabel(delivery.status)}
                 </span>
                 {delivery.distance_km != null && delivery.duration_min != null && (

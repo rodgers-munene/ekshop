@@ -21,15 +21,20 @@ export default async function CategoryStrip() {
     <nav className="bg-navy-light text-white/90">
       <div className="w-full px-4">
         <ul className="flex items-center gap-5 overflow-x-auto scrollbar-hide h-10">
-          <li className="shrink-0 flex items-center gap-1.5 font-semibold text-sm pr-4 border-r border-white/15">
-            <Menu size={16} />
-            All
+          <li className="shrink-0 pr-4 border-r border-white/15">
+            <Link
+              href="/products"
+              className="flex items-center gap-1.5 font-semibold text-sm whitespace-nowrap hover:text-gold transition-colors"
+            >
+              <Menu size={16} />
+              All
+            </Link>
           </li>
           {parents.map((category) => (
             <li key={category.id} className="shrink-0">
               <Link
                 href={`/products?category=${category.slug}`}
-                className="text-sm whitespace-nowrap hover:text-amber transition-colors"
+                className="text-sm whitespace-nowrap hover:text-gold transition-colors"
               >
                 {category.name}
               </Link>
