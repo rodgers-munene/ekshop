@@ -76,7 +76,7 @@ from app.schemas.user import UserRead
 from app.schemas.automation import AutomationSettingsRead, AutomationSettingsUpdate
 from app.services import storage
 from app.services import email as email_service
-from app.services import dashboard_metrics
+from app.services import dashboard_metrics, reports
 from app.services import automation as automation_service
 from app.services.dashboard_metrics import (
     get_cart_abandonment_metrics,
@@ -904,12 +904,19 @@ def export_margin_leakage_csv(
 ):
     since, until, _label = _resolve_window(period, days, date_from, date_to)
     metrics = dashboard_metrics.get_margin_leakage_metrics(db, since, until)
+    def cell(value, suffix: str = "") -> str:
+        """Unset rates export as an empty cell, never as 0.00 -- a zero would
+        read as 'this cost nothing'."""
+        return f"{value:.2f}{suffix}" if isinstance(value, (int, float)) else ""
+
     lines = [
         "label,gmv,platform_commission,mpesa_fees,net_profit,gross_margin_pct,aov",
     ]
     for point in metrics.get("trend", []):
         lines.append(
-            f"{point['label']},{point['gmv']:.2f},{point['platform_commission']:.2f},{point['mpesa_fees']:.2f},{point['net_profit']:.2f},{point['gross_margin_pct']:.2f},{point['aov']:.2f}"
+            f"{point['label']},{cell(point['gmv'])},{cell(point['platform_commission'])},"
+            f"{cell(point['mpesa_fees'])},{cell(point['net_profit'])},"
+            f"{cell(point['gross_margin_pct'])},{cell(point['aov'])}"
         )
     csv_content = "\n".join(lines) + "\n"
     return Response(content=csv_content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=margin-leakage.csv"})
@@ -928,52 +935,91 @@ def export_margin_leakage_pdf(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    since, until, _label = _resolve_window(period, days, date_from, date_to)
-    metrics = dashboard_metrics.get_margin_leakage_metrics(db, since, until)
+    since, until, label = _resolve_window(period, days, date_from, date_to)
+    summary = reports.build_trading_summary(db, since, until, label)
     try:
-        from fpdf import FPDF
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 8, "Ekshop Kenya - Margin Leakage Report", ln=True)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.cell(0, 6, f"Period: {metrics.get('period')} | Orders: {metrics.get('orders')} | AOV: KES {metrics.get('average_order_value')}", ln=True)
-        pdf.ln(2)
-        pdf.cell(0, 6, f"GMV: KES {metrics.get('gmv')} | Platform commission: KES {metrics.get('platform_commission')} | M-Pesa fees: KES {metrics.get('mpesa_fees')} | Net profit: KES {metrics.get('net_profit')} | Gross margin: {metrics.get('gross_margin_pct')}%", ln=True)
-        pdf.ln(4)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(40, 8, "Day", border=1)
-        pdf.cell(35, 8, "GMV", border=1, align="R")
-        pdf.cell(35, 8, "Commission", border=1, align="R")
-        pdf.cell(35, 8, "M-Pesa", border=1, align="R")
-        pdf.cell(35, 8, "Net profit", border=1, align="R")
-        pdf.cell(0, 8, "Margin %", border=1, align="R", ln=True)
-        pdf.set_font("Helvetica", "", 10)
-        for point in metrics.get("trend", []):
-            pdf.cell(40, 8, str(point.get("label", "")), border=1)
-            pdf.cell(35, 8, f"KES {point.get('gmv', 0):.2f}", border=1, align="R")
-            pdf.cell(35, 8, f"KES {point.get('platform_commission', 0):.2f}", border=1, align="R")
-            pdf.cell(35, 8, f"KES {point.get('mpesa_fees', 0):.2f}", border=1, align="R")
-            pdf.cell(35, 8, f"KES {point.get('net_profit', 0):.2f}", border=1, align="R")
-            pdf.cell(0, 8, f"{point.get('gross_margin_pct', 0):.2f}%", border=1, align="R", ln=True)
-        pdf_bytes = bytes(pdf.output())
-        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=margin-leakage.pdf"})
-    except Exception:
-        html = f"""
-        <html>
-          <head><title>Ekshop Margin Leakage Report</title></head>
-          <body>
-            <h1>Ekshop Kenya - Margin Leakage Report</h1>
-            <p>Period: {metrics.get('period')} | Orders: {metrics.get('orders')} | AOV: KES {metrics.get('average_order_value')}</p>
-            <p>GMV: KES {metrics.get('gmv')} | Platform commission: KES {metrics.get('platform_commission')} | M-Pesa fees: KES {metrics.get('mpesa_fees')} | Net profit: KES {metrics.get('net_profit')} | Gross margin: {metrics.get('gross_margin_pct')}%</p>
-            <table border="1" cellpadding="4" cellspacing="0">
-              <tr><th>Day</th><th>GMV</th><th>Commission</th><th>M-Pesa</th><th>Net profit</th><th>Margin %</th></tr>
-              {"".join(f"<tr><td>{p.get('label','')}</td><td>KES {p.get('gmv',0):.2f}</td><td>KES {p.get('platform_commission',0):.2f}</td><td>KES {p.get('mpesa_fees',0):.2f}</td><td>KES {p.get('net_profit',0):.2f}</td><td>{p.get('gross_margin_pct',0):.2f}%</td></tr>" for p in metrics.get('trend', []))}
-            </table>
-          </body>
-        </html>
-        """
-        return Response(content=html, media_type="text/html", headers={"Content-Disposition": "attachment; filename=margin-leakage.html"})
+        pdf_bytes = reports.render_pdf(summary)
+    except ImportError:
+        # fpdf2 is optional. Only its absence is caught here -- a genuine layout
+        # or arithmetic error used to be swallowed by a bare `except Exception`,
+        # which returned an HTML file and made a broken PDF look like a working
+        # export with a different format.
+        return Response(
+            content=reports.render_html(summary),
+            media_type="text/html",
+            headers={"Content-Disposition": "attachment; filename=trading-report.html"},
+        )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=trading-report.pdf"},
+    )
+
+
+@router.get("/reports/trading-report.html")
+def export_trading_report_html(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(30, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    since, until, label = _resolve_window(period, days, date_from, date_to)
+    return Response(
+        content=reports.render_html(reports.build_trading_summary(db, since, until, label)),
+        media_type="text/html",
+        headers={"Content-Disposition": "attachment; filename=trading-report.html"},
+    )
+
+
+@router.get("/reports/yesterday")
+def yesterday_report(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """The standing question: what happened yesterday.
+
+    Yesterday as a complete EAT calendar day, so it matches a point on the
+    trend and can be quoted verbatim without anyone having to guess whether the
+    figure covers 24 hours or midnight-to-midnight.
+    """
+    yesterday = datetime.now(EAT).date() - timedelta(days=1)
+    start, end, label = reports.daily_window(yesterday)
+    summary = reports.build_trading_summary(db, start, end, label)
+    return {
+        "period": label,
+        "verdict": summary.verdict,
+        "cash_received": str(summary.cash_received),
+        "refunds": str(summary.refunds),
+        "net_cash": str(summary.net_cash),
+        "gmv": str(summary.gmv),
+        "total_transacted": str(summary.total_transacted),
+        "orders": summary.orders,
+        "payments": summary.payments,
+        "payers": summary.payers,
+        "new_customers": summary.new_customers,
+        "average_order_value": str(summary.average_order_value),
+        "platform_revenue": (
+            str(summary.platform_revenue)
+            if summary.platform_revenue is not None
+            else None
+        ),
+        "commission_rate_configured": summary.commission_rate is not None,
+        "mpesa_fees": (
+            str(summary.mpesa_fees) if summary.mpesa_fees is not None else None
+        ),
+        "server_costs": (
+            str(summary.server_costs) if summary.server_costs is not None else None
+        ),
+        "net": str(summary.net) if summary.net is not None else None,
+        "net_note": summary.net_note.strip() or None,
+        "html_url": f"/admin/reports/trading-report.html?date_from={yesterday.isoformat()}&date_to={yesterday.isoformat()}",
+    }
 
 
 @router.post("/alerts/check-thresholds")

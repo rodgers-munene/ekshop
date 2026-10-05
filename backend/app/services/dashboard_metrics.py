@@ -14,6 +14,7 @@ from typing import List, Optional
 from sqlalchemy import Numeric, cast, desc, func
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.analytics import UserEvent, EventType, IssueReport
 from app.models.catalog import Product
 from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus, OrderItem
@@ -676,10 +677,42 @@ def get_priority_acquisition(db: Session, since: datetime, until: Optional[datet
 
 
 # ── Revenue leakage & margin monitor ────────────────────────────────────────
-
-COMMISSION_RATE = Decimal("0.10")
-MPESA_RATE = Decimal("0.0055")
-SERVER_COST_PER_ORDER = Decimal("6.25")
+#
+# The three rates below used to be hardcoded module constants:
+#   COMMISSION_RATE = 0.10, MPESA_RATE = 0.0055, SERVER_COST_PER_ORDER = 6.25
+#
+# That was the single worst number on the admin dashboard. `settings` already
+# carried a comment explaining that `PLATFORM_COMMISSION_RATE` is deliberately
+# unset so the dashboard reports revenue as unknown rather than inventing it --
+# and this function ignored that and multiplied by 10% anyway, so the same
+# platform showed an invented commission here and an honest blank on the
+# overview.
+#
+# Worse, the arithmetic was wrong whatever the rates were. It started from GMV
+# (the value of the goods, which Ekshop sells on merchants' behalf and does not
+# own), then subtracted the platform's own commission as though it were a cost.
+# So `net_profit` was neither revenue nor profit, and `gross_margin_pct` was
+# derived from it. "Are we winning or losing" was being answered by a formula
+# that could not be right.
+#
+# Now: the rates come from settings, and anything unset is reported as None so
+# the UI can say "not configured" instead of printing a number. The authoritative
+# win/loss figures live in services/reports.py.
+COMMISSION_RATE: Optional[Decimal] = (
+    Decimal(str(settings.PLATFORM_COMMISSION_RATE))
+    if settings.PLATFORM_COMMISSION_RATE is not None
+    else None
+)
+MPESA_RATE: Optional[Decimal] = (
+    Decimal(str(settings.MPESA_FEE_RATE))
+    if settings.MPESA_FEE_RATE is not None
+    else None
+)
+SERVER_COST_PER_ORDER: Optional[Decimal] = (
+    Decimal(str(settings.SERVER_COST_PER_ORDER))
+    if settings.SERVER_COST_PER_ORDER is not None
+    else None
+)
 
 
 def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[datetime] = None) -> dict:
@@ -692,11 +725,39 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
     order_count = paid_groups.count()
     gmv = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
 
-    platform_commission = (gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
-    mpesa_fees = (gmv * MPESA_RATE).quantize(Decimal("0.01"))
-    server_cost = (Decimal(order_count) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
-    net_profit = (gmv - platform_commission - mpesa_fees - server_cost).quantize(Decimal("0.01"))
-    gross_margin_pct = float((net_profit / gmv * 100).quantize(Decimal("0.01"))) if gmv else 0.0
+    # Anything that depends on an unconfigured rate stays None. It is never
+    # defaulted to zero, because a zero reads as "this cost nothing" and would
+    # quietly overstate the result.
+    platform_commission = (
+        (gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
+        if COMMISSION_RATE is not None
+        else None
+    )
+    mpesa_fees = (
+        (gmv * MPESA_RATE).quantize(Decimal("0.01")) if MPESA_RATE is not None else None
+    )
+    server_cost = (
+        (Decimal(order_count) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
+        if SERVER_COST_PER_ORDER is not None
+        else None
+    )
+
+    # Platform revenue is what Ekshop *keeps*: commission on goods, minus the
+    # costs of collecting it. The old formula subtracted commission from GMV,
+    # which treated money belonging to merchants as the platform's own and then
+    # charged the platform its own income as an expense.
+    if platform_commission is None or mpesa_fees is None or server_cost is None:
+        net_profit = None
+        gross_margin_pct = None
+    else:
+        net_profit = (
+            platform_commission - mpesa_fees - server_cost
+        ).quantize(Decimal("0.01"))
+        gross_margin_pct = (
+            float((net_profit / platform_commission * 100).quantize(Decimal("0.01")))
+            if platform_commission
+            else None
+        )
     average_order_value = (gmv / Decimal(order_count)).quantize(Decimal("0.01")) if order_count else Decimal("0")
 
     day_col = func.date_trunc("day", OrderGroup.created_at)
@@ -720,19 +781,41 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
         row = by_day.get(day)
         day_gmv = Decimal(row.gmv) if row and row.gmv else Decimal("0")
         day_orders = int(row.orders) if row else 0
-        day_commission = (day_gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
-        day_mpesa = (day_gmv * MPESA_RATE).quantize(Decimal("0.01"))
-        day_server = (Decimal(day_orders) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
-        day_profit = (day_gmv - day_commission - day_mpesa - day_server).quantize(Decimal("0.01"))
-        day_margin = float((day_profit / day_gmv * 100).quantize(Decimal("0.01"))) if day_gmv else 0.0
+        day_commission = (
+            (day_gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
+            if COMMISSION_RATE is not None
+            else None
+        )
+        day_mpesa = (
+            (day_gmv * MPESA_RATE).quantize(Decimal("0.01"))
+            if MPESA_RATE is not None
+            else None
+        )
+        day_server = (
+            (Decimal(day_orders) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
+            if SERVER_COST_PER_ORDER is not None
+            else None
+        )
+        if None in (day_commission, day_mpesa, day_server):
+            day_profit = None
+            day_margin = None
+        else:
+            day_profit = (day_commission - day_mpesa - day_server).quantize(
+                Decimal("0.01")
+            )
+            day_margin = (
+                float((day_profit / day_commission * 100).quantize(Decimal("0.01")))
+                if day_commission
+                else None
+            )
         day_aov = float((day_gmv / Decimal(day_orders)).quantize(Decimal("0.01"))) if day_orders else 0.0
         trend.append(
             {
                 "label": day.strftime("%d %b"),
                 "gmv": float(day_gmv),
-                "platform_commission": float(day_commission),
-                "mpesa_fees": float(day_mpesa),
-                "net_profit": float(day_profit),
+                "platform_commission": float(day_commission) if day_commission is not None else None,
+                "mpesa_fees": float(day_mpesa) if day_mpesa is not None else None,
+                "net_profit": float(day_profit) if day_profit is not None else None,
                 "gross_margin_pct": day_margin,
                 "aov": day_aov,
             }
@@ -745,13 +828,19 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
         "gmv": str(gmv),
         "orders": order_count,
         "average_order_value": str(average_order_value),
-        "platform_commission": str(platform_commission),
-        "mpesa_fees": str(mpesa_fees),
-        "server_cost": str(server_cost),
-        "net_profit": str(net_profit),
+        "platform_commission": (
+            str(platform_commission) if platform_commission is not None else None
+        ),
+        "mpesa_fees": str(mpesa_fees) if mpesa_fees is not None else None,
+        "server_cost": str(server_cost) if server_cost is not None else None,
+        "net_profit": str(net_profit) if net_profit is not None else None,
         "gross_margin_pct": gross_margin_pct,
-        "commission_rate_pct": float(COMMISSION_RATE * 100),
-        "mpesa_rate_pct": float(MPESA_RATE * 100),
+        "commission_rate_pct": (
+            float(COMMISSION_RATE * 100) if COMMISSION_RATE is not None else None
+        ),
+        "mpesa_rate_pct": float(MPESA_RATE * 100) if MPESA_RATE is not None else None,
+        # Tells the UI to say "not configured" rather than print a blank or a zero.
+        "rates_configured": None not in (COMMISSION_RATE, MPESA_RATE, SERVER_COST_PER_ORDER),
         "trend": trend,
     }
 

@@ -105,6 +105,20 @@ class Settings(BaseSettings):
     # See the team questionnaire -- this is a commercial decision, not a default.
     PLATFORM_COMMISSION_RATE: Optional[Decimal] = None
 
+    # M-Pesa merchant/service fee as a share of the amount collected, and the
+    # hosting cost attributed to one basket. Both feed the trading report's net
+    # figure.
+    #
+    # The margin-leakage monitor previously hardcoded 0.55% and KES 6.25 with no
+    # way to change them, and hardcoded a 10% commission even after
+    # PLATFORM_COMMISSION_RATE was deliberately left unset. So one screen showed
+    # an invented commission and another showed an honest blank. These are None
+    # for the same reason: a commercial figure nobody has agreed on should be
+    # reported as unknown, and the report then leaves net uncalculated instead of
+    # guessing at it.
+    MPESA_FEE_RATE: Optional[Decimal] = None
+    SERVER_COST_PER_ORDER: Optional[Decimal] = None
+
     ALERT_MIN_GROSS_MARGIN_PCT: float = 90.0
     ALERT_MAX_MPESA_LATENCY_SECONDS: float = 2.0
     ALERT_MAX_HOSTING_COST_PER_ORDER: float = 20.0
