@@ -32,6 +32,7 @@ from app.routers.returns import returns_router
 from app.routers.delivery import router as delivery_router
 from app.routers.fulfillment import router as fulfillment_router
 from app.routers.pricing_admin import router as pricing_admin_router
+from app.routers.presence import router as presence_router
 from app.routers.partner_fleet import router as partner_fleet_router
 from app.routers.recommendations import router as recommendations_router
 from app.routers.hero import router as hero_router
@@ -73,6 +74,7 @@ app.include_router(pricing_admin_router)
 app.include_router(partner_fleet_router)
 app.include_router(recommendations_router)
 app.include_router(admin.router)
+app.include_router(presence_router)
 app.include_router(investor.router)
 app.include_router(messaging.router)
 app.include_router(messaging_ws_router)

@@ -42,7 +42,6 @@ from app.schemas.admin import (
     EcommerceMetrics,
     AcquisitionMetrics,
     BehaviorMetrics,
-    RealTimeMetrics,
     HeroSlideCreate,
     HeroSlideRead,
     HeroSlideUpdate,
@@ -708,14 +707,11 @@ def get_priority_acquisition(
     return dashboard_metrics.get_priority_acquisition(db, since, until)
 
 
-@router.get("/metrics/real-time", response_model=RealTimeMetrics)
-def get_real_time_metrics(
-    minutes: int = Query(15, ge=1, le=60),
-    db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
-):
-    since = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    return dashboard_metrics.get_real_time_metrics(db, since)
+# NOTE: /metrics/real-time deliberately does NOT live here. It used to, and it
+# reported active_sessions by counting UserEvent rows -- a behavioural analytics
+# table written only for purchases and product views -- so it read zero with the
+# site open. It now reads the in-memory presence registry and lives in
+# app/routers/presence.py. Two routes on one path would be ambiguous.
 
 
 @router.get("/metrics/acquisition", response_model=AcquisitionMetrics)
