@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { DeliveryAgent } from "@/types/interface";
 import AgentHeader from "@/components/agent/AgentHeader";
+import PresenceHeartbeat from "@/components/PresenceHeartbeat";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -25,6 +26,9 @@ export default async function AgentLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-surface flex flex-col">
+      {/* A rider with the app open is exactly who the "active now" figure should
+          count, and the agent token is accepted by the heartbeat endpoint. */}
+      <PresenceHeartbeat />
       <AgentHeader agent={agent} />
       <main className="flex-1 px-4 md:px-8 py-6 max-w-3xl mx-auto w-full">{children}</main>
 

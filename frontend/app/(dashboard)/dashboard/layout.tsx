@@ -6,6 +6,7 @@ import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import ShopOnboardingForm from "@/components/dashboard/ShopOnboardingForm";
 import SubscriptionBanner from "@/components/dashboard/SubscriptionBanner";
 import DashboardPaywall from "@/components/dashboard/DashboardPaywall";
+import PresenceHeartbeat from "@/components/PresenceHeartbeat";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await serverFetch<User>("/users/me").catch(() => null);
@@ -35,6 +36,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-surface flex flex-col">
+      <PresenceHeartbeat />
       <DashboardHeader user={user} shop={shop} />
       {subscription && <SubscriptionBanner subscription={subscription} />}
       <div className="flex flex-1 flex-col md:flex-row">

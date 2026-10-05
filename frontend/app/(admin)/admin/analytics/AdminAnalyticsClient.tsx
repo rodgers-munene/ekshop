@@ -6,6 +6,7 @@ import StatCard from "@/components/dashboard/StatCard";
 import PeriodFilter, { PeriodKey } from "@/components/dashboard/PeriodFilter";
 import StatDrillDown from "@/components/admin/StatDrillDown";
 import RevenueLeakageMonitor from "@/components/admin/RevenueLeakageMonitor";
+import PresencePanel from "@/components/admin/PresencePanel";
 import {
   DrillSpec,
   ordersSpec,
@@ -258,12 +259,16 @@ export default function AdminAnalyticsClient({
           {realTime && (
             <div className="mt-4 p-4 bg-muted/30 rounded">
               <h3 className="font-bold mb-3">Real-time</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <StatCard label="Active sessions" value={realTime.active_sessions} />
                 <StatCard label="Active users" value={realTime.active_users} />
                 <StatCard label="Recent purchases" value={realTime.recent_purchases} />
                 <StatCard label="Active carts" value={realTime.active_carts} />
               </div>
+              {/* Who they are and what they are looking at. The two counters above
+                  answer "how many"; this answers "who", which is the question
+                  actually being asked when the number is zero. */}
+              <PresencePanel />
             </div>
           )}
           {acquisition && (
