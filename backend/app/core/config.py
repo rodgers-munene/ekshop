@@ -1,3 +1,6 @@
+from decimal import Decimal
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -89,6 +92,18 @@ class Settings(BaseSettings):
     # failing the quote -- but the result is marked approximate so it can never
     # be presented as a firm price by accident.
     DISTANCE_ALLOW_STRAIGHT_LINE_FALLBACK: bool = True
+
+    # --- Platform commission -------------------------------------------------
+    # What Ekshop keeps as a share of goods value. Deliberately unset rather than
+    # given a plausible default: the admin dashboard used to label GMV as
+    # "Revenue" and separately hardcode a 10% commission in the leakage monitor,
+    # so the same dashboard showed one number under two names and a second number
+    # that came from nowhere.
+    #
+    # Nothing in the data model records a commission rate, so until this is set
+    # the dashboard reports platform revenue as unknown instead of inventing one.
+    # See the team questionnaire -- this is a commercial decision, not a default.
+    PLATFORM_COMMISSION_RATE: Optional[Decimal] = None
 
     ALERT_MIN_GROSS_MARGIN_PCT: float = 90.0
     ALERT_MAX_MPESA_LATENCY_SECONDS: float = 2.0

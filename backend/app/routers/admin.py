@@ -15,6 +15,7 @@ from app.models.commerce import (
     OrderGroup,
     OrderGroupStatus,
     Order,
+    OrderItem,
     OrderStatus,
 )
 from app.models.catalog import Product, Category
@@ -97,8 +98,15 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 EAT = timezone(timedelta(hours=3), "EAT")
 
 
-def _period_figures(db: Session, start: datetime, end: datetime) -> PeriodFigures:
-    revenue, orders = (
+def _paid_money_between(db: Session, start: datetime, end: datetime) -> dict:
+    """The three money figures for a window, over **paid** order groups only.
+
+    GMV is summed from `OrderItem.line_total` rather than derived from
+    `OrderGroup.subtotal`, because subtotal excludes delivery but the arithmetic
+    still has to be walked back from groups to their line items -- and walking it
+    is the only way to be sure goods-only is genuinely goods-only.
+    """
+    transacted, orders = (
         db.query(
             func.coalesce(func.sum(cast(OrderGroup.total, Numeric)), 0),
             func.count(OrderGroup.id),
@@ -110,8 +118,51 @@ def _period_figures(db: Session, start: datetime, end: datetime) -> PeriodFigure
         )
         .one()
     )
-    revenue = Decimal(revenue).quantize(Decimal("0.01"))
-    aov = (revenue / orders).quantize(Decimal("0.01")) if orders else Decimal("0.00")
+    total_transacted = Decimal(transacted).quantize(Decimal("0.01"))
+
+    gmv = (
+        db.query(func.coalesce(func.sum(cast(OrderItem.line_total, Numeric)), 0))
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(OrderGroup, Order.group_id == OrderGroup.id)
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= start,
+            OrderGroup.created_at < end,
+        )
+        .scalar()
+    )
+    gmv_total = Decimal(gmv).quantize(Decimal("0.01"))
+
+    return {
+        "gmv": gmv_total,
+        "total_transacted": total_transacted,
+        "orders": orders,
+        "revenue": _commission(gmv_total),
+    }
+
+
+def _commission(gmv: Decimal) -> Optional[str]:
+    """Platform revenue: commission on goods value.
+
+    Returns None when no rate is configured. The dashboard used to show a
+    hardcoded 10% here, which meant the number looked measured but was invented --
+    and it appeared beside a "GMV" figure that was really the basket total, so
+    the two told different stories.
+    """
+    rate = settings.PLATFORM_COMMISSION_RATE
+    if rate is None:
+        return None
+    return str((gmv * Decimal(rate)).quantize(Decimal("0.01")))
+
+
+def _period_figures(db: Session, start: datetime, end: datetime) -> PeriodFigures:
+    money = _paid_money_between(db, start, end)
+    revenue = money["revenue"]
+    aov = (
+        (money["total_transacted"] / money["orders"]).quantize(Decimal("0.01"))
+        if money["orders"]
+        else Decimal("0.00")
+    )
 
     new_users = (
         db.query(func.count(User.id)).filter(User.created_at >= start, User.created_at < end).scalar() or 0
@@ -121,8 +172,11 @@ def _period_figures(db: Session, start: datetime, end: datetime) -> PeriodFigure
     )
 
     return PeriodFigures(
-        revenue=str(revenue),
-        orders=orders,
+        gmv=str(money["gmv"]),
+        total_transacted=str(money["total_transacted"]),
+        revenue=revenue,
+        commission_rate_configured=settings.PLATFORM_COMMISSION_RATE is not None,
+        orders=money["orders"],
         average_order_value=str(aov),
         new_users=new_users,
         new_shops=new_shops,
@@ -156,14 +210,23 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     total_products = db.query(func.count(Product.id)).scalar() or 0
 
     paid_groups = db.query(OrderGroup).filter(OrderGroup.status == OrderGroupStatus.paid)
+    # Paid only, and always counted as **order groups** (baskets). A group can
+    # hold one order per shop, so a shop order count and a basket count are
+    # different numbers and the label has to say which one it is. The orders list
+    # at /admin/orders counts groups on the same basis, so the two agree.
     total_orders = paid_groups.count()
     orders_7d = paid_groups.filter(OrderGroup.created_at >= seven_days_ago).count()
 
-    revenue_total = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
-    revenue_7d = sum(
-        (Decimal(g.total) for g in paid_groups.filter(OrderGroup.created_at >= seven_days_ago).all()),
-        Decimal("0"),
+    lifetime = _paid_money_between(
+        db, datetime(1970, 1, 1, tzinfo=timezone.utc), datetime.now(timezone.utc)
     )
+    last_7 = _paid_money_between(db, seven_days_ago, datetime.now(timezone.utc))
+
+    # Yesterday, as a complete calendar day in EAT rather than "the last 24
+    # hours", so it can be compared like-for-like against a day in the trend.
+    yesterday_end = datetime.now(EAT).replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = yesterday_end - timedelta(days=1)
+    yesterday = _paid_money_between(db, yesterday_start, yesterday_end)
 
     now = datetime.now(EAT)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -181,8 +244,16 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
         total_products=total_products,
         total_orders=total_orders,
         orders_7d=orders_7d,
-        revenue_total=str(revenue_total),
-        revenue_7d=str(revenue_7d),
+        gmv_total=str(lifetime["gmv"]),
+        total_transacted_total=str(lifetime["total_transacted"]),
+        gmv_7d=str(last_7["gmv"]),
+        total_transacted_7d=str(last_7["total_transacted"]),
+        revenue_total=lifetime["revenue"],
+        revenue_7d=last_7["revenue"],
+        commission_rate_configured=settings.PLATFORM_COMMISSION_RATE is not None,
+        orders_yesterday=yesterday["orders"],
+        gmv_yesterday=str(yesterday["gmv"]),
+        total_transacted_yesterday=str(yesterday["total_transacted"]),
         mtd=_period_to_date(db, month_start, previous_month_start, now),
         ytd=_period_to_date(db, year_start, previous_year_start, now),
     )
@@ -216,7 +287,10 @@ def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOver
     )
     sales = dashboard_metrics.get_sales_demand_metrics(db, since, until)
     return AdminOverviewPeriodMetrics(
+        gmv=figs.gmv,
+        total_transacted=figs.total_transacted,
         revenue=figs.revenue,
+        commission_rate_configured=figs.commission_rate_configured,
         orders=figs.orders,
         average_order_value=figs.average_order_value,
         new_users=figs.new_users,
@@ -248,9 +322,12 @@ def get_stats_overview(
     shops_pending = db.query(func.count(Shop.id)).filter(Shop.status == ShopStatus.pending).scalar() or 0
     total_products = db.query(func.count(Product.id)).scalar() or 0
 
-    paid_groups = db.query(OrderGroup).filter(OrderGroup.status == OrderGroupStatus.paid)
-    total_orders = paid_groups.count()
-    revenue_total = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
+    # Lifetime totals on the same basis as the period figures, so the header and
+    # the period panel cannot disagree about what "GMV" means.
+    lifetime = _paid_money_between(
+        db, datetime(1970, 1, 1, tzinfo=timezone.utc), datetime.now(timezone.utc)
+    )
+    total_orders = lifetime["orders"]
 
     return AdminOverviewRead(
         period=period or "days",
@@ -265,7 +342,10 @@ def get_stats_overview(
             shops_pending_verification=shops_pending,
             total_products=total_products,
             total_orders=total_orders,
-            revenue_total=str(revenue_total),
+            gmv_total=str(lifetime["gmv"]),
+            total_transacted_total=str(lifetime["total_transacted"]),
+            revenue_total=lifetime["revenue"],
+            commission_rate_configured=settings.PLATFORM_COMMISSION_RATE is not None,
         ),
         trend=_trend_points(db, 14),
     )
@@ -296,13 +376,20 @@ def _previous_bounds(since: datetime, until: datetime) -> tuple[datetime, dateti
 
 
 def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
+    """Daily paid figures, on the same three-way basis as the header.
+
+    GMV is aggregated from line items in its own query because it cannot be
+    derived from `OrderGroup.total` -- that figure includes delivery and tax.
+    Both series are returned so the chart can plot them as separate lines rather
+    than showing one bar relabelled twice.
+    """
     since = datetime.now(timezone.utc) - timedelta(days=days - 1)
     day_col = func.date_trunc("day", OrderGroup.created_at)
 
     rows = (
         db.query(
             day_col.label("day"),
-            func.sum(cast(OrderGroup.total, Numeric)).label("revenue"),
+            func.sum(cast(OrderGroup.total, Numeric)).label("transacted"),
             func.count(OrderGroup.id).label("orders"),
         )
         .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at >= since)
@@ -311,15 +398,38 @@ def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
     )
     by_day = {row.day.date(): row for row in rows}
 
+    gmv_day = func.date_trunc("day", OrderGroup.created_at)
+    gmv_rows = (
+        db.query(
+            gmv_day.label("day"),
+            func.sum(cast(OrderItem.line_total, Numeric)).label("gmv"),
+        )
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(OrderGroup, Order.group_id == OrderGroup.id)
+        .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at >= since)
+        .group_by(gmv_day)
+        .all()
+    )
+    gmv_by_day = {row.day.date(): row.gmv for row in gmv_rows}
+
     points: List[AdminTrendPoint] = []
     today = datetime.now(timezone.utc).date()
     for i in range(days - 1, -1, -1):
         day = today - timedelta(days=i)
         row = by_day.get(day)
+        transacted = float(row.transacted) if row and row.transacted else 0.0
+        gmv = float(gmv_by_day.get(day) or 0.0)
         points.append(
             AdminTrendPoint(
                 label=day.strftime("%d %b"),
-                revenue=float(row.revenue) if row and row.revenue else 0.0,
+                # Kept for existing consumers of this endpoint.
+                revenue=transacted,
+                gmv=gmv,
+                total_transacted=transacted,
+                revenue_earned=(
+                    _commission(Decimal(str(gmv))) if gmv else None
+                ),
+                commission_rate_configured=settings.PLATFORM_COMMISSION_RATE is not None,
                 orders=int(row.orders) if row else 0,
             )
         )

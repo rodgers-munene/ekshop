@@ -67,7 +67,27 @@ class PromotionRead(BaseModel):
 
 
 class PeriodFigures(BaseModel):
-    revenue: str
+    """Money and counts for a window.
+
+    Three different numbers that used to be conflated into one field called
+    `revenue`, which is why the dashboard showed the same value under two
+    different names:
+
+    * `gmv` -- Gross Merchandise Value. The value of the **goods only**, summed
+      from order line items. This is what the merchandise is worth.
+    * `total_transacted` -- everything the customer transacted: goods + delivery
+      + tax. This is money that moved through the platform. It is deliberately
+      *not* called revenue, because transacting money is not the same as keeping
+      it -- refunds and merchant payouts have not necessarily settled.
+    * `revenue` -- what Ekshop actually keeps, i.e. commission on goods. `None`
+      when no commission rate is configured, because nothing in the data model
+      records one and a fabricated figure is worse than an honest blank.
+    """
+
+    gmv: str
+    total_transacted: str
+    revenue: Optional[str]
+    commission_rate_configured: bool
     orders: int
     average_order_value: str
     new_users: int
@@ -83,6 +103,14 @@ class PeriodToDateMetrics(BaseModel):
 
 
 class AdminStatsRead(BaseModel):
+    """Lifetime and recent figures for the dashboard header.
+
+    `total_orders` and `orders_7d` count **paid order groups** (baskets), which
+    is the same basis as the orders list, so the two can be compared directly.
+    `gmv` is goods value, `total_transacted` is goods + delivery + tax, and
+    `revenue` is platform commission -- None until a rate is configured.
+    """
+
     total_users: int
     total_buyers: int
     total_sellers: int
@@ -92,15 +120,36 @@ class AdminStatsRead(BaseModel):
     total_products: int
     total_orders: int
     orders_7d: int
-    revenue_total: str
-    revenue_7d: str
+    gmv_total: str
+    gmv_7d: str
+    total_transacted_total: str
+    total_transacted_7d: str
+    revenue_total: Optional[str]
+    revenue_7d: Optional[str]
+    commission_rate_configured: bool
+    # Yesterday as a complete calendar day (EAT), so it lines up with the trend.
+    orders_yesterday: int
+    gmv_yesterday: str
+    total_transacted_yesterday: str
     mtd: PeriodToDateMetrics
     ytd: PeriodToDateMetrics
 
 
 class AdminTrendPoint(BaseModel):
+    """One day of paid activity.
+
+    `revenue` is retained as an alias of `total_transacted` so existing
+    consumers do not break, but new code should use the explicit names: it is
+    the same conflation that made GMV and revenue look identical on the
+    dashboard.
+    """
+
     label: str
     revenue: float
+    gmv: float
+    total_transacted: float
+    revenue_earned: Optional[float]
+    commission_rate_configured: bool
     orders: int
 
 
@@ -277,7 +326,10 @@ class PriorityAcquisitionRow(BaseModel):
 
 
 class AdminOverviewPeriodMetrics(BaseModel):
-    revenue: str
+    gmv: str
+    total_transacted: str
+    revenue: Optional[str]
+    commission_rate_configured: bool
     orders: int
     average_order_value: str
     new_users: int
@@ -296,7 +348,10 @@ class AdminOverviewTotals(BaseModel):
     shops_pending_verification: int
     total_products: int
     total_orders: int
-    revenue_total: str
+    gmv_total: str
+    total_transacted_total: str
+    revenue_total: Optional[str]
+    commission_rate_configured: bool
 
 
 class AdminOverviewRead(BaseModel):
