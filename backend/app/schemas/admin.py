@@ -92,6 +92,15 @@ class PeriodFigures(BaseModel):
     average_order_value: str
     new_users: int
     new_shops: int
+    # Money that actually arrived in the window, straight off the payments
+    # table rather than inferred from order rows.
+    cash_received: str
+    # Reported, not netted off, so "are we winning or losing" is answerable.
+    refunds: str
+    # Whether these figures came from payments (the honest basis) or had to fall
+    # back to order rows because no payment was recorded in the window.
+    basis: str
+    basis_note: Optional[str]
 
 
 class PeriodToDateMetrics(BaseModel):
@@ -105,10 +114,19 @@ class PeriodToDateMetrics(BaseModel):
 class AdminStatsRead(BaseModel):
     """Lifetime and recent figures for the dashboard header.
 
-    `total_orders` and `orders_7d` count **paid order groups** (baskets), which
-    is the same basis as the orders list, so the two can be compared directly.
+    Every money figure is on the same basis: **money that actually arrived**,
+    read off the `payments` table by `paid_at`. Nothing here counts orders that
+    were merely placed.
+
+    `total_orders` and `orders_7d` count **order groups** (baskets) behind a
+    successful payment, which is the same basis as the orders list, so a card
+    and the list it links to cannot disagree.
+
+    Three distinct money figures, deliberately not collapsed into one:
     `gmv` is goods value, `total_transacted` is goods + delivery + tax, and
     `revenue` is platform commission -- None until a rate is configured.
+    `cash_received` is actual payment movement, and `refunds` is reported
+    separately rather than netted off, so "are we winning" is answerable.
     """
 
     total_users: int
@@ -131,6 +149,10 @@ class AdminStatsRead(BaseModel):
     orders_yesterday: int
     gmv_yesterday: str
     total_transacted_yesterday: str
+    cash_received_yesterday: str
+    refunds_yesterday: str
+    cash_received_total: str
+    refunds_total: str
     mtd: PeriodToDateMetrics
     ytd: PeriodToDateMetrics
 
@@ -151,6 +173,42 @@ class AdminTrendPoint(BaseModel):
     revenue_earned: Optional[float]
     commission_rate_configured: bool
     orders: int
+
+
+class PayerActivity(BaseModel):
+    """One payment, and who made it.
+
+    The dashboard showed money as a bare aggregate with no way to answer "who
+    paid?" -- `payments` has recorded `user_id` and `provider_ref` all along,
+    they were simply never selected.
+    """
+    payment_id: str
+    order_group_id: str
+    user_id: str
+    first_name: str
+    last_name: str
+    email: str
+    provider: str
+    provider_ref: Optional[str]
+    channel: Optional[str]
+    amount: str
+    paid_at: datetime
+
+
+class PayerActivityRead(BaseModel):
+    """Payments in a window, newest first, plus the distinct payer count.
+
+    `payer_count` is deliberately distinct from the row count: one customer
+    paying twice is one paying customer, and conflating the two overstates how
+    many people actually transact.
+    """
+    period: str
+    start: datetime
+    end: datetime
+    total_cash_received: str
+    payment_count: int
+    payer_count: int
+    results: List[PayerActivity]
 
 
 class UserListResponse(BaseModel):
@@ -352,6 +410,8 @@ class AdminOverviewTotals(BaseModel):
     total_transacted_total: str
     revenue_total: Optional[str]
     commission_rate_configured: bool
+    cash_received_total: str
+    refunds_total: str
 
 
 class AdminOverviewRead(BaseModel):

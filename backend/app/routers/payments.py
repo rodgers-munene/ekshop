@@ -226,6 +226,11 @@ async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
         provider_ref=receipt,
         amount=str(amount),
         status="success",
+        # The instant the money actually landed. Without this the column stays
+        # NULL forever and "what did we take yesterday" cannot be answered --
+        # there is no trustworthy time to filter payments on but created_at,
+        # which is when the record was written, not when it was paid.
+        paid_at=datetime.now(timezone.utc),
         raw_response=data,
     )
     db.add(payment)
@@ -310,6 +315,7 @@ def _reconcile_mpesa_intent(db: Session, intent: PaymentIntent) -> PaymentStatus
                 provider_ref=placeholder_ref,
                 amount=intent.amount,
                 status=PaymentStatus.success,
+                paid_at=datetime.now(timezone.utc),
                 raw_response=result,
             )
             db.add(payment)
@@ -519,6 +525,7 @@ async def paystack_callback(request: Request, db: Session = Depends(get_db)):
         provider_ref=reference,
         amount=str(tx["amount"] / 100),
         status=PaymentStatus.success,
+        paid_at=datetime.now(timezone.utc),
         channel=tx.get("channel"),
         raw_response=data,
     )

@@ -8,6 +8,8 @@ from fastapi.responses import Response
 from sqlalchemy import Numeric, cast, func, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.payment import Payment, PaymentStatus
+
 from app.core.config import settings
 from app.dependencies.auth import require_admin
 from app.dependencies.database import get_db
@@ -36,6 +38,8 @@ from app.schemas.admin import (
     AdminProductRow,
     AdminStatsRead,
     AdminTrendPoint,
+    PayerActivity,
+    PayerActivityRead,
     CartAbandonmentMetrics,
     CustomerRecoveryRow,
     CustomerRetentionMetrics,
@@ -140,6 +144,121 @@ def custom_range_params():
         Query(None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."),
     )
 
+
+# ── Money basis ──────────────────────────────────────────────────────────────
+#
+# Everything below counts MONEY THAT ARRIVED, not orders that were typed.
+#
+# The dashboard used to filter on `OrderGroup.created_at`, which is when the
+# order was placed. For M-Pesa that is simply a different question: an STK push
+# can sit pending, be retried, or resolve through a delayed callback hours later.
+# So "what happened yesterday" was answered with orders *placed* yesterday,
+# which excluded money that landed yesterday from an order placed on Tuesday,
+# and included orders placed yesterday that have not been paid yet. The
+# `payments` table has been recording `paid_at`, `user_id` and `provider_ref`
+# the whole time; nothing read it.
+#
+# `paid_at` was itself never assigned by any code path until now, so it is
+# backfilled from `created_at` by migration c9d0e1f2a3b4. The coalesce keeps
+# this correct for rows written before that migration and for any provider that
+# succeeds without a timestamp.
+
+
+def money_instant():
+    """When a payment's money actually landed."""
+    return func.coalesce(Payment.paid_at, Payment.created_at)
+
+
+def _successful_payments(db: Session, start: datetime, end: datetime):
+    return db.query(Payment).filter(
+        Payment.status == PaymentStatus.success,
+        money_instant() >= start,
+        money_instant() < end,
+    )
+
+
+def _refunds_between(db: Session, start: datetime, end: datetime) -> Decimal:
+    refunded = (
+        db.query(func.coalesce(func.sum(cast(Payment.amount, Numeric)), 0))
+        .filter(
+            Payment.status == PaymentStatus.refunded,
+            money_instant() >= start,
+            money_instant() < end,
+        )
+        .scalar()
+    )
+    return Decimal(refunded or 0).quantize(Decimal("0.01"))
+
+
+def _paid_money_between(db: Session, start: datetime, end: datetime) -> dict:
+    """The money figures for a window, on the basis of payments received.
+
+    Deliberately two different aggregations, because they answer different
+    questions and conflating them is what made the old figures untrustworthy:
+
+    - `cash_received` sums payment rows, so it is real cash movement.
+    - `gmv` and `total_transacted` sum *distinct order groups* that have a
+      successful payment in the window. A retried STK push can leave more than
+      one successful row against the same order (each provider_ref is unique,
+      but the refs differ), and summing per row would inflate the basket figures
+      and make GMV exceed what was actually taken.
+
+    Refunds are reported rather than silently netted off, because a refund is
+    the answer to "are we winning or losing".
+    """
+    cash_received = (
+        db.query(func.coalesce(func.sum(cast(Payment.amount, Numeric)), 0))
+        .select_from(Payment)
+        .filter(
+            Payment.status == PaymentStatus.success,
+            money_instant() >= start,
+            money_instant() < end,
+        )
+        .scalar()
+    )
+    cash_total = Decimal(cash_received or 0).quantize(Decimal("0.01"))
+
+    # Distinct order groups behind those payments.
+    paid_groups = (
+        db.query(Payment.order_group_id.label("order_group_id"))
+        .filter(
+            Payment.status == PaymentStatus.success,
+            money_instant() >= start,
+            money_instant() < end,
+        )
+        .distinct()
+        .subquery()
+    )
+
+    transacted, orders = (
+        db.query(
+            func.coalesce(func.sum(cast(OrderGroup.total, Numeric)), 0),
+            func.count(OrderGroup.id),
+        )
+        .join(paid_groups, paid_groups.c.order_group_id == OrderGroup.id)
+        .one()
+    )
+    total_transacted = Decimal(transacted or 0).quantize(Decimal("0.01"))
+
+    gmv = (
+        db.query(func.coalesce(func.sum(cast(OrderItem.line_total, Numeric)), 0))
+        .select_from(OrderItem)
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(paid_groups, paid_groups.c.order_group_id == Order.group_id)
+        .scalar()
+    )
+    gmv_total = Decimal(gmv or 0).quantize(Decimal("0.01"))
+
+    return {
+        "gmv": gmv_total,
+        "total_transacted": total_transacted,
+        "orders": orders,
+        "cash_received": cash_total,
+        "refunds": _refunds_between(db, start, end),
+        "revenue": _commission(gmv_total),
+    }
+
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -149,49 +268,6 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # order placed at 01:00 EAT on the 1st belongs to the new month. Kenya is a
 # fixed UTC+3 with no DST, so a fixed offset is exact (see services/mpesa.py).
 EAT = timezone(timedelta(hours=3), "EAT")
-
-
-def _paid_money_between(db: Session, start: datetime, end: datetime) -> dict:
-    """The three money figures for a window, over **paid** order groups only.
-
-    GMV is summed from `OrderItem.line_total` rather than derived from
-    `OrderGroup.subtotal`, because subtotal excludes delivery but the arithmetic
-    still has to be walked back from groups to their line items -- and walking it
-    is the only way to be sure goods-only is genuinely goods-only.
-    """
-    transacted, orders = (
-        db.query(
-            func.coalesce(func.sum(cast(OrderGroup.total, Numeric)), 0),
-            func.count(OrderGroup.id),
-        )
-        .filter(
-            OrderGroup.status == OrderGroupStatus.paid,
-            OrderGroup.created_at >= start,
-            OrderGroup.created_at < end,
-        )
-        .one()
-    )
-    total_transacted = Decimal(transacted).quantize(Decimal("0.01"))
-
-    gmv = (
-        db.query(func.coalesce(func.sum(cast(OrderItem.line_total, Numeric)), 0))
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(OrderGroup, Order.group_id == OrderGroup.id)
-        .filter(
-            OrderGroup.status == OrderGroupStatus.paid,
-            OrderGroup.created_at >= start,
-            OrderGroup.created_at < end,
-        )
-        .scalar()
-    )
-    gmv_total = Decimal(gmv).quantize(Decimal("0.01"))
-
-    return {
-        "gmv": gmv_total,
-        "total_transacted": total_transacted,
-        "orders": orders,
-        "revenue": _commission(gmv_total),
-    }
 
 
 def _commission(gmv: Decimal) -> Optional[str]:
@@ -233,6 +309,10 @@ def _period_figures(db: Session, start: datetime, end: datetime) -> PeriodFigure
         average_order_value=str(aov),
         new_users=new_users,
         new_shops=new_shops,
+        cash_received=str(money["cash_received"]),
+        refunds=str(money["refunds"]),
+        basis="payments",
+        basis_note=None,
     )
 
 
@@ -262,13 +342,37 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
 
     total_products = db.query(func.count(Product.id)).scalar() or 0
 
-    paid_groups = db.query(OrderGroup).filter(OrderGroup.status == OrderGroupStatus.paid)
-    # Paid only, and always counted as **order groups** (baskets). A group can
-    # hold one order per shop, so a shop order count and a basket count are
-    # different numbers and the label has to say which one it is. The orders list
-    # at /admin/orders counts groups on the same basis, so the two agree.
-    total_orders = paid_groups.count()
-    orders_7d = paid_groups.filter(OrderGroup.created_at >= seven_days_ago).count()
+    # Counted as **order groups** (baskets) behind a successful payment, on the
+    # same basis as every money figure below and as the orders list, so a basket
+    # count, a money figure and a list length cannot disagree. A group holds one
+    # order per shop, so a shop order count is a different number.
+    #
+    # This used to filter on `OrderGroup.status == paid` with `created_at`, which
+    # counts orders *placed* recently even if they were never paid.
+    paid_group_ids = (
+        db.query(Payment.order_group_id.label("gid"))
+        .filter(
+            Payment.status == PaymentStatus.success,
+            money_instant() <= datetime.now(timezone.utc),
+        )
+        .distinct()
+        .subquery()
+    )
+    total_orders = (
+        db.query(func.count(OrderGroup.id))
+        .join(paid_group_ids, paid_group_ids.c.gid == OrderGroup.id)
+        .scalar()
+        or 0
+    )
+    orders_7d = (
+        db.query(func.count(OrderGroup.id))
+        .join(paid_group_ids, paid_group_ids.c.gid == OrderGroup.id)
+        .filter(
+            func.timezone("Africa/Nairobi", money_instant()) >= seven_days_ago
+        )
+        .scalar()
+        or 0
+    )
 
     lifetime = _paid_money_between(
         db, datetime(1970, 1, 1, tzinfo=timezone.utc), datetime.now(timezone.utc)
@@ -307,6 +411,10 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(require_admin)):
         orders_yesterday=yesterday["orders"],
         gmv_yesterday=str(yesterday["gmv"]),
         total_transacted_yesterday=str(yesterday["total_transacted"]),
+        cash_received_yesterday=str(yesterday["cash_received"]),
+        refunds_yesterday=str(yesterday["refunds"]),
+        cash_received_total=str(lifetime["cash_received"]),
+        refunds_total=str(lifetime["refunds"]),
         mtd=_period_to_date(db, month_start, previous_month_start, now),
         ytd=_period_to_date(db, year_start, previous_year_start, now),
     )
@@ -405,6 +513,8 @@ def get_stats_overview(
             total_transacted_total=str(lifetime["total_transacted"]),
             revenue_total=lifetime["revenue"],
             commission_rate_configured=settings.PLATFORM_COMMISSION_RATE is not None,
+            cash_received_total=str(lifetime["cash_received"]),
+            refunds_total=str(lifetime["refunds"]),
         ),
         trend=_trend_points(db, 14),
     )
@@ -435,7 +545,13 @@ def _previous_bounds(since: datetime, until: datetime) -> tuple[datetime, dateti
 
 
 def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
-    """Daily paid figures, on the same three-way basis as the header.
+    """Daily paid figures, bucketed by the day the money arrived.
+
+    Bucketing on `OrderGroup.created_at` put a day on the chart for orders that
+    were placed that day but never paid, and left out orders that were placed
+    earlier and paid that day. So the line could rise on a day with no takings.
+    These points come off the payments table, on the same basis as the header
+    cards, and each order group is counted once.
 
     GMV is aggregated from line items in its own query because it cannot be
     derived from `OrderGroup.total` -- that figure includes delivery and tax.
@@ -443,30 +559,51 @@ def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
     than showing one bar relabelled twice.
     """
     since = datetime.now(timezone.utc) - timedelta(days=days - 1)
-    day_col = func.date_trunc("day", OrderGroup.created_at)
+    instant = money_instant()
+
+    # Bucket explicitly in EAT. `date_trunc` on a timestamptz truncates in the
+    # *session* timezone, so on a UTC-configured server every day would be
+    # shifted three hours and the 00:00-03:00 band would land on the wrong day.
+    day_col = func.date_trunc("day", func.timezone("Africa/Nairobi", instant))
+
+    # Distinct (payment day, order group) pairs. Deduplicated per pair so a
+    # retried push that left two successful rows against one order still counts
+    # that basket once.
+    paid_pairs = (
+        db.query(
+            day_col.label("day"),
+            Payment.order_group_id.label("gid"),
+        )
+        .filter(
+            Payment.status == PaymentStatus.success,
+            instant >= since,
+        )
+        .distinct()
+        .subquery()
+    )
 
     rows = (
         db.query(
-            day_col.label("day"),
-            func.sum(cast(OrderGroup.total, Numeric)).label("transacted"),
+            paid_pairs.c.day.label("day"),
             func.count(OrderGroup.id).label("orders"),
+            func.sum(cast(OrderGroup.total, Numeric)).label("transacted"),
         )
-        .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at >= since)
-        .group_by(day_col)
+        .select_from(paid_pairs)
+        .join(OrderGroup, OrderGroup.id == paid_pairs.c.gid)
+        .group_by(paid_pairs.c.day)
         .all()
     )
     by_day = {row.day.date(): row for row in rows}
 
-    gmv_day = func.date_trunc("day", OrderGroup.created_at)
     gmv_rows = (
         db.query(
-            gmv_day.label("day"),
+            paid_pairs.c.day.label("day"),
             func.sum(cast(OrderItem.line_total, Numeric)).label("gmv"),
         )
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(OrderGroup, Order.group_id == OrderGroup.id)
-        .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at >= since)
-        .group_by(gmv_day)
+        .select_from(paid_pairs)
+        .join(Order, Order.group_id == paid_pairs.c.gid)
+        .join(OrderItem, OrderItem.order_id == Order.id)
+        .group_by(paid_pairs.c.day)
         .all()
     )
     gmv_by_day = {row.day.date(): row.gmv for row in gmv_rows}
@@ -493,6 +630,93 @@ def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
             )
         )
     return points
+
+
+@router.get("/stats/payers", response_model=PayerActivityRead)
+def get_payer_activity(
+    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
+    days: int = Query(7, ge=1, le=365),
+    date_from: Optional[date] = Query(
+        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
+    ),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Who paid, when, how much, and via which provider reference.
+
+    Answers "what happened yesterday" at the level of an individual transaction
+    rather than a total, which no other endpoint could do.
+    """
+    since, until, label = _resolve_window(period, days, date_from, date_to)
+
+    total = (
+        db.query(func.coalesce(func.sum(cast(Payment.amount, Numeric)), 0))
+        .filter(
+            Payment.status == PaymentStatus.success,
+            money_instant() >= since,
+            money_instant() < until,
+        )
+        .scalar()
+    )
+    payment_count, payer_count = (
+        db.query(func.count(Payment.id), func.count(func.distinct(Payment.user_id)))
+        .filter(
+            Payment.status == PaymentStatus.success,
+            money_instant() >= since,
+            money_instant() < until,
+        )
+        .one()
+    )
+
+    rows = (
+        db.query(
+            Payment,
+            User.first_name,
+            User.last_name,
+            User.email,
+        )
+        .join(User, User.id == Payment.user_id)
+        .filter(
+            Payment.status == PaymentStatus.success,
+            money_instant() >= since,
+            money_instant() < until,
+        )
+        .order_by(money_instant().desc())
+        .limit(limit)
+        .all()
+    )
+
+    return PayerActivityRead(
+        period=label,
+        start=since,
+        end=until,
+        total_cash_received=str(Decimal(total or 0).quantize(Decimal("0.01"))),
+        payment_count=int(payment_count or 0),
+        payer_count=int(payer_count or 0),
+        results=[
+            PayerActivity(
+                payment_id=str(payment.id),
+                order_group_id=str(payment.order_group_id),
+                user_id=str(payment.user_id),
+                first_name=first_name or "",
+                last_name=last_name or "",
+                email=email or "",
+                provider=payment.provider,
+                provider_ref=payment.provider_ref,
+                channel=payment.channel,
+                amount=str(Decimal(payment.amount or "0").quantize(Decimal("0.01"))),
+                # Resolved in Python because the row object is already loaded;
+                # `money_instant()` is a SQL expression and would serialise the
+                # expression text into the response.
+                paid_at=payment.paid_at or payment.created_at,
+            )
+            for payment, first_name, last_name, email in rows
+        ],
+    )
 
 
 @router.get("/metrics/merchants", response_model=MerchantActivityMetrics)
