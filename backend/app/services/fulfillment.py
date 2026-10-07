@@ -488,7 +488,7 @@ def create_fulfillment(
     mode=self requires a rider name and phone (PRD 5.3) -- a self-delivery
     with nobody named cannot produce a trackable timeline.
 
-    Subsidies follow spec §10 / Appendix B.1: the merchant and Ekshop may each
+    Subsidies follow spec10 / Appendix B.1: the merchant and Ekshop may each
     contribute toward the delivery, and the customer pays the remainder. A
     subsidy changes *who pays*, never the total -- `delivery_price_gross` stays
     the full computed price and contribution is always computed on the gross,

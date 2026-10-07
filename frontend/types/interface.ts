@@ -206,6 +206,14 @@ export interface DeliveryAgent {
   created_at: string;
 }
 
+/** One stored identity document. `url` is a short-lived presigned link
+ *  generated per request and is never what gets stored. */
+export interface KYCDocument {
+  type: string;
+  key: string | null;
+  url: string | null;
+}
+
 export interface KYCAgent {
   id: string;
   name: string;
@@ -213,14 +221,53 @@ export interface KYCAgent {
   phone: string;
   kyc_status: string;
   vehicle_type?: string;
+  /** Identity and equipment are reviewed separately. */
   equipment_verified: boolean;
   wallet_balance: string;
+  kyc_review_notes?: string | null;
+  kyc_submitted_at?: string | null;
+  kyc_reviewed_at?: string | null;
+  equipment_review_notes?: string | null;
+  equipment_reviewed_at?: string | null;
 }
 
 export interface KYCAgentList {
   total: number;
   pending: number;
   results: KYCAgent[];
+}
+
+/** The rider's own KYC record, as returned by GET /delivery/kyc/me. */
+export interface RiderKYC {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  vehicle_type?: string | null;
+  national_id_number?: string | null;
+  license_number?: string | null;
+  kyc_status: "pending_review" | "approved" | "rejected";
+  equipment_verified: boolean;
+  kyc_documents?: KYCDocument[] | null;
+  /** Presigned, short-lived. Absent when storage is not configured. */
+  equipment_photo_url?: string | null;
+  kyc_review_notes?: string | null;
+  kyc_submitted_at?: string | null;
+  kyc_reviewed_at?: string | null;
+equipment_review_notes?: string | null;
+  equipment_reviewed_at?: string | null;
+  /** Used to explain why a rider cannot go online yet. */
+  current_lat?: number | null;
+  current_lng?: number | null;
+  last_location_update?: string | null;
+}
+
+/** Response of POST /api/agent/kyc/upload -- a key to submit, not a URL. */
+export interface KYCUploadResult {
+  key: string;
+  type: string;
+  filename?: string | null;
+  content_type: string;
 }
 
 export interface LedgerEntry {
@@ -512,12 +559,12 @@ export interface PricingResponse {
   order_id: string;
   pricing_version: string;
   /**
-   * True when the distance was not a real road distance. §3.2 forbids pricing on
+   * True when the distance was not a real road distance.3.2 forbids pricing on
    * straight-line, so a quote with this set must not be presented to a customer
    * as firm.
    */
   distance_is_approximate: boolean;
-  /** Over the weight where §7 defines no formula, so no price exists. */
+  /** Over the weight where7 defines no formula, so no price exists. */
   requires_manual_quote: boolean;
   distance: PricingDistance;
   customer: PricingCustomer;

@@ -67,7 +67,7 @@ def _own_order(db: Session, order_id: uuid.UUID, user: User) -> Order:
 def _to_response(
     order: Order, result, row: PricingCalculation
 ) -> PricingResponse:
-    """Shape the engine's result into the §16 response."""
+    """Shape the engine's result into the16 response."""
     return PricingResponse(
         order_id=order.id,
         pricing_version=row.pricing_version,
@@ -119,7 +119,7 @@ def quote(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ) -> PricingResponse:
-    """Price one delivery and record the calculation (§16, §17).
+    """Price one delivery and record the calculation (§16,17).
 
     Distances are supplied by the caller because they must come from the
     road-distance provider; this endpoint deliberately does not compute them, so
@@ -151,7 +151,7 @@ def quote(
         raise HTTPException(status_code=422, detail=str(exc))
 
     if result.requires_manual_quote:
-        # §7 gives no formula above 20 kg. This is not an error, but the caller
+        #7 gives no formula above 20 kg. This is not an error, but the caller
         # must not present the zero price as a quote.
         logger.info("Order %s needs a manual quote: %s", payload.order_id, result.reason)
 
@@ -168,7 +168,7 @@ def list_calculations(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ) -> list[PricingCalculationRead]:
-    """The §17 audit trail for one order, newest first.
+    """The17 audit trail for one order, newest first.
 
     Read-only by construction: there is no update or delete endpoint, and the
     table has an append-only trigger behind it as well.
@@ -257,7 +257,7 @@ def lock_price(
     return _to_response(order, result, row)
 
 
-# --- §15 admin parameters --------------------------------------------------------
+# ---15 admin parameters --------------------------------------------------------
 
 
 @router.get(

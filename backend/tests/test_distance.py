@@ -1,4 +1,4 @@
-"""Road distance must be road distance (spec §3.2).
+"""Road distance must be road distance (spec3.2).
 
 The pricing code used to call the Haversine great-circle formula, which
 undercharges by 20-40% in built-up areas. These tests exist to make that

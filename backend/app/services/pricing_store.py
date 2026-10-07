@@ -41,7 +41,7 @@ from app.services.pricing import (
 
 logger = logging.getLogger(__name__)
 
-# Bumped when the schedule's *meaning* changes, not when a rate is edited. §17
+# Bumped when the schedule's *meaning* changes, not when a rate is edited.17
 # expects a label like DELIVERY_V1_2026_10.
 DEFAULT_PRICING_VERSION = "DELIVERY_V1_2026_10"
 
@@ -283,7 +283,7 @@ def record_calculation(
     """Persist one calculation (§17).
 
     Every parameter value that affected the outcome is copied onto the row, not
-    referenced. That is what makes §17's promise possible: a schedule change in
+    referenced. That is what makes17's promise possible: a schedule change in
     November cannot alter what the arithmetic was in October.
     """
     config = config or PricingConfig()
@@ -356,7 +356,7 @@ def quote_order(
 ) -> tuple[PricingResult, PricingCalculation]:
     """Price an order, persist the calculation, and return both.
 
-    §14 price lock: when the order's price is already locked the stored figure is
+   14 price lock: when the order's price is already locked the stored figure is
     returned rather than recalculated, so a slow assignment or a moving rider can
     never change what the customer agreed to pay.
     """

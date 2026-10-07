@@ -31,7 +31,7 @@ class OrderStatus(str, enum.Enum):
 
 
 class ServiceLevel(str, enum.Enum):
-    """Delivery service level (spec §9).
+    """Delivery service level (spec9).
 
     STANDARD uses normal pricing, PRIORITY is higher-priced with restricted
     batching and high dispatch priority, EXPRESS is highest-priced with
@@ -203,11 +203,11 @@ class Order(Base):
     total = Column(String(20), nullable=False)
     notes = Column(Text)
 
-    # Delivery pricing inputs (technical specification §3.1, §7, §9).
+    # Delivery pricing inputs (technical specification3.1,7,9).
     # `package_weight_kg` drives the weight multiplier and `service_level` the
     # service multiplier. Both are snapshotted here rather than read from the
     # product at pricing time, so editing a product later cannot rewrite the
-    # economics of an order that has already been quoted -- §17 requires
+    # economics of an order that has already been quoted --17 requires
     # historical calculations to be retained exactly as they were made.
     package_weight_kg = Column(Numeric(8, 3))
     service_level = Column(
@@ -216,7 +216,7 @@ class Order(Base):
         nullable=False,
         server_default="standard",
     )
-    # §14: once checkout is confirmed the customer-facing price is locked. Stored
+    #14: once checkout is confirmed the customer-facing price is locked. Stored
     # rather than recomputed so it cannot drift if the schedule changes.
     delivery_price_locked = Column(Boolean, nullable=False, server_default="0")
 

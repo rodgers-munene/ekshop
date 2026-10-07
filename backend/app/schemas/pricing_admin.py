@@ -14,7 +14,7 @@ class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# --- §16 the required pricing response ------------------------------------------
+# ---16 the required pricing response ------------------------------------------
 
 
 class PricingDistance(BaseModel):
@@ -68,7 +68,7 @@ class PricingRecommendation(BaseModel):
 
 
 class PricingResponse(BaseModel):
-    """The §16 response shape."""
+    """The16 response shape."""
 
     order_id: UUID
     pricing_version: str
@@ -128,7 +128,7 @@ class PricingCalculationRead(ORMModel):
     created_at: datetime
 
 
-# --- §15 admin parameters -------------------------------------------------------
+# ---15 admin parameters -------------------------------------------------------
 
 
 class PricingParameterRead(ORMModel):

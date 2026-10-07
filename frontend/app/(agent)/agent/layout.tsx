@@ -40,6 +40,7 @@ export default async function AgentLayout({ children }: { children: React.ReactN
           <NavItem href="/agent/deliveries" icon="deliveries" label="Deliveries" />
           <NavItem href="/agent/route" icon="route" label="Route" />
           <NavItem href="/agent/earnings" icon="earnings" label="Earnings" />
+          <NavItem href="/agent/kyc" icon="kyc" label="Details" />
         </div>
       </nav>
     </div>
@@ -54,6 +55,8 @@ function NavItem({ href, icon, label }: { href: string; icon: string; label: str
     deliveries: "M4 5h16v13H4zM4 9h16M8 5v4M16 5v4",
     route: "M12 2a10 10 0 100 20 10 10 0 000-20zM12 8v4l3 3",
     earnings: "M12 2v20M17 6H9.5a2.5 2.5 0 000 5h5a2.5 2.5 0 010 5H7",
+    // An ID card, for rider onboarding.
+    kyc: "M2 5h20v14H2zM5 9h4M5 12h6M15 10a2 2 0 100 4 2 2 0 000-4zM13 16h5",
   };
 
   return (

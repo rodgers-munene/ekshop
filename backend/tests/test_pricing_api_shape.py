@@ -1,4 +1,4 @@
-"""The §16 pricing response must match the specified shape.
+"""The16 pricing response must match the specified shape.
 
 The specification gives a literal example response. If our field names drift from
 it, a client built against the document breaks silently -- JSON does not error on
@@ -77,24 +77,24 @@ def test_every_documented_field_is_present():
 
 
 def test_fields_the_spec_text_requires_are_present():
-    """§16's literal example is abbreviated. These are named in §16/§17 and §14
+    """§16's literal example is abbreviated. These are named in16/§17 and14
     and are needed for the response to be honest about how the price was reached.
     """
     ours = flatten(_schema)
     for field in (
-        "pricing_version",              # §17
-        "distance_is_approximate",      # §3.2
-        "requires_manual_quote",        # §7
+        "pricing_version",              #17
+        "distance_is_approximate",      #3.2
+        "requires_manual_quote",        #7
         "calculated_at",
-        "customer.weight_multiplier",   # §7
-        "customer.surge_multiplier",    # §8
-        "customer.service_multiplier",  # §9
+        "customer.weight_multiplier",   #7
+        "customer.surge_multiplier",    #8
+        "customer.service_multiplier",  #9
         "customer.delivery_price",      # gross, distinct from amount_to_pay
-        "rider.chargeable_wait_minutes",  # §6
+        "rider.chargeable_wait_minutes",  #6
         "profitability.payment_cost",
         "profitability.expected_exception_cost",
         "profitability.contribution_pct",
-        "profitability.minimum_economic_price",  # §12
+        "profitability.minimum_economic_price",  #12
     ):
         assert field in ours, f"missing {field}"
 

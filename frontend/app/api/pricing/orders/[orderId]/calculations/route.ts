@@ -2,7 +2,7 @@ import { proxy } from "@/lib/bff";
 import type { NextResponse } from "next/server";
 
 /**
- * The §17 audit trail for one order: every calculation made, newest first.
+ * The17 audit trail for one order: every calculation made, newest first.
  *
  * Read-only by construction -- there is no update or delete route, and the table
  * has an append-only trigger behind it as well.

@@ -250,7 +250,7 @@ def get_provider(name: Optional[str] = None) -> DistanceProvider:
     if chosen in ("straight_line", "haversine", "geodesic"):
         logger.warning(
             "DISTANCE_PROVIDER is '%s'. Straight-line distance is not valid for "
-            "pricing (spec §3.2) and will undercharge by roughly 20-40%%. Use it "
+            "pricing (spec3.2) and will undercharge by roughly 20-40%%. Use it "
             "only for radius scans and fraud detection.",
             chosen,
         )
@@ -312,7 +312,7 @@ def get_road_distance(
 def require_firm_distance(result: RoadDistance) -> RoadDistance:
     """Guard for the pricing path: refuse an approximate distance.
 
-    §3.2 forbids pricing on straight-line distance. Rather than trusting every
+   3.2 forbids pricing on straight-line distance. Rather than trusting every
     call site to remember, the pricing engine calls this and gets an explicit
     failure instead of a quietly wrong price.
     """

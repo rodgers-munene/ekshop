@@ -28,7 +28,7 @@ def price(km, **kwargs):
     return calculate(PricingInputs(**inputs))
 
 
-# --- §5 customer price ---------------------------------------------------------
+# ---5 customer price ---------------------------------------------------------
 
 @pytest.mark.parametrize(
     "km,expected",
@@ -52,7 +52,7 @@ def test_minimum_fare_floors_the_short_case():
     assert result.customer_delivery_price == D("120.00")
 
 
-# --- §6 rider payout -----------------------------------------------------------
+# ---6 rider payout -----------------------------------------------------------
 
 def test_spec_worked_example_pays_175():
     """§6: rider 2 km out, 5 km delivery, 10 min wait -> KES 175."""
@@ -109,7 +109,7 @@ def test_specification_as_written_loses_money_at_short_range(km):
     assert price(km, rider_to_merchant_km=D("2")).status == PricingStatus.loss_making
 
 
-# --- §12 profitability --------------------------------------------------------
+# ---12 profitability --------------------------------------------------------
 
 def test_specified_parameters_only_reach_target_from_about_10km():
     assert price(5, rider_to_merchant_km=D("2")).status == PricingStatus.positive_low_margin
@@ -137,7 +137,7 @@ def test_target_contribution_must_be_a_rate():
         )
 
 
-# --- §7 weight -----------------------------------------------------------------
+# ---7 weight -----------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "kg,multiplier",
@@ -159,7 +159,7 @@ def test_over_20kg_requires_a_manual_quote():
     assert result.recommended_action == RecommendedAction.manual_quote
 
 
-# --- §8 surge ------------------------------------------------------------------
+# ---8 surge ------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "ratio,multiplier",
@@ -201,7 +201,7 @@ def test_express_price():
     assert price(10, service_level=ServiceLevel.express).customer_delivery_price == D("429.00")
 
 
-# --- §10 / B.1 subsidies -------------------------------------------------------
+# ---10 / B.1 subsidies -------------------------------------------------------
 
 def test_subsidy_changes_who_pays_not_the_total():
     result = price(5, merchant_subsidy=D("50"))
@@ -233,7 +233,7 @@ def test_free_delivery_threshold():
     assert below.customer_payment == D("205.00")
 
 
-# --- §11 the delivery/basket ratio ladder --------------------------------------
+# ---11 the delivery/basket ratio ladder --------------------------------------
 
 @pytest.mark.parametrize(
     "basket,action",
@@ -252,7 +252,7 @@ def test_ratio_value():
     assert price(5, basket_value=D("1000")).delivery_basket_ratio == D("0.2050")
 
 
-# --- §12 the system never auto-rejects ------------------------------------------
+# ---12 the system never auto-rejects ------------------------------------------
 
 def test_absurd_order_returns_a_recommendation_not_a_rejection():
     result = calculate(

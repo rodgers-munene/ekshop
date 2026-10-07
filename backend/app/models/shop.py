@@ -44,7 +44,7 @@ class Shop(Base):
     prep_time_minutes = Column(Integer, default=30, nullable=False)
     max_prep_time_minutes = Column(Integer, default=60, nullable=False)
 
-    # --- Delivery subsidy settings (spec §10.1, Appendix B.1) ----------------
+    # --- Delivery subsidy settings (spec10.1, Appendix B.1) ----------------
     # A merchant subsidy is a contribution *towards fulfilment*, never a product
     # discount: it must not reduce the order subtotal or appear as a sale. It
     # changes who bears the delivery cost, not the total delivery revenue.

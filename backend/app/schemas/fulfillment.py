@@ -130,7 +130,7 @@ class FulfillmentRead(ORMModel):
     # Derived from the current job, never stored. Present in the response so a
     # client can render state without reimplementing the state machine.
     status: FulfillmentStatus
-    # Subsidy split (spec §10, B.1). `delivery_price_gross` is the full computed
+    # Subsidy split (spec10, B.1). `delivery_price_gross` is the full computed
     # price; `customer_payment` is what the buyer actually hands over. They are
     # different numbers and conflating them is how a subsidy ends up looking
     # like lost revenue.
@@ -168,7 +168,7 @@ class FulfillmentCreate(BaseModel):
 
     order_id: UUID
     mode: FulfillmentMode = FulfillmentMode.ekshop
-    # Subsidies, per spec §10.1. Both default to zero, so the default behaviour
+    # Subsidies, per spec10.1. Both default to zero, so the default behaviour
     # is unchanged: the customer bears the whole delivery price.
     merchant_subsidy: Decimal = Field(default=Decimal("0"), ge=0)
     ekshop_subsidy: Decimal = Field(default=Decimal("0"), ge=0)

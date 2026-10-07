@@ -11,31 +11,31 @@ and it is required regardless of how the open pricing questions are answered.
 Adds
 -----
 orders
-  package_weight_kg        §3.1, §7  -- drives the weight multiplier
-  service_level            §3.1, §9  -- STANDARD / PRIORITY / EXPRESS
-  delivery_price_locked    §14       -- price must not drift after checkout
+  package_weight_kg       3.1,7  -- drives the weight multiplier
+  service_level           3.1,9  -- STANDARD / PRIORITY / EXPRESS
+  delivery_price_locked   14       -- price must not drift after checkout
 
 shops
   delivery_subsidy_enabled, delivery_subsidy_amount,
   free_delivery_threshold, maximum_delivery_subsidy,
-  weekly_subsidy_budget    §10.1, §10.2, B.1
+  weekly_subsidy_budget   10.1,10.2, B.1
 
 delivery_jobs
-  merchant_to_customer_km  §4       -- the leg the customer is priced on
-  rider_to_merchant_km     §4       -- the rider's trip to collect
-  distance_source          §3.2     -- how the figures were obtained
-  distance_is_approximate  §3.2     -- true if straight-line was used
-  estimated_duration_seconds         -- feeds the §14 SLA and §13 batching test
+  merchant_to_customer_km 4       -- the leg the customer is priced on
+  rider_to_merchant_km    4       -- the rider's trip to collect
+  distance_source         3.2     -- how the figures were obtained
+  distance_is_approximate 3.2     -- true if straight-line was used
+  estimated_duration_seconds         -- feeds the14 SLA and13 batching test
 
 Changes
 -------
-delivery_jobs.distance_km is replaced by the two legs above. §4 requires them
+delivery_jobs.distance_km is replaced by the two legs above.4 requires them
 separately: the customer is priced on merchant->customer while the rider is paid
 for the whole movement. One column cannot express both, and keeping a single
 number is how a rider who travelled to the merchant ends up underpaid.
 
 fulfillments.payer and payer_split_pct are replaced by explicit amounts:
-merchant_subsidy, ekshop_subsidy, delivery_price_gross, customer_payment. §10
+merchant_subsidy, ekshop_subsidy, delivery_price_gross, customer_payment.10
 and B.1 define a three-way split -- customer pays the remainder after the
 merchant and Ekshop subsidies -- which a single payer enum plus a percentage
 cannot represent. Contribution is always computed on the gross price, never on
@@ -56,7 +56,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # ── orders: pricing inputs (§3.1, §9, §14) ────────────────────────────────
+    # ── orders: pricing inputs (§3.1,9,14) ────────────────────────────────
     op.add_column("orders", sa.Column("package_weight_kg", sa.Numeric(8, 3), nullable=True))
     op.add_column(
         "orders",
@@ -89,7 +89,7 @@ def upgrade() -> None:
         "ck_shops_subsidy_amount_non_negative", "shops", "delivery_subsidy_amount >= 0"
     )
 
-    # ── delivery_jobs: split the distance into its two legs (§4, §3.2) ───────
+    # ── delivery_jobs: split the distance into its two legs (§4,3.2) ───────
     # Backfill the merchant->customer leg from the old single column, so existing
     # jobs keep a usable figure. rider_to_merchant_km stays NULL because the old
     # value never captured it -- it must be measured, not guessed.

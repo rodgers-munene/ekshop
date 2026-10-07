@@ -121,7 +121,7 @@ class Fulfillment(Base):
 
     mode = Column(Enum(FulfillmentMode, native_enum=False), nullable=False)
 
-    # Who bears the fee, per spec §10 and Appendix B.1. Subsidies change *who
+    # Who bears the fee, per spec10 and Appendix B.1. Subsidies change *who
     # pays*, never the total: contribution is always computed on
     # `delivery_price_gross`, never on what the customer hands over.
     #
@@ -243,17 +243,17 @@ class DeliveryJob(Base):
     drop_lat = Column(Numeric(9, 6))
     drop_lng = Column(Numeric(9, 6))
 
-    # Two distances, not one (spec §4). The customer is priced on the
+    # Two distances, not one (spec4). The customer is priced on the
     # merchant->customer leg only; the rider is paid for the whole movement
     # including their trip to collect. Keeping them apart is what stops a rider
     # who travelled to the merchant being silently underpaid.
     merchant_to_customer_km = Column(Numeric(10, 2))
     rider_to_merchant_km = Column(Numeric(10, 2))
-    # How each figure was obtained. §3.2 forbids pricing on straight-line, so a
+    # How each figure was obtained.3.2 forbids pricing on straight-line, so a
     # quote built on an approximate distance must be detectable after the fact.
     distance_source = Column(String(20))
     distance_is_approximate = Column(Boolean, nullable=False, server_default="0")
-    # OSRM's duration estimate, in seconds. Feeds the §14 SLA rules and the §13
+    # OSRM's duration estimate, in seconds. Feeds the14 SLA rules and the13
     # batching test.
     estimated_duration_seconds = Column(Integer)
 

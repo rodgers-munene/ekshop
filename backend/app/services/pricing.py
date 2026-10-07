@@ -1,7 +1,7 @@
 """Delivery pricing and profitability engine.
 
-Pure functions over the technical specification's formulas (§5, §6, §7, §8, §10,
-§12, §20). No database, no I/O: the caller supplies the inputs and persists the
+Pure functions over the technical specification's formulas (§5,6,7,8,10,
+§12,20). No database, no I/O: the caller supplies the inputs and persists the
 result. That keeps every arithmetic rule testable without infrastructure, which
 matters because these numbers decide whether Ekshop makes money.
 
@@ -58,7 +58,7 @@ class PricingStatus(str, Enum):
 
 
 class RecommendedAction(str, Enum):
-    """§12 / §11 decision ladder, in the order the specification lists them."""
+    """§12 /11 decision ladder, in the order the specification lists them."""
 
     normal = "NORMAL"
     optional_incentive = "OPTIONAL_INCENTIVE"
@@ -85,32 +85,32 @@ class SurgeBand:
 
 @dataclass(frozen=True)
 class PricingConfig:
-    """Every tunable from §15. Defaults are the specification's MVP values.
+    """Every tunable from15. Defaults are the specification's MVP values.
 
     Note these are the *specified* values, which the questionnaire shows produce
     a loss on deliveries under roughly 4 km. They are defaults, not
     recommendations; change them here or in the admin once Q23 is answered.
     """
 
-    # §5 customer price
+    #5 customer price
     base_fare: Decimal = Decimal("80")
     customer_distance_rate: Decimal = Decimal("25")
     minimum_delivery_fare: Decimal = Decimal("120")
 
-    # §6 rider payout
+    #6 rider payout
     rider_base_fare: Decimal = Decimal("60")
     rider_distance_rate: Decimal = Decimal("15")
     minimum_rider_payout: Decimal = Decimal("100")
     waiting_grace_minutes: Decimal = Decimal("5")
     waiting_rate_per_minute: Decimal = Decimal("2")
 
-    # §7 weight bands, ascending. `None` means "no upper bound".
+    #7 weight bands, ascending. `None` means "no upper bound".
     weight_bands: tuple[WeightBand, ...] = (
         WeightBand(Decimal("5"), Decimal("1.00")),
         WeightBand(Decimal("10"), Decimal("1.10")),
         WeightBand(Decimal("20"), Decimal("1.25")),
     )
-    # §7 gives ">20 kg -> manual / special quote" with no formula, so there is
+    #7 gives ">20 kg -> manual / special quote" with no formula, so there is
     # deliberately no multiplier band above 20 kg: the engine refuses instead of
     # inventing a price.
     manual_quote_above_kg: Optional[Decimal] = Decimal("20")
@@ -124,32 +124,32 @@ class PricingConfig:
         }
     )
 
-    # §8 surge bands: <=1 -> 1.00, >1..2 -> 1.15, >2..3 -> 1.30, >3 -> 1.50.
+    #8 surge bands: <=1 -> 1.00, >1..2 -> 1.15, >2..3 -> 1.30, >3 -> 1.50.
     # The customer never sees more than `customer_surge_cap`; beyond that the
     # pressure is expressed as a rider incentive instead (B.2).
     surge_bands: tuple[SurgeBand, ...] = (
         SurgeBand(Decimal("1"), Decimal("1.00")),
         SurgeBand(Decimal("2"), Decimal("1.15")),
         SurgeBand(Decimal("3"), Decimal("1.30")),
-        # §8's ">3 -> 1.50" has no upper bound, so this band is open-ended.
+        #8's ">3 -> 1.50" has no upper bound, so this band is open-ended.
         SurgeBand(None, Decimal("1.50")),
     )
     customer_surge_cap: Decimal = Decimal("1.30")
     max_customer_price: Optional[Decimal] = Decimal("500")  # D#1
 
-    # §12 profitability
+    #12 profitability
     target_contribution: Decimal = Decimal("0.15")  # A.8 suggests 15-20%
     payment_cost_rate: Decimal = Decimal("0.015")  # PLACEHOLDER -- D#8 says measure
     failure_probability: Decimal = Decimal("0.08")  # B.4 example
     average_failure_cost: Decimal = Decimal("250")  # B.4 example
 
-    # §11 delivery/basket ratio thresholds
+    #11 delivery/basket ratio thresholds
     ratio_incentive: Decimal = Decimal("0.10")
     ratio_subsidy: Decimal = Decimal("0.20")
     ratio_basket_building: Decimal = Decimal("0.30")
     ratio_intervention: Decimal = Decimal("0.40")
 
-    # §10.1 merchant subsidy caps
+    #10.1 merchant subsidy caps
     maximum_delivery_subsidy: Optional[Decimal] = None
     free_delivery_threshold: Optional[Decimal] = None
 
@@ -173,7 +173,7 @@ class PricingConfig:
         """§8. `supply_ratio = orders_waiting / available_riders`.
 
         Ratios above the highest band take that band's multiplier rather than
-        falling back to 1.00: §8 defines ">3 -> 1.50" with no upper limit, so a
+        falling back to 1.00:8 defines ">3 -> 1.50" with no upper limit, so a
         severe shortage must still attract riders. Returning 1.00 here would
         quietly drop the surge exactly when demand is worst.
         """
@@ -194,10 +194,10 @@ class PricingConfig:
 
 @dataclass(frozen=True)
 class PricingInputs:
-    """§3 required inputs, plus the §4 distances and §12 basket value."""
+    """§3 required inputs, plus the4 distances and12 basket value."""
 
     basket_value: Decimal
-    # §4: the leg the customer is priced on by default...
+    #4: the leg the customer is priced on by default...
     merchant_to_customer_km: Decimal
     # ...and the rider's trip to collect, which the rider is always paid for.
     rider_to_merchant_km: Decimal = Decimal("0")
@@ -206,15 +206,15 @@ class PricingInputs:
     supply_ratio: Optional[Decimal] = None
     merchant_subsidy: Decimal = Decimal("0")
     ekshop_subsidy: Decimal = Decimal("0")
-    # Actual measured waiting, §6. None before pickup.
+    # Actual measured waiting,6. None before pickup.
     actual_wait_minutes: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
 class PricingResult:
-    """The §16 response, plus the §20 status and decision."""
+    """The16 response, plus the20 status and decision."""
 
-    # §16
+    #16
     merchant_to_customer_km: Decimal
     rider_to_merchant_km: Decimal
     total_km: Decimal
@@ -260,7 +260,7 @@ def calculate(
     inputs: PricingInputs,
     config: Optional[PricingConfig] = None,
 ) -> PricingResult:
-    """Price one delivery. Implements §5, §6, §7, §8, §10, §11, §12 and §20.
+    """Price one delivery. Implements5,6,7,8,10,11,12 and20.
 
     Raises :class:`PricingError` rather than returning a guess when the inputs
     cannot produce a defensible price -- negative money, a missing distance, or
@@ -289,7 +289,7 @@ def calculate(
         else None
     )
     if weight_multiplier is None:
-        # §7: ">20 kg -> manual / special quote". There is no formula, so the
+        #7: ">20 kg -> manual / special quote". There is no formula, so the
         # engine refuses rather than inventing a price that would be wrong.
         return _manual_quote(inputs, config, d_mc, d_rm, d_total)
 
@@ -297,7 +297,7 @@ def calculate(
         inputs.service_level, Decimal("1.00")
     )
 
-    # ── §5 customer price ────────────────────────────────────────────────────
+    # ──5 customer price ────────────────────────────────────────────────────
     base_price = _money(config.base_fare + config.customer_distance_rate * d_mc)
     surge_multiplier = config.customer_surge_effective(inputs.supply_ratio, service_multiplier)
 
@@ -317,7 +317,7 @@ def calculate(
         and customer_delivery_price > config.max_customer_price
     )
 
-    # ── §10 subsidies change who pays, never the total (B.1) ─────────────────
+    # ──10 subsidies change who pays, never the total (B.1) ─────────────────
     applied_merchant_subsidy = merchant_subsidy
     if (
         config.free_delivery_threshold is not None
@@ -335,7 +335,7 @@ def calculate(
     total_subsidy = applied_merchant_subsidy + ekshop_subsidy
     customer_payment = _money(max(Decimal("0"), customer_delivery_price - total_subsidy))
 
-    # ── §6 rider payout, always on the full movement (§4) ────────────────────
+    # ──6 rider payout, always on the full movement (§4) ────────────────────
     chargeable_wait = Decimal("0")
     if inputs.actual_wait_minutes is not None:
         chargeable_wait = max(
@@ -352,7 +352,7 @@ def calculate(
         )
     )
 
-    # ── §12 profitability, always on the gross price (B.1) ───────────────────
+    # ──12 profitability, always on the gross price (B.1) ───────────────────
     payment_cost = _money(customer_delivery_price * config.payment_cost_rate)
     expected_exception_cost = _money(config.failure_probability * config.average_failure_cost)
     expected_delivery_cost = _money(
@@ -366,7 +366,7 @@ def calculate(
         if customer_delivery_price > 0
         else None
     )
-    # §12 writes minimum_economic_price as "... + target_delivery_contribution",
+    #12 writes minimum_economic_price as "... + target_delivery_contribution",
     # which reads like an addition but cannot be one: A.8 gives the target as a
     # margin *percentage* (15-20%), and adding 0.15 to a cost in shillings would
     # make the threshold meaningless. A margin of t on the price P means
@@ -466,7 +466,7 @@ def _manual_quote(
         status=PricingStatus.loss_making,
         recommended_action=RecommendedAction.manual_quote,
         reason=(
-            f"Package exceeds {config.manual_quote_above_kg} kg; §7 requires a "
+            f"Package exceeds {config.manual_quote_above_kg} kg;7 requires a "
             f"manual quote and defines no formula"
         ),
         requires_manual_quote=True,
@@ -481,7 +481,7 @@ def _recommend(
     ratio: Optional[Decimal],
     ceiling_breached: bool,
 ) -> tuple[RecommendedAction, str]:
-    """§12 for LOSS_MAKING, §11 for a high delivery/basket ratio.
+    """§12 for LOSS_MAKING,11 for a high delivery/basket ratio.
 
     The specification is explicit that the system "must not automatically reject
     a below-target order; it returns a pricing recommendation", so this never
@@ -497,7 +497,7 @@ def _recommend(
     if status == PricingStatus.loss_making:
         return (
             RecommendedAction.basket_building,
-            "Delivery contribution is negative; §12 ladder starts at basket-building",
+            "Delivery contribution is negative;12 ladder starts at basket-building",
         )
 
     if ratio is None:
@@ -506,7 +506,7 @@ def _recommend(
     if ratio > config.ratio_intervention:
         return (
             RecommendedAction.basket_building,
-            f"Delivery is {ratio * 100:.0f}% of basket value (>40%); §12 strong intervention",
+            f"Delivery is {ratio * 100:.0f}% of basket value (>40%);12 strong intervention",
         )
     if ratio > config.ratio_basket_building:
         return (

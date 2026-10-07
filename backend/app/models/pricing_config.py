@@ -121,8 +121,8 @@ class PricingCalculation(Base):
     # rather than silently duplicating the audit trail.
     reason = Column(String(40), nullable=False, server_default="quote")
 
-    # Provenance of the distance (§3.2, §4). Storing the source and the
-    # approximate flag makes §3.2 compliance verifiable after the fact: a price
+    # Provenance of the distance (§3.2,4). Storing the source and the
+    # approximate flag makes3.2 compliance verifiable after the fact: a price
     # built on straight-line distance can be identified years later.
     merchant_lat = Column(Numeric(9, 6))
     merchant_lng = Column(Numeric(9, 6))
@@ -135,14 +135,14 @@ class PricingCalculation(Base):
     distance_source = Column(String(20))
     distance_is_approximate = Column(Boolean, default=False, nullable=False, server_default="0")
 
-    # Order inputs (§3.1, §7, §9)
+    # Order inputs (§3.1,7,9)
     basket_value = Column(Numeric(12, 2), nullable=False)
     package_weight_kg = Column(Numeric(8, 3))
     service_level = Column(String(20))
     supply_ratio = Column(Numeric(8, 3))
 
     # Every parameter value used, so the arithmetic can be re-derived even after
-    # the schedule changes. This is the point of §17.
+    # the schedule changes. This is the point of17.
     base_fare = Column(Numeric(12, 2), nullable=False)
     customer_distance_rate = Column(Numeric(12, 2), nullable=False)
     customer_weight_multiplier = Column(Numeric(6, 4), nullable=False, server_default="1")
