@@ -54,11 +54,21 @@ export function statusStyle(status: string): string {
   return STATUS_STYLES[status] ?? "bg-amber/15 text-gold";
 }
 
-/** Which statuses the rider may advance to from the current one. */
+/** Which statuses the rider may advance to from the current one.
+ *
+ * Mirrors `DELIVERY_TRANSITIONS` in backend/app/routers/delivery.py exactly.
+ * It previously offered `in_transit → cancelled`, which the backend rejects with
+ * `400 Cannot transition from 'in_transit' to 'cancelled'` -- so a rider in
+ * transit was shown a Cancel button that could never work. Cancelling is only
+ * legal before the rider has picked the parcel up.
+ *
+ * Keep the two in step. If a transition is added here it must be added to the
+ * backend table too, or the button will fail.
+ */
 export const DELIVERY_TRANSITIONS: Record<string, string[]> = {
   assigned: ["picked", "cancelled"],
   picked: ["in_transit"],
-  in_transit: ["delivered", "cancelled"],
+  in_transit: ["delivered"],
 };
 
 /**

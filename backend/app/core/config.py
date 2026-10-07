@@ -165,6 +165,29 @@ class Settings(BaseSettings):
     # bucket's own public S3 URL when unset.
     AWS_S3_PUBLIC_URL: str | None = None
 
+    # --- Rider KYC document storage ------------------------------------------
+    # Deliberately a SEPARATE bucket with its own credentials, not a prefix in
+    # the product bucket.
+    #
+    # Product images are served from public URLs by design. KYC documents are
+    # national ID and licence scans, which must never be publicly reachable:
+    # anyone holding or guessing a URL could read them. Sharing the product
+    # bucket would also mean one bucket-policy mistake exposes identity
+    # documents, so the blast radius is kept separate and the credentials can
+    # be revoked independently.
+    #
+    # Nothing is ever stored as a URL. The database holds the S3 object key, and
+    # a short-lived presigned URL is generated only when an admin opens the
+    # review queue or a rider views their own file. Storing a presigned URL
+    # would be wrong -- it expires, and the review queue would silently break.
+    KYC_S3_BUCKET: str | None = None
+    KYC_S3_ACCESS_KEY_ID: str | None = None
+    KYC_S3_SECRET_ACCESS_KEY: str | None = None
+    KYC_S3_REGION: str = "eu-west-1"
+    # How long a generated view link stays valid. Short: these links are handed
+    # to an admin reviewing documents and must not become a durable capability.
+    KYC_URL_EXPIRY_SECONDS: int = 900
+
     @property
     def MPESA_BASE_URL(self) -> str:
         return (

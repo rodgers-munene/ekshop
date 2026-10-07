@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
 from sqlalchemy.orm import Session, selectinload
@@ -38,7 +38,7 @@ from app.schemas.delivery import (
     DeliveryRateRead, DeliveryRateUpdate,
     DeliverySimulationRow, DeliverySimulationResponse,
     RouteOptimizationRequest, RouteOptimizationResponse, RouteOptimizationStop,
-    KYCDetailRead, KYCSubmitRequest, KYCReviewRequest,
+    KYCDetailRead, KYCSubmitRequest, KYCReviewRequest, KYCDocumentUploadRead,
     KYCAgentRead, KYCAgentListResponse,
     OfferRead, OfferListResponse, PingDispatchResponse,
     LedgerEntryRead, LedgerListResponse, WalletTransactionRequest,
@@ -64,7 +64,7 @@ from app.services.delivery_pricing import (
     get_region,
 )
 from app.services.routing import get_route_eta_distance, get_route_matrix
-from app.services import fleet
+from app.services import fleet, storage
 from app.services.mpesa import get_access_token, initiate_b2c_payment, initiate_b2c_reversal
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
@@ -407,13 +407,15 @@ def update_my_status(
     db: Session = Depends(get_db),
     agent: DeliveryAgent = Depends(get_current_agent),
 ):
-    # A rider may only come online after an admin has approved their KYC and
-    # vehicle/equipment verification — the fleet safety gate.
+    # A rider may only come online after an admin has approved their identity
+    # AND their vehicle/equipment, and only with a location on file — the fleet
+    # safety gate. Identity and equipment are reviewed separately now, so each
+    # message names the half that is actually outstanding.
     if payload.status == DeliveryAgentStatus.active:
         if agent.kyc_status != KYCStatus.approved:
-            raise HTTPException(400, "KYC not approved yet. Complete onboarding before going online.")
+            raise HTTPException(400, "Your ID has not been approved yet. Complete onboarding before going online.")
         if not agent.equipment_verified:
-            raise HTTPException(400, "Equipment verification pending. Complete onboarding before going online.")
+            raise HTTPException(400, "Your vehicle has not been verified yet. Complete onboarding before going online.")
         if not agent.current_lat or not agent.current_lng:
             raise HTTPException(400, "Location not set. Share your location before going online.")
 
@@ -714,13 +716,77 @@ def simulate_delivery_fees(
 
 
 # ── Fleet: rider KYC + vehicle/equipment verification ────────────────────────
+#
+# Identity and equipment are reviewed separately. They used to share one click,
+# which meant a single admin action cleared both halves of the go-live gate and
+# there was no way to tell afterwards which one had actually been judged.
+
+
+def _kyc_detail(agent: DeliveryAgent) -> KYCDetailRead:
+    """Serialise a rider's KYC, presigning document links on read.
+
+    The database holds object keys, never URLs. A presigned link is generated
+    here, for the rider viewing their own file or an admin reviewing it, and
+    expires shortly afterwards.
+    """
+    documents = []
+    for doc in agent.kyc_documents or []:
+        if not isinstance(doc, dict):
+            continue
+        key = doc.get("key")
+        # Fall back to `url` for rows written before the key-based change.
+        url = storage.presign_kyc_url(key) if key else doc.get("url")
+        documents.append({"type": doc.get("type", "document"), "key": key, "url": url})
+
+    detail = KYCDetailRead.model_validate(agent)
+    detail.kyc_documents = documents or None
+    detail.equipment_photo_url = (
+        storage.presign_kyc_url(agent.equipment_photo_key)
+        if agent.equipment_photo_key
+        else None
+    )
+    return detail
+
 
 @router.get("/kyc/me", response_model=KYCDetailRead)
 def my_kyc(
     db: Session = Depends(get_db),
     agent: DeliveryAgent = Depends(get_current_agent),
 ):
-    return agent
+    return _kyc_detail(agent)
+
+
+@router.post("/kyc/me/upload", response_model=KYCDocumentUploadRead)
+async def upload_kyc_document(
+    file: UploadFile = File(...),
+    kind: str = Query("document", description="What the document is, e.g. national-id"),
+    db: Session = Depends(get_db),
+    agent: DeliveryAgent = Depends(get_current_agent),
+):
+    """Store one identity document and return its key.
+
+    Separate from `PUT /kyc/me` on purpose: the submission is a small JSON body,
+    while each scan is several megabytes. Mixing them would mean re-sending
+    every other document to change one field, and a failed upload would leave a
+    half-completed submission.
+    """
+    content_type = file.content_type or ""
+    try:
+        key = storage.upload_kyc_document(
+            agent_id=agent.id,
+            kind=kind,
+            filename=file.filename or "document",
+            content_type=content_type,
+            data=await file.read(),
+        )
+    except storage.StorageError as exc:
+        # 400 not 500: an unsupported type or an oversized file is the rider's
+        # problem to fix, and a generic 500 tells them nothing.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return KYCDocumentUploadRead(
+        key=key, type=kind, filename=file.filename, content_type=content_type
+    )
 
 
 @router.put("/kyc/me", response_model=KYCDetailRead)
@@ -732,17 +798,30 @@ def submit_kyc(
     agent.vehicle_type = payload.vehicle_type
     agent.national_id_number = payload.national_id_number
     agent.license_number = payload.license_number
-    agent.kyc_documents = [doc.model_dump() for doc in payload.kyc_documents] if payload.kyc_documents else None
-    agent.equipment_photo_url = payload.equipment_photo_url
+    agent.kyc_documents = (
+        [
+            {"type": doc.type, "key": doc.key}
+            for doc in payload.kyc_documents
+            if doc.key
+        ]
+        or None
+    )
+    agent.equipment_photo_key = payload.equipment_photo_key
     agent.kyc_status = KYCStatus.pending_review
     agent.kyc_submitted_at = datetime.now(timezone.utc)
     agent.kyc_reviewed_at = None
     agent.kyc_review_notes = None
+    # Equipment evidence changed, so a previous equipment verdict no longer
+    # applies. Leaving it set would let a rider whose vehicle was rejected keep
+    # going online because an admin had once verified the old one.
+    agent.equipment_verified = False
+    agent.equipment_review_notes = None
+    agent.equipment_reviewed_at = None
     # a re-flight off the road until re-approved
     agent.status = DeliveryAgentStatus.inactive
     db.commit()
     db.refresh(agent)
-    return agent
+    return _kyc_detail(agent)
 
 
 @router.get("/admin/kyc", response_model=KYCAgentListResponse)
@@ -768,13 +847,54 @@ def approve_kyc(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    """Approve the rider's **identity** only.
+
+    This used to set `equipment_verified = True` as well, so one click cleared
+    both halves of the go-live gate and the admin could not tell which one they
+    had judged. Equipment has its own endpoint now; the gate's existing messages
+    name which half is still missing.
+    """
     agent = db.get(DeliveryAgent, agent_id)
     if not agent:
         raise HTTPException(404, "Agent not found")
+    if not agent.kyc_submitted_at:
+        raise HTTPException(
+            400, "This rider has not submitted KYC yet, so there is nothing to approve."
+        )
     agent.kyc_status = KYCStatus.approved
-    agent.equipment_verified = True
     agent.kyc_reviewed_at = datetime.now(timezone.utc)
-    agent.kyc_review_notes = "Approved by admin"
+    agent.kyc_review_notes = "Identity approved by admin"
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
+@router.post("/admin/kyc/{agent_id}/equipment", response_model=KYCAgentRead)
+def review_equipment(
+    agent_id: uuid.UUID,
+    payload: KYCReviewRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Approve or reject the rider's vehicle and equipment, independently.
+
+    Refusing equipment takes the rider off the road immediately: someone
+    approved to ride on a box that has since been rejected should not keep
+    carrying parcels.
+    """
+    agent = db.get(DeliveryAgent, agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+
+    agent.equipment_verified = bool(payload.approve)
+    agent.equipment_reviewed_at = datetime.now(timezone.utc)
+    agent.equipment_review_notes = (
+        payload.notes
+        or ("Equipment approved by admin" if payload.approve else "Equipment rejected by admin")
+    )
+    if not payload.approve:
+        agent.status = DeliveryAgentStatus.inactive
+
     db.commit()
     db.refresh(agent)
     return agent
@@ -787,13 +907,14 @@ def reject_kyc(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    """Reject the rider's identity. Equipment is left alone: it is reviewed
+    separately, and refusing someone's ID says nothing about their vehicle."""
     agent = db.get(DeliveryAgent, agent_id)
     if not agent:
         raise HTTPException(404, "Agent not found")
     agent.kyc_status = KYCStatus.rejected
-    agent.equipment_verified = False
     agent.kyc_reviewed_at = datetime.now(timezone.utc)
-    agent.kyc_review_notes = payload.notes or "Rejected by admin"
+    agent.kyc_review_notes = payload.notes or "Identity rejected by admin"
     agent.status = DeliveryAgentStatus.inactive
     db.commit()
     db.refresh(agent)

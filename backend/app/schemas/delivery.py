@@ -2,7 +2,7 @@ import uuid
 import enum
 from datetime import datetime
 from typing import Optional, List, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.models.delivery import (
     DeliveryStatus,
     DeliveryAgentStatus,
@@ -188,8 +188,23 @@ class RouteOptimizationResponse(BaseModel):
 
 
 class KYCDocument(BaseModel):
+    """One identity document, referenced by its storage key.
+
+    `key` is the durable reference held in the database. `url` is a short-lived
+    presigned link generated on read and is never persisted -- a presigned URL
+    expires, so storing one would break the admin review queue.
+    """
     type: str
-    url: str
+    key: Optional[str] = None
+    url: Optional[str] = None
+
+
+class KYCDocumentUploadRead(BaseModel):
+    """Returned by the upload endpoint: a key to submit later, not a URL."""
+    key: str
+    type: str
+    filename: Optional[str] = None
+    content_type: str
 
 
 class KYCSummaryBase(BaseModel):
@@ -208,6 +223,8 @@ class KYCSummaryRead(KYCSummaryBase):
     kyc_review_notes: Optional[str] = None
     kyc_submitted_at: Optional[datetime] = None
     kyc_reviewed_at: Optional[datetime] = None
+    equipment_review_notes: Optional[str] = None
+    equipment_reviewed_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -222,11 +239,17 @@ class KYCDetailRead(KYCSummaryRead):
 
 
 class KYCSubmitRequest(BaseModel):
+    """Rider-side submission.
+
+    `equipment_verified` is deliberately NOT accepted here. A rider submits
+    evidence; only an admin may mark it verified. Accepting it from this payload
+    would let a rider self-approve and walk straight through the go-live gate.
+    """
     vehicle_type: VehicleType
-    national_id_number: str
-    license_number: Optional[str] = None
+    national_id_number: str = Field(min_length=1, max_length=50)
+    license_number: Optional[str] = Field(default=None, max_length=50)
     kyc_documents: Optional[List[KYCDocument]] = None
-    equipment_photo_url: Optional[str] = None
+    equipment_photo_key: Optional[str] = None
 
 
 class KYCReviewRequest(BaseModel):

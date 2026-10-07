@@ -147,9 +147,19 @@ class DeliveryAgent(Base):
     national_id_number = Column(String(50))
     license_number = Column(String(50))
     kyc_status = Column(Enum(KYCStatus, native_enum=False), default=KYCStatus.pending_review, nullable=False)
-    kyc_documents = Column(JSONB)  # list of {type, url} KYC proof artifacts
+    # list of {type, key}. Holds S3 object KEYS, never URLs: the documents live
+    # in a private bucket and a view link is presigned on read. Storing a
+    # presigned URL would leave the admin review queue pointing at a dead link.
+    kyc_documents = Column(JSONB)
+
+    # Identity and equipment are reviewed separately. Approving a rider's ID
+    # does not imply their box has been checked, and conflating the two meant
+    # one admin click cleared both halves of the go-live gate.
     equipment_verified = Column(Boolean, default=False, nullable=False)
-    equipment_photo_url = Column(String(500))
+    equipment_photo_key = Column(String(500))
+    equipment_review_notes = Column(Text)
+    equipment_reviewed_at = Column(DateTime(timezone=True))
+
     kyc_submitted_at = Column(DateTime(timezone=True))
     kyc_reviewed_at = Column(DateTime(timezone=True))
     kyc_review_notes = Column(Text)
