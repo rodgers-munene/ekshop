@@ -8,6 +8,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from app.models.etims import EtimsInvoice
 
 
 def utcnow():
@@ -187,6 +188,7 @@ class OrderGroup(Base):
     orders = relationship("Order", back_populates="group", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="order_group")
     payment_intents = relationship("PaymentIntent", back_populates="order_group", cascade="all, delete-orphan")
+    etims_invoice = relationship("EtimsInvoice", back_populates="order_group", uselist=False, cascade="all, delete-orphan")
 
 
 class Order(Base):

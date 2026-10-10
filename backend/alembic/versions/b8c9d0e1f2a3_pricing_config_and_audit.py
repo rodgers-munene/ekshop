@@ -75,30 +75,30 @@ def upgrade() -> None:
     # Seeded from the specification's MVP tables so a fresh database and the
     # engine's dataclass defaults cannot drift apart silently.
     seed = [
-        ("base_fare", "80", "money", "Customer base fare", " 5", 0),
-        ("customer_distance_rate", "25", "money", "Per km, on merchant->customer", " 5", 0),
-        ("minimum_delivery_fare", "120", "money", "Floor for the customer price", " 5", 0),
-        ("rider_base_fare", "60", "money", "Rider base payout", " 6", 0),
-        ("rider_distance_rate", "15", "money", "Rider per km, on the FULL movement", " 6", 0),
-        ("minimum_rider_payout", "100", "money", "Floor for the rider payout", " 6", 0),
-        ("waiting_grace_minutes", "5", "integer", "Waiting before it is payable", " 6", 0),
-        ("waiting_rate_per_minute", "2", "money", "Rider pay per chargeable minute", " 6", 0),
-        ("manual_quote_above_kg", "20", "integer", "Above this weight, no formula exists", " 7", 0),
-        ("customer_surge_cap", "1.30", "rate", "The customer never sees more than this", " 8/D#1", 0),
-        ("max_customer_price", "500", "money", "Above this, surge becomes a rider incentive", "D#1", 0),
-        ("service_multiplier_standard", "1.00", "rate", "STANDARD service level", "A.7", 0),
-        ("service_multiplier_priority", "1.15", "rate", "PRIORITY service level", "A.7", 0),
-        ("service_multiplier_express", "1.30", "rate", "EXPRESS service level", "A.7", 0),
-        ("target_contribution", "0.15", "rate", "Margin rate a healthy delivery earns", " 12/A.8", 1),
+        ("base_fare", "80", "money", "Customer base fare", " 5", False),
+        ("customer_distance_rate", "25", "money", "Per km, on merchant->customer", " 5", False),
+        ("minimum_delivery_fare", "120", "money", "Floor for the customer price", " 5", False),
+        ("rider_base_fare", "60", "money", "Rider base payout", " 6", False),
+        ("rider_distance_rate", "15", "money", "Rider per km, on the FULL movement", " 6", False),
+        ("minimum_rider_payout", "100", "money", "Floor for the rider payout", " 6", False),
+        ("waiting_grace_minutes", "5", "integer", "Waiting before it is payable", " 6", False),
+        ("waiting_rate_per_minute", "2", "money", "Rider pay per chargeable minute", " 6", False),
+        ("manual_quote_above_kg", "20", "integer", "Above this weight, no formula exists", " 7", False),
+        ("customer_surge_cap", "1.30", "rate", "The customer never sees more than this", " 8/D#1", False),
+        ("max_customer_price", "500", "money", "Above this, surge becomes a rider incentive", "D#1", False),
+        ("service_multiplier_standard", "1.00", "rate", "STANDARD service level", "A.7", False),
+        ("service_multiplier_priority", "1.15", "rate", "PRIORITY service level", "A.7", False),
+        ("service_multiplier_express", "1.30", "rate", "EXPRESS service level", "A.7", False),
+        ("target_contribution", "0.15", "rate", "Margin rate a healthy delivery earns", " 12/A.8", True),
         # D#8: "seed with measured payment-processor rate". The 1.5% here is the
         # placeholder the questionnaire flags as unverified.
-        ("payment_cost_rate", "0.015", "rate", "PLACEHOLDER - measure the real processor rate (D#8)", " 12/D#8", 1),
-        ("failure_probability", "0.08", "rate", "PLACEHOLDER - start from observed data per zone (D#8)", " 12/B.4", 1),
-        ("average_failure_cost", "250", "money", "PLACEHOLDER - start from observed data per zone (D#8)", " 12/B.4", 1),
+        ("payment_cost_rate", "0.015", "rate", "PLACEHOLDER - measure the real processor rate (D#8)", " 12/D#8", True),
+        ("failure_probability", "0.08", "rate", "PLACEHOLDER - start from observed data per zone (D#8)", " 12/B.4", True),
+        ("average_failure_cost", "250", "money", "PLACEHOLDER - start from observed data per zone (D#8)", " 12/B.4", True),
         # Q23. Defaults to off, i.e. the specification exactly as written, which
         # the questionnaire shows loses money under ~4 km.
         ("charge_rider_detour_to_customer", "false", "boolean",
-         "Q23: charge the customer for the rider's trip to the merchant too", " 4/Q23", 1),
+         "Q23: charge the customer for the rider's trip to the merchant too", " 4/Q23", True),
     ]
     for key, value, value_type, description, spec, commercial in seed:
         op.execute(

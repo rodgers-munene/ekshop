@@ -188,6 +188,23 @@ class Settings(BaseSettings):
     # to an admin reviewing documents and must not become a durable capability.
     KYC_URL_EXPIRY_SECONDS: int = 900
 
+    # --- eTIMS / KRA Integration ---------------------------------------------
+    # All settings optional so the codebase works in dev without credentials.
+    # Production MUST set these before go-live (KRA deadline was 31 Mar 2024).
+    ETIMS_ENABLED: bool = False
+    ETIMS_BASE_URL: str = "https://etims.kra.go.ke"  # production
+    ETIMS_SANDBOX_URL: str = "https://etims-sandbox.kra.go.ke"
+    ETIMS_TIN: str | None = None              # KRA PIN of the registered taxpayer
+    ETIMS_DEVICE_ID: str | None = None        # Control Unit serial number
+    ETIMS_USERNAME: str | None = None         # eTIMS portal username
+    ETIMS_PASSWORD: str | None = None         # eTIMS portal password
+    ETIMS_CLIENT_ID: str | None = None        # OAuth client ID
+    ETIMS_CLIENT_SECRET: str | None = None    # OAuth client secret
+    # Queue behaviour when KRA is unreachable
+    ETIMS_QUEUE_MAX_RETRIES: int = 10
+    ETIMS_QUEUE_RETRY_DELAY_SECONDS: int = 300  # 5 minutes between retries
+    ETIMS_QUEUE_BATCH_SIZE: int = 50
+
     @property
     def MPESA_BASE_URL(self) -> str:
         return (
@@ -195,6 +212,10 @@ class Settings(BaseSettings):
             if self.MPESA_ENVIRONMENT == "production"
             else "https://sandbox.safaricom.co.ke"
         )
+
+    @property
+    def ETIMS_URL(self) -> str:
+        return self.ETIMS_SANDBOX_URL if self.MPESA_ENVIRONMENT != "production" else self.ETIMS_BASE_URL
 
     @property
     def cors_origins_list(self) -> list[str]:

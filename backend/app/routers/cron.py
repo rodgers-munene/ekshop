@@ -8,7 +8,7 @@ from app.dependencies.database import get_db
 from app.routers.payments import reconcile_stale_mpesa_intents
 from app.services.subscriptions import run_billing_cycle
 from app.services.email import _send, send_abandoned_cart_email
-from app.services import dashboard_metrics, reports
+from app.services import dashboard_metrics, reports, etims as etims_service
 from app.services.reports import EAT
 from app.models.commerce import Order, Cart
 from app.models.shop import Shop
@@ -396,3 +396,28 @@ def expire_old_scheduled_orders(
 
     db.commit()
     return {"status": "completed", "cancelled": cancelled}
+
+
+@router.post(
+    "/etims-process-queue",
+    summary="Process pending eTIMS submission queue (cron-triggered)",
+    description="""
+Processes pending eTIMS invoices and credit notes in the submission queue.
+Retries failed submissions with exponential backoff. Respects ETIMS_ENABLED setting.
+Triggered periodically by an external scheduler (GitHub Actions).
+""",
+)
+def process_etims_queue(
+    batch_size: int = Query(settings.ETIMS_QUEUE_BATCH_SIZE, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_cron_secret),
+):
+    if not settings.ETIMS_ENABLED:
+        return {"status": "skipped", "reason": "ETIMS_ENABLED is false"}
+
+    # Import here to avoid circular dependency at module load time
+    import asyncio
+    from app.services import etims as etims_service
+
+    processed = asyncio.run(etims_service.process_queue_batch(db, batch_size))
+    return {"status": "completed", "processed": processed, "batch_size": batch_size}
