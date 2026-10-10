@@ -19,8 +19,8 @@ const schema = z.object({
   county: z.string().min(2, "County is required"),
   town: z.string().optional(),
   phone: z.string().optional(),
-  lat: z.number().optional(),
-  lng: z.number().optional(),
+  lat: z.number().min(-90, "Invalid latitude").max(90, "Invalid latitude"),
+  lng: z.number().min(-180, "Invalid longitude").max(180, "Invalid longitude"),
 });
 
 type ShopForm = z.infer<typeof schema>;
@@ -59,23 +59,40 @@ export default function ShopOnboardingForm() {
       toast.error("Location isn't available on this device. Use the map instead.");
       return;
     }
+    if (typeof window !== "undefined" && window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+      toast.error("Location requires HTTPS. Use the map instead.");
+      return;
+    }
     setDetecting(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        setDetecting(false);
-        applyCounty({
-          county: "",
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          addressHint: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`,
-        });
-        toast.success("Location detected");
+        try {
+          setDetecting(false);
+          applyCounty({
+            county: "",
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            addressHint: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`,
+          });
+          toast.success("Location detected");
+        } catch {
+          setDetecting(false);
+          toast.error("Location service error. Try the map instead.");
+        }
       },
-      () => {
+      (err) => {
         setDetecting(false);
-        toast.error("Couldn't get your location. Check browser permission or use the map.");
+        if (err.code === err.PERMISSION_DENIED) {
+          toast.error("Location permission denied. Enable in browser settings or use the map.");
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          toast.error("Location unavailable. Try the map instead.");
+        } else if (err.code === err.TIMEOUT) {
+          toast.error("Location request timed out. Try the map.");
+        } else {
+          toast.error("Couldn't get your location. Check browser permission or use the map.");
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }
 
@@ -147,8 +164,8 @@ export default function ShopOnboardingForm() {
           <input type="tel" {...register("phone")} className="input-field" placeholder="0712 345 678" />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Shop location</label>
+<div>
+          <label className="block text-sm font-medium mb-1">Shop location <span className="text-danger">*</span></label>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -157,7 +174,7 @@ export default function ShopOnboardingForm() {
               className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-amber disabled:opacity-50"
             >
               <Crosshair size={14} className={detecting ? "animate-spin" : ""} />
-              {detecting ? "Detecting…" : "Use my location"}
+              {detecting ? "Detecting�?�" : "Use my location"}
             </button>
             <button
               type="button"
@@ -173,6 +190,12 @@ export default function ShopOnboardingForm() {
               </span>
             )}
           </div>
+          {(errors.lat || errors.lng) && (
+            <p className="text-danger text-xs mt-1">Shop location is required</p>
+          )}
+          <input type="hidden" {...register("lat", { valueAsNumber: true })} />
+          <input type="hidden" {...register("lng", { valueAsNumber: true })} />
+        </div>
           <input type="hidden" {...register("lat", { valueAsNumber: true })} />
           <input type="hidden" {...register("lng", { valueAsNumber: true })} />
         </div>

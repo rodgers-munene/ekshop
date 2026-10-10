@@ -10,10 +10,10 @@ class ShopCreate(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
-    county: Optional[str] = None
+    county: str
     town: Optional[str] = None
-    lat: Optional[float] = None
-    lng: Optional[float] = None
+    lat: float
+    lng: float
     ward_id: Optional[uuid.UUID] = None
     exact_location: Optional[str] = None
     phone: Optional[str] = None

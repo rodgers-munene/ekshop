@@ -107,34 +107,51 @@ export default function AccountClient({ user, addresses: initialAddresses }: { u
       toast.error("Location isn't available on this device. Use the map instead.");
       return;
     }
+    if (typeof window !== "undefined" && window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+      toast.error("Location requires HTTPS. Use the map instead.");
+      return;
+    }
     setDetecting(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const data = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-        setDetecting(false);
-        if (!data) {
-          toast.error("We couldn't pinpoint your location — use the map instead.");
-          return;
+        try {
+          const data = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          setDetecting(false);
+          if (!data) {
+            toast.error("We couldn't pinpoint your location — use the map instead.");
+            return;
+          }
+          applyGeo({
+            lat: data.lat,
+            lng: data.lng,
+            county: data.county,
+            subcounty: data.subcounty,
+            ward: data.ward,
+            location: data.location,
+            sublocation: data.sublocation,
+            addressHint: data.address_hint,
+            countyId: data.county_id,
+            subcountyId: data.subcounty_id,
+            wardId: data.ward_id,
+          });
+        } catch {
+          setDetecting(false);
+          toast.error("Location service error. Try the map instead.");
         }
-        applyGeo({
-          lat: data.lat,
-          lng: data.lng,
-          county: data.county,
-          subcounty: data.subcounty,
-          ward: data.ward,
-          location: data.location,
-          sublocation: data.sublocation,
-          addressHint: data.address_hint,
-          countyId: data.county_id,
-          subcountyId: data.subcounty_id,
-          wardId: data.ward_id,
-        });
       },
-      () => {
+      (err) => {
         setDetecting(false);
-        toast.error("Couldn't get your location. Check browser permission or use the map.");
+        if (err.code === err.PERMISSION_DENIED) {
+          toast.error("Location permission denied. Enable in browser settings or use the map.");
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          toast.error("Location unavailable. Try the map instead.");
+        } else if (err.code === err.TIMEOUT) {
+          toast.error("Location request timed out. Try the map.");
+        } else {
+          toast.error("Couldn't get your location. Check browser permission or use the map.");
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }
 

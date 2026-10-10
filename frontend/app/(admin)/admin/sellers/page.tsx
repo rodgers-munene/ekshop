@@ -7,6 +7,7 @@ import { BadgeCheck } from "lucide-react";
 import { PaginatedResponse, Shop } from "@/types/interface";
 import Pagination from "@/components/admin/Pagination";
 import MessageUserButton from "@/components/MessageUserButton";
+import Link from "next/link";
 
 type Filter = "pending" | "active" | "suspended" | "all";
 const LIMIT = 20;
@@ -95,7 +96,7 @@ export default function AdminSellersPage() {
                 </div>
                 <p className="text-xs text-muted truncate">{shop.county ?? "Unknown"} · {shop.slug}</p>
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex gap-2 shrink-0 flex-wrap">
                 {!shop.is_verified && (
                   <button onClick={() => verify(shop.id)} className="btn-accent text-xs py-1.5 px-3">
                     Verify
@@ -114,6 +115,12 @@ export default function AdminSellersPage() {
                 <button onClick={() => suspend(shop.id)} className="text-xs py-1.5 px-3 rounded-md border border-danger text-danger hover:bg-danger/5">
                   Suspend
                 </button>
+                <Link
+                  href={`/admin/shops/${shop.id}/location`}
+                  className="text-xs py-1.5 px-3 rounded-md border border-info text-info hover:bg-info/5"
+                >
+                  Location
+                </Link>
                 {shop.seller_id && (
                   <MessageUserButton userId={shop.seller_id} userName={shop.name} />
                 )}
