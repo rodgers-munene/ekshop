@@ -1,12 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { use } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Shop, ShopUpdate } from "@/types/interface";
 import LocationPicker from "@/components/geo/LocationPicker";
 
-type ShopLocationForm = Pick<ShopUpdate, "lat" | "lng" | "county" | "town" | "exact_location">;
+type ShopLocationForm = {
+  lat: number;
+  lng: number;
+  county: string;
+  town: string;
+  exact_location: string;
+};
 
 export default function AdminShopLocationPage({ params }: { params: Promise<{ shopId: string }> }) {
   const queryClient = useQueryClient();
@@ -24,33 +31,6 @@ export default function AdminShopLocationPage({ params }: { params: Promise<{ sh
     enabled: !!shopId,
   });
 
-  const updateMutation = useMutation({
-    mutationFn: async (data: ShopLocationForm) => {
-      const res = await fetch(`/api/admin/shops/${shopId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.detail ?? "Failed to update location");
-      return json;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "shop", shopId] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "shops"] });
-      toast.success("Shop location updated");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const [formData, setFormData] = useState<ShopLocationForm>({
-    lat: shop?.lat ?? 0,
-    lng: shop?.lng ?? 0,
-    county: shop?.county ?? "",
-    town: shop?.town ?? "",
-    exact_location: shop?.exact_location ?? "",
-  });
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -66,6 +46,14 @@ export default function AdminShopLocationPage({ params }: { params: Promise<{ sh
       </div>
     );
   }
+
+  const [formData, setFormData] = useState<ShopLocationForm>({
+    lat: shop.lat ?? 0,
+    lng: shop.lng ?? 0,
+    county: shop.county ?? "",
+    town: shop.town ?? "",
+    exact_location: shop.exact_location ?? "",
+  });
 
   function applyLocation(sel: { lat: number; lng: number; county?: string; subcounty?: string; ward?: string; location?: string; sublocation?: string; addressHint?: string; countyId?: string; subcountyId?: string; wardId?: string }) {
     setFormData((prev) => ({
@@ -121,6 +109,25 @@ export default function AdminShopLocationPage({ params }: { params: Promise<{ sh
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: ShopLocationForm) => {
+      const res = await fetch(`/api/admin/shops/${shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.detail ?? "Failed to update location");
+      return json;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "shop", shopId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "shops"] });
+      toast.success("Shop location updated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

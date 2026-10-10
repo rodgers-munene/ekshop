@@ -431,7 +431,17 @@ class AdminOverviewPeriodMetrics(BaseModel):
     gmv: str
     total_transacted: str
     revenue: Optional[str]
+    net_revenue: Optional[str]
     commission_rate_configured: bool
+    take_rate: Optional[float]
+    avg_delivery_fee: str
+    delivery_cost_per_order: Optional[str]
+    payment_success_rate: float
+    refund_rate: float
+    active_buyers: int
+    active_sellers: int
+    repeat_buyer_rate: float
+    gross_margin: Optional[float]
     orders: int
     average_order_value: str
     new_users: int
@@ -453,9 +463,17 @@ class AdminOverviewTotals(BaseModel):
     gmv_total: str
     total_transacted_total: str
     revenue_total: Optional[str]
+    net_revenue_total: Optional[str]
     commission_rate_configured: bool
     cash_received_total: str
     refunds_total: str
+    total_refunds_lifetime: str
+    total_chargebacks_lifetime: str
+    avg_delivery_fee_lifetime: str
+    delivery_cost_per_order_lifetime: Optional[str]
+    active_buyers_lifetime: int
+    active_sellers_lifetime: int
+    repeat_buyer_rate_lifetime: float
 
 
 class AdminOverviewRead(BaseModel):

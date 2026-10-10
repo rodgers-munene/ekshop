@@ -188,14 +188,11 @@ export default function ShopOnboardingForm() {
               <span className="text-xs text-ink/70">
                 Detected: <strong>{geoHint}</strong>
               </span>
-            )}
+)}
           </div>
           {(errors.lat || errors.lng) && (
             <p className="text-danger text-xs mt-1">Shop location is required</p>
           )}
-          <input type="hidden" {...register("lat", { valueAsNumber: true })} />
-          <input type="hidden" {...register("lng", { valueAsNumber: true })} />
-        </div>
           <input type="hidden" {...register("lat", { valueAsNumber: true })} />
           <input type="hidden" {...register("lng", { valueAsNumber: true })} />
         </div>

@@ -46,6 +46,14 @@ export interface Shop {
   distance_km?: number;
 }
 
+export interface ShopUpdate {
+  lat?: number;
+  lng?: number;
+  county?: string;
+  town?: string;
+  exact_location?: string;
+}
+
 export type SubscriptionStatus = "pending_payment" | "active" | "cancelled" | "past_due" | "trialing";
 export type BillingInterval = "monthly" | "annual";
 

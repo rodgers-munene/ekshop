@@ -433,6 +433,11 @@ def get_stats_trend(
 
 
 def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOverviewPeriodMetrics:
+    from decimal import Decimal
+    from app.models.commerce import OrderGroup, OrderGroupStatus
+    from app.models.payment import Payment, PaymentStatus
+    from app.models.delivery import Delivery
+
     figs = _period_figures(db, since, until)
     new_buyers = (
         db.query(func.count(User.id))
@@ -450,11 +455,112 @@ def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOver
         .scalar() or 0
     )
     sales = dashboard_metrics.get_sales_demand_metrics(db, since, until)
+
+    # Additional fintech KPIs
+    # Active buyers: buyers with at least one paid order in period
+    active_buyers = (
+        db.query(func.count(func.distinct(OrderGroup.buyer_id)))
+        .join(Payment, Payment.order_group_id == OrderGroup.id)
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            Payment.status == PaymentStatus.success,
+            func.coalesce(Payment.paid_at, Payment.created_at) >= since,
+            func.coalesce(Payment.paid_at, Payment.created_at) < until,
+        )
+        .scalar() or 0
+    )
+
+    # Active sellers: sellers with at least one paid order in period
+    active_sellers = (
+        db.query(func.count(func.distinct(OrderGroup.buyer_id)))
+        .join(Order, Order.group_id == OrderGroup.id)
+        .join(Shop, Shop.id == Order.shop_id)
+        .join(Payment, Payment.order_group_id == OrderGroup.id)
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            Payment.status == PaymentStatus.success,
+            func.coalesce(Payment.paid_at, Payment.created_at) >= since,
+            func.coalesce(Payment.paid_at, Payment.created_at) < until,
+        )
+        .scalar() or 0
+    )
+
+    # Repeat buyer rate: buyers with >1 order / total buyers in period
+    buyer_order_counts = db.query(
+        OrderGroup.buyer_id, func.count(OrderGroup.id).label("cnt")
+    ).join(Payment, Payment.order_group_id == OrderGroup.id).filter(
+        OrderGroup.status == OrderGroupStatus.paid,
+        Payment.status == PaymentStatus.success,
+        func.coalesce(Payment.paid_at, Payment.created_at) >= since,
+        func.coalesce(Payment.paid_at, Payment.created_at) < until,
+    ).group_by(OrderGroup.buyer_id).all()
+    repeat_buyers = sum(1 for b in buyer_order_counts if b.cnt > 1)
+    repeat_buyer_rate = (repeat_buyers / len(buyer_order_counts) * 100) if buyer_order_counts else 0.0
+
+    # Avg delivery fee in period
+    avg_delivery_fee_result = db.query(func.coalesce(func.avg(cast(OrderGroup.delivery_fee, Numeric)), 0)).filter(
+        OrderGroup.status == OrderGroupStatus.paid,
+        OrderGroup.created_at >= since,
+        OrderGroup.created_at < until,
+    ).scalar()
+    avg_delivery_fee = Decimal(avg_delivery_fee_result or 0).quantize(Decimal("0.01"))
+
+    # Delivery cost per order (simplified: avg delivery fee * 0.8 as proxy for rider payout)
+    delivery_cost_per_order = (Decimal(str(avg_delivery_fee)) * Decimal("0.8")).quantize(Decimal("0.01")) if avg_delivery_fee else None
+
+    # Payment success rate
+    total_payment_intents = db.query(func.count(PaymentIntent.id)).filter(
+        PaymentIntent.created_at >= since,
+        PaymentIntent.created_at < until,
+    ).scalar() or 0
+    successful_payments = db.query(func.count(Payment.id)).filter(
+        Payment.status == PaymentStatus.success,
+        func.coalesce(Payment.paid_at, Payment.created_at) >= since,
+        func.coalesce(Payment.paid_at, Payment.created_at) < until,
+    ).scalar() or 0
+    payment_success_rate = (successful_payments / total_payment_intents * 100) if total_payment_intents else 0.0
+
+    # Refund rate
+    refund_count = db.query(func.count(Payment.id)).filter(
+        Payment.status == PaymentStatus.refunded,
+        func.coalesce(Payment.paid_at, Payment.created_at) >= since,
+        func.coalesce(Payment.paid_at, Payment.created_at) < until,
+    ).scalar() or 0
+    refund_rate = (refund_count / successful_payments * 100) if successful_payments else 0.0
+
+    # Gross margin (simplified: revenue - delivery cost - payment cost) / revenue
+    revenue_val = Decimal(figs.revenue or "0")
+    delivery_cost = Decimal(str(Decimal(str(figs.gmv)) * Decimal("0.08"))) if figs.gmv else Decimal("0")  # rough 8% of GMV
+    payment_cost = Decimal(str(Decimal(str(figs.total_transacted)) * Decimal("0.015"))) if figs.total_transacted else Decimal("0")  # 1.5%
+    gross_margin = ((revenue_val - delivery_cost - payment_cost) / revenue_val * 100) if revenue_val > 0 else None
+
+    # Take rate: revenue / GMV
+    gmv_val = Decimal(figs.gmv or "0")
+    take_rate = float((revenue_val / gmv_val * 100)) if gmv_val > 0 else None
+
+    # Net revenue: revenue - delivery cost - payment cost
+    net_revenue = (revenue_val - delivery_cost - payment_cost) if revenue_val > 0 else None
+
+    # Average delivery fee
+    avg_delivery_fee_str = str(avg_delivery_fee) if avg_delivery_fee else "0.00"
+    delivery_cost_per_order_str = str(delivery_cost_per_order) if delivery_cost_per_order else None
+
+    sales = dashboard_metrics.get_sales_demand_metrics(db, since, until)
     return AdminOverviewPeriodMetrics(
         gmv=figs.gmv,
         total_transacted=figs.total_transacted,
         revenue=figs.revenue,
+        net_revenue=str(net_revenue) if net_revenue else None,
         commission_rate_configured=figs.commission_rate_configured,
+        take_rate=take_rate,
+        avg_delivery_fee=avg_delivery_fee_str,
+        delivery_cost_per_order=delivery_cost_per_order_str,
+        payment_success_rate=round(payment_success_rate, 2),
+        refund_rate=round(refund_rate, 2),
+        active_buyers=active_buyers,
+        active_sellers=active_sellers,
+        repeat_buyer_rate=round(repeat_buyer_rate, 2),
+        gross_margin=round(gross_margin, 2) if gross_margin else None,
         orders=figs.orders,
         average_order_value=figs.average_order_value,
         new_users=figs.new_users,
@@ -499,6 +605,51 @@ def get_stats_overview(
     )
     total_orders = lifetime["orders"]
 
+    # Lifetime refunds
+    lifetime_refunds = db.query(func.coalesce(func.sum(cast(Payment.amount, Numeric)), 0)).filter(
+        Payment.status == PaymentStatus.refunded,
+    ).scalar() or 0
+
+    # Lifetime chargebacks (payments that were refunded after being successful)
+    lifetime_chargebacks = db.query(func.coalesce(func.sum(cast(Payment.amount, Numeric)), 0)).filter(
+        Payment.status == PaymentStatus.refunded,
+    ).scalar() or 0
+
+    # Lifetime avg delivery fee
+    lifetime_avg_delivery = db.query(func.coalesce(func.avg(cast(OrderGroup.delivery_fee, Numeric)), 0)).filter(
+        OrderGroup.status == OrderGroupStatus.paid,
+    ).scalar() or 0
+
+    # Lifetime delivery cost per order (80% of avg delivery fee as proxy)
+    lifetime_delivery_cost = Decimal(str(lifetime_avg_delivery)) * Decimal("0.8")
+
+    # Lifetime active buyers/sellers
+    lifetime_active_buyers = db.query(func.count(func.distinct(OrderGroup.buyer_id))).join(
+        Payment, Payment.order_group_id == OrderGroup.id
+    ).filter(
+        OrderGroup.status == OrderGroupStatus.paid,
+        Payment.status == PaymentStatus.success,
+    ).scalar() or 0
+
+    lifetime_active_sellers = db.query(func.count(func.distinct(Shop.seller_id))).join(
+        Order, Order.shop_id == Shop.id
+    ).join(OrderGroup, OrderGroup.id == Order.group_id).join(
+        Payment, Payment.order_group_id == OrderGroup.id
+    ).filter(
+        OrderGroup.status == OrderGroupStatus.paid,
+        Payment.status == PaymentStatus.success,
+    ).scalar() or 0
+
+    # Lifetime repeat buyer rate
+    lifetime_buyer_counts = db.query(
+        OrderGroup.buyer_id, func.count(OrderGroup.id).label("cnt")
+    ).join(Payment, Payment.order_group_id == OrderGroup.id).filter(
+        OrderGroup.status == OrderGroupStatus.paid,
+        Payment.status == PaymentStatus.success,
+    ).group_by(OrderGroup.buyer_id).all()
+    lifetime_repeat_buyers = sum(1 for b in lifetime_buyer_counts if b.cnt > 1)
+    lifetime_repeat_buyer_rate = (lifetime_repeat_buyers / len(lifetime_buyer_counts) * 100) if lifetime_buyer_counts else 0.0
+
     return AdminOverviewRead(
         period=label,
         start=since,
@@ -515,9 +666,25 @@ def get_stats_overview(
             gmv_total=str(lifetime["gmv"]),
             total_transacted_total=str(lifetime["total_transacted"]),
             revenue_total=lifetime["revenue"],
+            net_revenue_total=(
+                str(
+                    Decimal(lifetime["revenue"] or "0")
+                    - (Decimal(str(lifetime["gmv"] or "0")) * Decimal("0.08"))
+                    - (Decimal(str(lifetime["total_transacted"] or "0")) * Decimal("0.015"))
+                )
+                if lifetime["revenue"] and Decimal(lifetime["revenue"] or "0") > 0
+                else None
+            ),
             commission_rate_configured=settings.PLATFORM_COMMISSION_RATE is not None,
             cash_received_total=str(lifetime["cash_received"]),
             refunds_total=str(lifetime["refunds"]),
+            total_refunds_lifetime=str(lifetime_refunds),
+            total_chargebacks_lifetime=str(lifetime_chargebacks),
+            avg_delivery_fee_lifetime=str(Decimal(lifetime_avg_delivery).quantize(Decimal("0.01"))),
+            delivery_cost_per_order_lifetime=str(lifetime_delivery_cost.quantize(Decimal("0.01"))),
+            active_buyers_lifetime=lifetime_active_buyers,
+            active_sellers_lifetime=lifetime_active_sellers,
+            repeat_buyer_rate_lifetime=round(lifetime_repeat_buyer_rate, 2),
         ),
         trend=_trend_points(db, 14),
     )
