@@ -39,7 +39,24 @@ export default function AdminKycPage() {
     queryClient.invalidateQueries({ queryKey: ["admin", "kyc"] });
   }
 
-  async function approve(agent: KYCAgent) {
+  async function rejectIdentity(agent: KYCAgent) {
+    const notes = window.prompt(
+      `Rejection reason for ${agent.name}:`,
+      "Identity rejected by admin",
+    );
+    if (notes === null) return;
+    const res = await fetch(`/api/admin/fleet/kyc/${agent.id}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: notes || "Identity rejected by admin" }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(body.detail ?? "Could not reject KYC"); return; }
+    toast.success(`${agent.name} rejected`);
+    refresh();
+  }
+
+  async function approveIdentity(agent: KYCAgent) {
     const res = await fetch(`/api/admin/fleet/kyc/${agent.id}/approve`, { method: "POST" });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { toast.error(body.detail ?? "Could not approve KYC"); return; }
@@ -47,17 +64,43 @@ export default function AdminKycPage() {
     refresh();
   }
 
-  async function reject(agent: KYCAgent) {
-    const notes = window.prompt(`Rejection reason for ${agent.name}:`, "Identity or equipment could not be verified");
+  async function approveEquipment(agent: KYCAgent) {
+    const notes = window.prompt(
+      `Approve equipment for ${agent.name}? Notes (optional):`,
+      "Equipment approved by admin",
+    );
     if (notes === null) return;
-    const res = await fetch(`/api/admin/fleet/kyc/${agent.id}/reject`, {
+    const res = await fetch(`/api/admin/fleet/kyc/${agent.id}/equipment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: notes || "Rejected by admin" }),
+      body: JSON.stringify({ approve: true, notes: notes || "Equipment approved by admin" }),
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) { toast.error(body.detail ?? "Could not reject KYC"); return; }
-    toast.success(`${agent.name} rejected`);
+    if (!res.ok) {
+      toast.error(body.detail ?? "Could not approve equipment");
+      return;
+    }
+    toast.success(`Equipment approved for ${agent.name}`);
+    refresh();
+  }
+
+  async function rejectEquipment(agent: KYCAgent) {
+    const notes = window.prompt(
+      `Reject equipment for ${agent.name}? Reason:`,
+      "Equipment rejected by admin",
+    );
+    if (notes === null) return;
+    const res = await fetch(`/api/admin/fleet/kyc/${agent.id}/equipment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approve: false, notes: notes || "Equipment rejected by admin" }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(body.detail ?? "Could not reject equipment");
+      return;
+    }
+    toast.success(`Equipment rejected for ${agent.name}`);
     refresh();
   }
 
@@ -112,15 +155,27 @@ export default function AdminKycPage() {
                   <span className="text-xs text-muted">Wallet {formatKES(Number(a.wallet_balance))}</span>
                 </div>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <button onClick={() => approve(a)} className="btn-accent text-xs py-1.5 px-3">
-                  Approve
+              <div className="flex gap-2 shrink-0 flex-wrap">
+                <button onClick={() => approveIdentity(a)} className="btn-accent text-xs py-1.5 px-3">
+                  Approve ID
                 </button>
                 <button
-                  onClick={() => reject(a)}
+                  onClick={() => rejectIdentity(a)}
                   className="text-xs py-1.5 px-3 rounded-md border border-danger text-danger hover:bg-danger/5"
                 >
-                  Reject
+                  Reject ID
+                </button>
+                <button
+                  onClick={() => approveEquipment(a)}
+                  className="text-xs py-1.5 px-3 rounded-md border border-success text-success hover:bg-success/5"
+                >
+                  Approve Equipment
+                </button>
+                <button
+                  onClick={() => rejectEquipment(a)}
+                  className="text-xs py-1.5 px-3 rounded-md border border-amber text-amber hover:bg-amber/5"
+                >
+                  Reject Equipment
                 </button>
               </div>
             </div>

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Delivery } from "@/types/interface";
+import { Delivery, RiderKYC } from "@/types/interface";
 import MessageAdminButton from "@/components/MessageAdminButton";
 import {
   agentStatusLabel,
@@ -35,6 +35,37 @@ export default function AgentHomePage() {
   });
 
   const status: AgentStatus = remoteStatus?.status ?? "inactive";
+
+  // Why the rider cannot go online, if they cannot. The backend refuses with a
+  // named reason; showing only a failed toggle leaves a rider stuck with no idea
+  // what to do. Identity and equipment are reviewed separately, so both halves
+  // are checked.
+  const { data: kyc } = useQuery({
+    queryKey: ["agent-kyc"],
+    queryFn: async () => {
+      const res = await fetch("/api/agent/kyc");
+      if (!res.ok) return null;
+      return (await res.json()) as RiderKYC;
+    },
+    refetchInterval: 60000,
+  });
+
+  const blockers = useMemo(() => {
+    if (!kyc) return [] as string[];
+    const missing: string[] = [];
+    if (kyc.kyc_status !== "approved") {
+      missing.push(
+        kyc.kyc_status === "rejected"
+          ? "Your ID was not approved — send new details"
+          : "Send your ID for review",
+      );
+    }
+    if (!kyc.equipment_verified) missing.push("Send a photo of your vehicle");
+    if (!kyc.current_lat || !kyc.current_lng) {
+      missing.push("Allow location access");
+    }
+    return missing;
+  }, [kyc]);
 
   const { data: deliveries = [] } = useQuery({
     queryKey: ["agent-deliveries"],
@@ -125,6 +156,40 @@ export default function AgentHomePage() {
         </button>
         <MessageAdminButton />
       </div>
+
+      {/* Why the rider cannot go online, and where to fix it. Without this the
+          availability button just fails and the rider is left guessing. */}
+      {blockers.length > 0 && (
+        <div className="card p-4 mb-6 border-gold bg-amber/5">
+          <p className="font-bold text-sm mb-2">
+            {blockers.length === 1
+              ? "One step left before you can take deliveries"
+              : `${blockers.length} steps left before you can take deliveries`}
+          </p>
+          <ul className="space-y-1">
+            {blockers.map((b) => (
+              <li key={b} className="text-xs text-muted flex gap-1.5">
+                <span aria-hidden>•</span>
+                {b}
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/agent/kyc"
+            className="btn-accent inline-block mt-3 px-4 py-2 rounded-md text-xs font-semibold"
+          >
+            Complete your details
+          </Link>
+        </div>
+      )}
+
+      {kyc?.kyc_status === "approved" &&
+        kyc.equipment_verified &&
+        blockers.length === 0 && (
+          <div className="card p-3 mb-6 text-xs text-muted">
+            Your ID and vehicle are approved. Tap the button above to go online.
+          </div>
+        )}
 
       {/* Summary stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">

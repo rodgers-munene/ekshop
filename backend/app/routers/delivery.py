@@ -806,7 +806,11 @@ def submit_kyc(
         ]
         or None
     )
-    agent.equipment_photo_key = payload.equipment_photo_key
+    # Omitting the equipment photo means "leave what is on file", not "clear
+    # it". A rider correcting their ID number should not have to re-upload the
+    # vehicle photo they submitted last week.
+    if payload.equipment_photo_key:
+        agent.equipment_photo_key = payload.equipment_photo_key
     agent.kyc_status = KYCStatus.pending_review
     agent.kyc_submitted_at = datetime.now(timezone.utc)
     agent.kyc_reviewed_at = None

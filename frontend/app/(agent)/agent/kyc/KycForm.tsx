@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, ShieldCheck, Upload, X } from "lucide-react";
 import { toast } from "sonner";
@@ -51,21 +51,25 @@ export default function RiderKycForm() {
   const [equipmentPhoto, setEquipmentPhoto] = useState<Uploaded | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
 
-  // Pre-fill from the server so a returning rider sees their existing values.
-  useEffect(() => {
-    if (!data) return;
+  // Seeded once from the server. Keyed on the agent id rather than the whole
+  // response so an unrelated refetch cannot stomp what the rider is typing.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (data && data.id && seededFor !== data.id) {
+    setSeededFor(data.id);
     setVehicleType(data.vehicle_type ?? "");
     setNationalId(data.national_id_number ?? "");
     setLicence(data.license_number ?? "");
     setDocuments(
-      (data.kyc_documents ?? []).map((doc) => ({
-        type: doc.type,
-        key: doc.key,
-        url: doc.url,
-        filename: doc.type,
-      })),
+      (data.kyc_documents ?? [])
+        .filter((doc) => doc.key)
+        .map((doc) => ({
+          type: doc.type,
+          key: doc.key,
+          url: doc.url,
+          filename: doc.type,
+        })),
     );
-  }, [data]);
+  }
 
   async function upload(file: File, kind: string): Promise<Uploaded | null> {
     if (file.size > MAX_BYTES) {
@@ -122,6 +126,9 @@ export default function RiderKycForm() {
           vehicle_type: vehicleType,
           national_id_number: nationalId.trim(),
           license_number: licence.trim() || null,
+          // Any document the rider did not remove is submitted, including ones
+          // already on the server -- otherwise submitting a corrected ID number
+          // would throw away their existing scans.
           kyc_documents: documents
             .filter((d) => d.key)
             .map((d) => ({ type: d.type, key: d.key })),
