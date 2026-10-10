@@ -1,9 +1,10 @@
 import { cookies } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
+import { withCsrf } from "@/lib/admin-csrf";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ dealId: string }> }) {
+async function patchHandler(req: NextRequest, { params }: { params: Promise<{ dealId: string }> }) {
   const { dealId } = await params;
   const cookieStore = await cookies();
   const token = cookieStore.get("ekshop_token")?.value;
@@ -19,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ de
   return NextResponse.json(data, { status: res.status });
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ dealId: string }> }) {
+async function deleteHandler(_req: NextRequest, { params }: { params: Promise<{ dealId: string }> }) {
   const { dealId } = await params;
   const cookieStore = await cookies();
   const token = cookieStore.get("ekshop_token")?.value;
@@ -33,3 +34,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ deal
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });
 }
+
+export const PATCH = withCsrf(patchHandler);
+export const DELETE = withCsrf(deleteHandler);

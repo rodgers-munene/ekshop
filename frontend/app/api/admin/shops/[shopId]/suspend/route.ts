@@ -1,9 +1,10 @@
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
+import { withCsrf } from "@/lib/admin-csrf";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export async function PATCH(_req: Request, { params }: { params: Promise<{ shopId: string }> }) {
+async function handler(_req: NextRequest, { params }: { params: Promise<{ shopId: string }> }) {
   const { shopId } = await params;
   const cookieStore = await cookies();
   const token = cookieStore.get("ekshop_token")?.value;
@@ -16,3 +17,5 @@ export async function PATCH(_req: Request, { params }: { params: Promise<{ shopI
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });
 }
+
+export const PATCH = withCsrf(handler);

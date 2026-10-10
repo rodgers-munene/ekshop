@@ -1,9 +1,10 @@
 import { cookies } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
+import { withCsrf } from "@/lib/admin-csrf";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ vehicle: string }> }) {
+async function handler(req: NextRequest, { params }: { params: Promise<{ vehicle: string }> }) {
   const { vehicle } = await params;
   const cookieStore = await cookies();
   const token = cookieStore.get("ekshop_token")?.value;
@@ -18,3 +19,5 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ vehi
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });
 }
+
+export const PUT = withCsrf(handler);

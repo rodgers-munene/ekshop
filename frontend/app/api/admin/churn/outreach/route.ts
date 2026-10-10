@@ -1,15 +1,12 @@
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
+import { withCsrf } from "@/lib/admin-csrf";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
-async function getToken() {
+async function handler(req: NextRequest) {
   const cookieStore = await cookies();
-  return cookieStore.get("ekshop_token")?.value;
-}
-
-export async function POST(req: Request) {
-  const token = await getToken();
+  const token = cookieStore.get("ekshop_token")?.value;
   if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
 
   const body = await req.text();
@@ -26,3 +23,5 @@ export async function POST(req: Request) {
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });
 }
+
+export const POST = withCsrf(handler);
