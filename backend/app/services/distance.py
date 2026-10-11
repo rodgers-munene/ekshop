@@ -1,6 +1,6 @@
 """Road distance and travel time, as the technical specification requires.
 
-§3.2: *"Distances must use road distance, not straight-line/geodesic distance."*
+3.2: *"Distances must use road distance, not straight-line/geodesic distance."*
 
 This is not a stylistic preference. In built-up areas road distance is routinely
 20-40% longer than straight-line, so a geodesic quote **systematically

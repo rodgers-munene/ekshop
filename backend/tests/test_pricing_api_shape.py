@@ -77,7 +77,7 @@ def test_every_documented_field_is_present():
 
 
 def test_fields_the_spec_text_requires_are_present():
-    """§16's literal example is abbreviated. These are named in16/§17 and14
+    """16's literal example is abbreviated. These are named in16/17 and14
     and are needed for the response to be honest about how the price was reached.
     """
     ours = flatten(_schema)
@@ -100,7 +100,7 @@ def test_fields_the_spec_text_requires_are_present():
 
 
 def test_gross_price_and_amount_paid_are_separate():
-    """§10/B.1: a subsidy changes who pays, not the total. Collapsing these two
+    """10/B.1: a subsidy changes who pays, not the total. Collapsing these two
     is how a subsidy gets reported as lost revenue."""
     ours = flatten(_schema)
     assert "customer.delivery_price" in ours
@@ -108,7 +108,7 @@ def test_gross_price_and_amount_paid_are_separate():
 
 
 def test_approximate_distance_is_visible_to_the_client():
-    """§3.2 compliance has to be checkable by whoever receives the quote, not
+    """3.2 compliance has to be checkable by whoever receives the quote, not
     only by someone reading the audit table later."""
     assert "distance_is_approximate" in _schema["properties"]
 

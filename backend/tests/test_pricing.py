@@ -42,7 +42,7 @@ def price(km, **kwargs):
     ],
 )
 def test_spec_distance_table(km, expected):
-    """§5 publishes this exact table."""
+    """5 publishes this exact table."""
     assert price(km).customer_delivery_price == D(expected)
 
 
@@ -55,7 +55,7 @@ def test_minimum_fare_floors_the_short_case():
 # ---6 rider payout -----------------------------------------------------------
 
 def test_spec_worked_example_pays_175():
-    """§6: rider 2 km out, 5 km delivery, 10 min wait -> KES 175."""
+    """6: rider 2 km out, 5 km delivery, 10 min wait -> KES 175."""
     result = price(5, rider_to_merchant_km=D("2"), actual_wait_minutes=D("10"))
     assert result.rider_total_payout == D("175.00")
     assert result.rider_base_fare == D("60.00")
@@ -76,7 +76,7 @@ def test_minimum_rider_payout_floor():
 
 
 def test_rider_is_paid_on_the_full_movement():
-    """§4: the customer price ignores the detour, the rider payout does not."""
+    """4: the customer price ignores the detour, the rider payout does not."""
     near = price(3, rider_to_merchant_km=D("0"))
     far = price(3, rider_to_merchant_km=D("5"))
     assert far.customer_delivery_price == near.customer_delivery_price
@@ -117,7 +117,7 @@ def test_specified_parameters_only_reach_target_from_about_10km():
 
 
 def test_minimum_economic_price_yields_the_target_margin():
-    """§12 writes it as an addition; A.8 makes the target a percentage, so it is
+    """12 writes it as an addition; A.8 makes the target a percentage, so it is
     cost / (1 - target). Adding 0.15 shillings would be meaningless."""
     result = price(5, rider_to_merchant_km=D("2"))
     implied = (result.minimum_economic_price - result.expected_delivery_cost) / result.minimum_economic_price
@@ -152,7 +152,7 @@ def test_weight_multiplier_raises_the_price():
 
 
 def test_over_20kg_requires_a_manual_quote():
-    """§7 says 'manual / special quote' and gives no formula, so nothing is invented."""
+    """7 says 'manual / special quote' and gives no formula, so nothing is invented."""
     result = price(5, package_weight_kg=D("25"))
     assert result.requires_manual_quote is True
     assert result.customer_delivery_price == D("0")
@@ -182,7 +182,7 @@ def test_surge_above_the_top_band_keeps_the_highest_multiplier():
 
 
 def test_customer_surge_is_capped():
-    """§8 / D#1: the customer never sees more than 1.30."""
+    """8 / D#1: the customer never sees more than 1.30."""
     result = price(10, supply_ratio=D("10"), service_level=ServiceLevel.express)
     assert result.surge_multiplier == D("1.30")
 

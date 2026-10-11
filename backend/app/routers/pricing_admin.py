@@ -1,16 +1,16 @@
-"""Pricing API (§16) and admin parameter management (§15).
+"""Pricing API (16) and admin parameter management (15).
 
 The quote endpoint is the one place a customer-facing price is produced, so it
 holds three deliberate refusals:
 
-1. **It refuses to serve a firm price from an approximate distance** (§3.2). A
+1. **It refuses to serve a firm price from an approximate distance** (3.2). A
    geodesic quote undercharges by 20-40%, so the response is returned with
    `distance_is_approximate` set rather than being quietly presented as firm.
 
-2. **It refuses to auto-reject a loss-making order** (§12). The engine returns a
+2. **It refuses to auto-reject a loss-making order** (12). The engine returns a
    recommendation; the decision to decline belongs to a person.
 
-3. **It reuses a locked price rather than recalculating it** (§14). Once checkout
+3. **It reuses a locked price rather than recalculating it** (14). Once checkout
    is confirmed, a slow assignment or a rider who moved further away must not
    change what the customer agreed to pay.
 """
@@ -119,7 +119,7 @@ def quote(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ) -> PricingResponse:
-    """Price one delivery and record the calculation (§16,17).
+    """Price one delivery and record the calculation (16,17).
 
     Distances are supplied by the caller because they must come from the
     road-distance provider; this endpoint deliberately does not compute them, so
@@ -193,7 +193,7 @@ def lock_price(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ) -> PricingResponse:
-    """Freeze the price at checkout (§14).
+    """Freeze the price at checkout (14).
 
     From this point the customer-facing price cannot change because assignment was
     slow, the rider moved further away, supply changed, or a rider became

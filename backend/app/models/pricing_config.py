@@ -2,12 +2,12 @@
 
 Two specification requirements that need persistence:
 
-§15 -- "All parameters below must be editable without a code deployment."
+15 -- "All parameters below must be editable without a code deployment."
   The rates live in :class:`PricingParameters` rows rather than in a dataclass
   default, so an admin change takes effect on the next quote and is itself
   recorded.
 
-§17 -- "Every pricing calculation is stored", with a version, and "Historical
+17 -- "Every pricing calculation is stored", with a version, and "Historical
   orders retain their original calculation -- never recalculate historical
   economics with current rules."
   :class:`PricingCalculation` is append-only and carries every input and every
@@ -52,7 +52,7 @@ class ParameterValueType(str, enum.Enum):
 
 
 class PricingParameter(Base):
-    """One editable pricing parameter (§15).
+    """One editable pricing parameter (15).
 
     A name/value table rather than columns, because the set of parameters is
     expected to grow (per-zone overrides in v1.1, per-vehicle rates) and because
@@ -94,7 +94,7 @@ class PricingParameter(Base):
 
 
 class PricingCalculation(Base):
-    """One immutable pricing calculation (§17).
+    """One immutable pricing calculation (17).
 
     Deliberately a separate table from the fulfillment rather than more columns
     on it: one order may be priced several times -- a quote at checkout, a
@@ -121,7 +121,7 @@ class PricingCalculation(Base):
     # rather than silently duplicating the audit trail.
     reason = Column(String(40), nullable=False, server_default="quote")
 
-    # Provenance of the distance (§3.2,4). Storing the source and the
+    # Provenance of the distance (3.2,4). Storing the source and the
     # approximate flag makes3.2 compliance verifiable after the fact: a price
     # built on straight-line distance can be identified years later.
     merchant_lat = Column(Numeric(9, 6))
@@ -135,7 +135,7 @@ class PricingCalculation(Base):
     distance_source = Column(String(20))
     distance_is_approximate = Column(Boolean, default=False, nullable=False, server_default="0")
 
-    # Order inputs (§3.1,7,9)
+    # Order inputs (3.1,7,9)
     basket_value = Column(Numeric(12, 2), nullable=False)
     package_weight_kg = Column(Numeric(8, 3))
     service_level = Column(String(20))

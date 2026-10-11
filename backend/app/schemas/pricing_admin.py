@@ -1,4 +1,4 @@
-"""Pydantic schemas for the pricing API (§16) and admin parameters (§15)."""
+"""Pydantic schemas for the pricing API (16) and admin parameters (15)."""
 
 from datetime import datetime
 from decimal import Decimal
@@ -18,7 +18,7 @@ class ORMModel(BaseModel):
 
 
 class PricingDistance(BaseModel):
-    """§16 names these three explicitly. `total_km` is the whole rider movement,
+    """16 names these three explicitly. `total_km` is the whole rider movement,
     which is what the rider is paid on."""
 
     rider_to_merchant_km: Decimal
@@ -61,7 +61,7 @@ class PricingProfitability(BaseModel):
 
 
 class PricingRecommendation(BaseModel):
-    """§12: the engine returns a recommendation and never auto-rejects."""
+    """12: the engine returns a recommendation and never auto-rejects."""
 
     action: str
     reason: str
@@ -73,7 +73,7 @@ class PricingResponse(BaseModel):
     order_id: UUID
     pricing_version: str
     # A quote built on straight-line distance is not a defensible firm price
-    # (§3.2). Surfaced so the caller can decide, rather than buried in an audit
+    # (3.2). Surfaced so the caller can decide, rather than buried in an audit
     # table nobody reads.
     distance_is_approximate: bool
     requires_manual_quote: bool
@@ -108,7 +108,7 @@ class PricingQuoteRequest(BaseModel):
 
 
 class PricingCalculationRead(ORMModel):
-    """A stored calculation (§17). Read-only -- these rows are append-only."""
+    """A stored calculation (17). Read-only -- these rows are append-only."""
 
     id: UUID
     order_id: UUID

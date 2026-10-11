@@ -2,10 +2,10 @@
 
 Two jobs, both required by the specification:
 
-§15 -- load :class:`PricingConfig` from the ``pricing_parameters`` table so rates
+15 -- load :class:`PricingConfig` from the ``pricing_parameters`` table so rates
   can be changed by an admin without a deployment.
 
-§17 -- persist every :class:`PricingResult` to ``pricing_calculations`` with the
+17 -- persist every :class:`PricingResult` to ``pricing_calculations`` with the
   version it was calculated under, and never recompute a historical one.
 
 The engine itself stays pure. This module is the only part that touches the
@@ -280,7 +280,7 @@ def record_calculation(
     distance_is_approximate: bool = False,
     commit: bool = True,
 ) -> PricingCalculation:
-    """Persist one calculation (§17).
+    """Persist one calculation (17).
 
     Every parameter value that affected the outcome is copied onto the row, not
     referenced. That is what makes17's promise possible: a schedule change in
@@ -373,7 +373,7 @@ def quote_order(
                 return _result_from_row(existing), existing
 
     config = load_config(db)
-    # Merchant subsidy defaults to the shop's configured contribution (§10.1).
+    # Merchant subsidy defaults to the shop's configured contribution (10.1).
     if merchant_subsidy is None:
         shop = order.shop
         if shop is not None and shop.delivery_subsidy_enabled:

@@ -53,7 +53,7 @@ class Shop(Base):
     delivery_subsidy_amount = Column(Numeric(12, 2), nullable=False, server_default="0")
     # ...and/or a threshold rule: at or above this basket value the merchant
     # covers up to `maximum_delivery_subsidy`, which can zero the customer's
-    # payment entirely (§10.2).
+    # payment entirely (10.2).
     free_delivery_threshold = Column(Numeric(12, 2))
     maximum_delivery_subsidy = Column(Numeric(12, 2))
     # Caps the merchant's total exposure; the engine must not exceed it.
