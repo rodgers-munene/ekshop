@@ -102,7 +102,7 @@ export default function ChurnOutreachPanel({
           <h2 className="text-sm font-bold text-ink">Churn risk</h2>
           <p className="text-xs text-muted mt-0.5">
             Buyers whose last order predates this period
-            {rows.length > 0 && ` · ${rows.length} shown`}
+            {rows.length > 0 && ` - ${rows.length} shown`}
           </p>
         </div>
         {rows.length > 0 && (
@@ -128,14 +128,14 @@ export default function ChurnOutreachPanel({
                     <input
                       type="checkbox"
                       aria-label="Select all"
-                      checked={selected.size === rows.length && rows.length > 0}
-                      onChange={(e) =>
-                        setSelected(
-                          e.target.checked
-                            ? new Set(rows.map((r) => r.user_id))
-                            : new Set(),
-                        )
-                      }
+                      checked={rows.length > 0 && selected.size === rows.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelected(new Set(rows.map((r) => r.user_id)));
+                        } else {
+                          setSelected(new Set());
+                        }
+                      }}
                     />
                   </th>
                   <th className="font-semibold py-2 pr-3">Customer</th>
@@ -254,9 +254,9 @@ export default function ChurnOutreachPanel({
                     : "Emailed"}{" "}
                   {result.sent || result.results.filter((r) => r.status === "would_send").length}{" "}
                   of {result.attempted}
-                  {result.failed > 0 && ` · ${result.failed} failed`}
+                  {result.failed > 0 && ` - ${result.failed} failed`}
                   {result.skipped_not_at_risk > 0 &&
-                    ` · ${result.skipped_not_at_risk} skipped`}
+                    ` - ${result.skipped_not_at_risk} skipped`}
                 </p>
                 <ul className="mt-1 space-y-0.5">
                   {result.results
