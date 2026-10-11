@@ -10,6 +10,7 @@ from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 
 from app.core.config import settings
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +249,6 @@ async def send_push_notification(
     # If db_session provided, look up user's FCM token
     token = None
     if db_session:
-        from app.models.user import User
         user = db_session.query(User).filter(User.id == user_id).first()
         if user and user.fcm_token:
             token = user.fcm_token
@@ -281,7 +281,6 @@ async def send_push_to_multiple(
 
     tokens = []
     if db_session:
-        from app.models.user import User
         users = db_session.query(User).filter(User.id.in_(user_ids)).all()
         for user in users:
             if user.fcm_token:

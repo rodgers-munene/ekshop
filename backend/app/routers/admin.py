@@ -436,9 +436,7 @@ def get_stats_trend(
 
 
 def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOverviewPeriodMetrics:
-    from decimal import Decimal
     from app.models.commerce import OrderGroup, OrderGroupStatus
-    from app.models.payment import Payment, PaymentStatus
     from app.models.delivery import Delivery
 
     figs = _period_figures(db, since, until)

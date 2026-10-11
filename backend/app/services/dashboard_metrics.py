@@ -1191,7 +1191,6 @@ def get_seller_analytics(
     status_filter: Optional[str] = None,
 ) -> dict:
     """Get detailed analytics for all sellers/merchants with pagination."""
-    from decimal import Decimal
     from sqlalchemy import cast, func, and_, or_, case
     from sqlalchemy.orm import selectinload
 

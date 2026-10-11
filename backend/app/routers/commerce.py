@@ -589,8 +589,6 @@ def update_order_status(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    # confirm the order belongs to this seller's shop
-    from app.models.shop import Shop
     shop = db.query(Shop).filter(
         Shop.id == order.shop_id,
         Shop.seller_id == current_user.id,

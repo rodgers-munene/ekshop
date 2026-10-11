@@ -276,8 +276,6 @@ def run_abandoned_carts_recovery(
     db: Session = Depends(get_db),
     _: None = Depends(verify_cron_secret),
 ):
-    from datetime import datetime, timedelta, timezone
-
     cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
 
     abandoned_carts = (
@@ -379,8 +377,6 @@ def expire_old_scheduled_orders(
     _: None = Depends(verify_cron_secret),
 ):
     """Cancel scheduled orders that are past their scheduled time + expiry window."""
-    from app.models.commerce import OrderGroup, OrderGroupStatus
-
     expiry_cutoff = datetime.now(timezone.utc) - timedelta(hours=expiry_hours)
 
     expired_groups = db.query(OrderGroup).filter(

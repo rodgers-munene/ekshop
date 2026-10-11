@@ -321,7 +321,6 @@ async def update_delivery_status(
     elif payload.status == DeliveryStatus.in_transit:
         delivery.in_transit_at = now
         # Generate OTP for delivery verification
-        import random
         delivery.otp_code = str(random.randint(100000, 999999))
         delivery.otp_expires_at = now + timedelta(minutes=30)
     elif payload.status == DeliveryStatus.delivered:
@@ -1813,7 +1812,6 @@ def create_trip_share(
     if not delivery:
         raise HTTPException(404, "Delivery not found or not assigned to you")
 
-    import secrets
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=payload.expires_in_hours)
 
@@ -2073,7 +2071,6 @@ def update_delivery_stop(
         if payload.status == DeliveryStatus.picked:
             stop.arrived_at = datetime.now(timezone.utc)
             # Generate OTP for this stop
-            import random
             stop.otp_code = str(random.randint(100000, 999999))
             stop.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
         elif payload.status == DeliveryStatus.delivered:

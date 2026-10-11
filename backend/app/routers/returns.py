@@ -277,7 +277,6 @@ def update_return_status(
             logger.warning(f"Failed to create eTIMS credit note for return {return_req.id}: {e}")
 
     # Notify buyer
-    from app.services.notifications import create_notification
     status_messages = {
         ReturnStatus.approved: "Your return has been approved. Please ship the item back.",
         ReturnStatus.rejected: "Your return request has been rejected.",
