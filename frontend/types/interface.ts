@@ -507,7 +507,7 @@ export interface IssueOtpResponse {
   expires_at: string;
 }
 
-// ── Pricing (§16 response shape) ──────────────────────────────────────────────
+// ── Pricing (16 response shape) ──────────────────────────────────────────────
 
 /**
  * HEALTHY / POSITIVE_LOW_MARGIN / LOSS_MAKING.

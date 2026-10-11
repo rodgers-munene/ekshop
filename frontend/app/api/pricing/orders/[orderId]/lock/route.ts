@@ -2,7 +2,7 @@ import { proxy } from "@/lib/bff";
 import type { NextResponse } from "next/server";
 
 /**
- * Confirm and lock the delivery price at checkout (§14).
+ * Confirm and lock the delivery price at checkout (14).
  *
  * After this the price cannot change because assignment was slow, the rider moved
  * further away, or supply changed. The backend measures real road distance here

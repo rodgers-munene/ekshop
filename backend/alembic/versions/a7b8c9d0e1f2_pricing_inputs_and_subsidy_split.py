@@ -56,7 +56,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # ── orders: pricing inputs (§3.1,9,14) ────────────────────────────────
+    # ── orders: pricing inputs (3.1,9,14) ────────────────────────────────
     op.add_column("orders", sa.Column("package_weight_kg", sa.Numeric(8, 3), nullable=True))
     op.add_column(
         "orders",
@@ -73,7 +73,7 @@ def upgrade() -> None:
         "ck_orders_service_level", "orders", "service_level IN ('standard','priority','express')"
     )
 
-    # ── shops: merchant subsidy configuration (§10.1) ────────────────────────
+    # ── shops: merchant subsidy configuration (10.1) ────────────────────────
     op.add_column(
         "shops",
         sa.Column("delivery_subsidy_enabled", sa.Boolean(), nullable=False, server_default="0"),
@@ -89,7 +89,7 @@ def upgrade() -> None:
         "ck_shops_subsidy_amount_non_negative", "shops", "delivery_subsidy_amount >= 0"
     )
 
-    # ── delivery_jobs: split the distance into its two legs (§4,3.2) ───────
+    # ── delivery_jobs: split the distance into its two legs (4,3.2) ───────
     # Backfill the merchant->customer leg from the old single column, so existing
     # jobs keep a usable figure. rider_to_merchant_km stays NULL because the old
     # value never captured it -- it must be measured, not guessed.
@@ -116,7 +116,7 @@ def upgrade() -> None:
     # straight-line and must be treated as approximate until re-measured.
     op.drop_column("delivery_jobs", "distance_km")
 
-    # ── fulfillments: three-way subsidy split (§10, B.1) ─────────────────────
+    # ── fulfillments: three-way subsidy split (10, B.1) ─────────────────────
     op.add_column(
         "fulfillments",
         sa.Column("merchant_subsidy", sa.Numeric(12, 2), nullable=False, server_default="0"),

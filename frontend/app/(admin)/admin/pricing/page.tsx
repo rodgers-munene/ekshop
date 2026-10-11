@@ -10,7 +10,7 @@ import {
 } from "@/types/interface";
 
 /**
- * The pricing parameters an admin can change without a deployment (§15).
+ * The pricing parameters an admin can change without a deployment (15).
  *
  * Two things this screen does deliberately, because they are what stops a
  * placeholder being mistaken for an agreed number:

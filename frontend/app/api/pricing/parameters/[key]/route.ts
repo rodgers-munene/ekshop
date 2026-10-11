@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import type { NextResponse } from "next/server";
 
 /**
- * Read or change one pricing parameter (§15).
+ * Read or change one pricing parameter (15).
  *
  * The backend validates the new value before saving it, so a typo is rejected
  * here rather than becoming a mysterious pricing failure later. It also refuses
