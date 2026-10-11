@@ -36,7 +36,7 @@ class ServiceLevel(str, enum.Enum):
 
     STANDARD uses normal pricing, PRIORITY is higher-priced with restricted
     batching and high dispatch priority, EXPRESS is highest-priced with
-    batching disabled. The multipliers themselves are configuration (§15), not
+    batching disabled. The multipliers themselves are configuration (15), not
     code, so they can be changed without a deployment.
     """
 

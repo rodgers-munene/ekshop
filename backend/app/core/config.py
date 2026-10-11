@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     #   python -c "import secrets; print(secrets.token_urlsafe(32))"
     DELIVERY_OTP_PEPPER: str | None = None
 
-    # --- Road distance (§3.2 of the technical specification) ------------------
+    # --- Road distance (3.2 of the technical specification) ------------------
     # Pricing MUST use road distance, not straight-line/geodesic: road distance
     # runs 20-40% longer in built-up areas, so a geodesic quote systematically
     # undercharges. The provider is pluggable and self-hosted by default.
