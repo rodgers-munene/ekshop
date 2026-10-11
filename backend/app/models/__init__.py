@@ -21,6 +21,19 @@ from app.models.analytics import (
     UserEvent, ProductScore, UserPreference, SearchTerm,
     HeroSlide, Promotion, WeeklyAnalytics, IssueReport, ProductRequest,
 )
+from app.models.zone_pricing import (
+    Zone,
+    ZoneType,
+    PricingTier,
+    ZonePricingTier,
+    ZonePricingOverride,
+    ShopZoneAssignment,
+    CustomerZoneAssignment,
+    ZoneAnalytics,
+    get_zone_for_point,
+    get_zones_near_point,
+    get_zone_by_code,
+)
 
 __all__ = [
     "User", "EmailVerification", "PasswordReset", "RefreshToken", "NotificationPreference",
@@ -40,4 +53,15 @@ __all__ = [
     "PricingParameter", "ParameterValueType", "PricingCalculation",
     "UserEvent", "ProductScore", "UserPreference", "SearchTerm",
     "HeroSlide", "Promotion", "WeeklyAnalytics", "IssueReport", "ProductRequest",
+    "Zone",
+    "ZoneType",
+    "PricingTier",
+    "ZonePricingTier",
+    "ZonePricingOverride",
+    "ShopZoneAssignment",
+    "CustomerZoneAssignment",
+    "ZoneAnalytics",
+    "get_zone_for_point",
+    "get_zones_near_point",
+    "get_zone_by_code",
 ]

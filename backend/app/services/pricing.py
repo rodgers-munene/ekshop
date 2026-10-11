@@ -1,12 +1,17 @@
-"""Delivery pricing and profitability engine.
+"""Delivery pricing and profitability engine with zone-aware pricing.
 
-Pure functions over the technical specification's formulas (§5,6,7,8,10,
-§12,20). No database, no I/O: the caller supplies the inputs and persists the
+Pure functions over the technical specification's formulas (5,6,7,8,10,
+12,20). No database, no I/O: the caller supplies the inputs and persists the
 result. That keeps every arithmetic rule testable without infrastructure, which
 matters because these numbers decide whether Ekshop makes money.
 
+Zone-aware pricing (15.1): Pricing now uses geospatial zones with tier-based
+pricing from the Excel/CSV reference data. Zones are defined by geospatial
+boundaries (PostGIS polygons) and each zone has tier-based pricing from the
+reference Excel/CSV data (Nyaribo, Embassy, etc.).
+
 Three decisions are deliberately *configuration*, not code, so the team can
-change their mind without a deployment (§15 requires exactly that):
+change their mind without a deployment (15 requires exactly that):
 
 - **Which distance the customer pays for.** The specification prices the
   customer on ``D_mc`` while paying the rider on ``D_rm + D_mc``. With the
@@ -25,6 +30,37 @@ centimehundred times a day is a reconciliation problem forever.
 """
 
 from __future__ import annotations
+"""Delivery pricing and profitability engine with zone-aware pricing.
+
+Pure functions over the technical specification's formulas (5,6,7,8,10,
+12,20). No database, no I/O: the caller supplies the inputs and persists the
+result. That keeps every arithmetic rule testable without infrastructure, which
+matters because these numbers decide whether Ekshop makes money.
+
+Zone-aware pricing (15.1): Pricing now uses geospatial zones with tier-based
+pricing from the Excel/CSV reference data. Zones are defined by geospatial
+boundaries (PostGIS polygons) and each zone has tier-based pricing from the
+reference Excel/CSV data (Nyaribo, Embassy, etc.).
+
+Three decisions are deliberately *configuration*, not code, so the team can
+change their mind without a deployment (15 requires exactly that):
+
+- **Which distance the customer pays for.** The specification prices the
+  customer on ``D_mc`` while paying the rider on ``D_rm + D_mc``. With the
+  specified rates that makes every delivery under ~4 km loss-making, because the
+  rider's trip to collect is charged entirely to Ekshop. Set
+  ``charge_rider_detour_to_customer=True`` and the customer pays for the whole
+  rider movement, which is the only variant tested that is profitable at every
+  distance. **This is questionnaire Q23 and it is a business decision, so it is
+  a flag here rather than an assumption in the formula.**
+- Every rate, floor, band and multiplier in ``PricingConfig``.
+- Whether the exception-cost allowance is applied per delivery.
+
+All arithmetic is :class:`~decimal.Decimal`. Floats are never used for money: a
+binary float cannot represent 0.10 exactly, and a fee that is off by a
+centimehundred times a day is a reconciliation problem forever.
+"""
+
 
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
@@ -50,7 +86,7 @@ class ServiceLevel(str, Enum):
 
 
 class PricingStatus(str, Enum):
-    """§12 verdicts. `LOSS_MAKING` is a recommendation, never an automatic reject."""
+    """12 verdicts. `LOSS_MAKING` is a recommendation, never an automatic reject."""
 
     healthy = "HEALTHY"
     positive_low_margin = "POSITIVE_LOW_MARGIN"
@@ -58,7 +94,7 @@ class PricingStatus(str, Enum):
 
 
 class RecommendedAction(str, Enum):
-    """§12 /11 decision ladder, in the order the specification lists them."""
+    """12 /11 decision ladder, in the order the specification lists them."""
 
     normal = "NORMAL"
     optional_incentive = "OPTIONAL_INCENTIVE"
@@ -83,73 +119,167 @@ class SurgeBand:
     multiplier: Decimal
 
 
+"""
+Delivery pricing and profitability engine with zone-aware pricing.
+
+Pure functions over the technical specification's formulas (5,6,7,8,10,
+12,20). No database, no I/O: the caller supplies the inputs and persists the
+result. That keeps every arithmetic rule testable without infrastructure, which
+matters because these numbers decide whether Ekshop makes money.
+
+Zone-aware pricing (15.1): Pricing now uses geospatial zones with tier-based
+pricing from the Excel/CSV reference data. Zones are defined by geospatial
+boundaries (PostGIS polygons) and each zone has tier-based pricing from the
+reference Excel/CSV data (Nyaribo, Embassy, etc.).
+
+Three decisions are deliberately *configuration*, not code, so the team can
+change their mind without a deployment (15 requires exactly that):
+
+- **Which distance the customer pays for.** The specification prices the
+  customer on ``D_mc`` while paying the rider on ``D_rm + D_mc``. With the
+  specified rates that makes every delivery under ~4 km loss-making, because the
+  rider's trip to collect is charged entirely to Ekshop. Set
+  ``charge_rider_detour_to_customer=True`` and the customer pays for the whole
+  rider movement, which is the only variant tested that is profitable at every
+  distance. **This is questionnaire Q23 and it is a business decision, so it is
+  a flag here rather than an assumption in the formula.**
+- Every rate, floor, band and multiplier in ``PricingConfig``.
+- Whether the exception-cost allowance is applied per delivery.
+
+All arithmetic is :class:`~decimal.Decimal`. Floats are never used for money: a
+binary float cannot represent 0.10 exactly, and a fee that is off by a
+centimehundred times a day is a reconciliation problem forever.
+"""
+
+
+from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
+from enum import Enum
+from typing import Optional, Dict, Any, Tuple
+
+MONEY = Decimal("0.01")
+RATE = Decimal("0.0001")
+
+
+def _money(value: Decimal) -> Decimal:
+    return Decimal(value).quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def _rate(value: Decimal) -> Decimal:
+    return Decimal(value).quantize(RATE, rounding=ROUND_HALF_UP)
+
+
+class ServiceLevel(str, Enum):
+    standard = "standard"
+    priority = "priority"
+    express = "express"
+
+
+class PricingStatus(str, Enum):
+    """Verdicts. `LOSS_MAKING` is a recommendation, never an automatic reject."""
+
+    healthy = "HEALTHY"
+    positive_low_margin = "POSITIVE_LOW_MARGIN"
+    loss_making = "LOSS_MAKING"
+
+
+class RecommendedAction(str, Enum):
+    """Decision ladder, in the order the specification lists them."""
+
+    normal = "NORMAL"
+    optional_incentive = "OPTIONAL_INCENTIVE"
+    merchant_subsidy = "MERCHANT_SUBSIDY"
+    basket_building = "BASKET_BUILDING"
+    batching = "BATCHING"
+    alternative_fulfilment = "ALTERNATIVE_FULFILMENT"
+    customer_pays_actual = "CUSTOMER_PAYS_ACTUAL"
+    ekshop_logistics_unavailable = "EKSHOP_LOGISTICS_UNAVAILABLE"
+    manual_quote = "MANUAL_QUOTE"
+
+
+@dataclass(frozen=True)
+class WeightBand:
+    max_kg: Optional[Decimal]  # None = open-ended top band
+    multiplier: Decimal
+
+
+@dataclass(frozen=True)
+class SurgeBand:
+    max_ratio: Optional[Decimal]
+    multiplier: Decimal
+
+
 @dataclass(frozen=True)
 class PricingConfig:
-    """Every tunable from15. Defaults are the specification's MVP values.
+    """Every tunable from 15. Defaults are the specification's MVP values.
 
     Note these are the *specified* values, which the questionnaire shows produce
     a loss on deliveries under roughly 4 km. They are defaults, not
     recommendations; change them here or in the admin once Q23 is answered.
     """
 
-    #5 customer price
+    # 5 customer price
     base_fare: Decimal = Decimal("80")
     customer_distance_rate: Decimal = Decimal("25")
     minimum_delivery_fare: Decimal = Decimal("120")
 
-    #6 rider payout
+    # 6 rider payout
     rider_base_fare: Decimal = Decimal("60")
     rider_distance_rate: Decimal = Decimal("15")
     minimum_rider_payout: Decimal = Decimal("100")
     waiting_grace_minutes: Decimal = Decimal("5")
     waiting_rate_per_minute: Decimal = Decimal("2")
 
-    #7 weight bands, ascending. `None` means "no upper bound".
-    weight_bands: tuple[WeightBand, ...] = (
-        WeightBand(Decimal("5"), Decimal("1.00")),
-        WeightBand(Decimal("10"), Decimal("1.10")),
-        WeightBand(Decimal("20"), Decimal("1.25")),
+    # 7 weight bands, ascending. None means "no upper bound".
+    weight_bands: tuple = field(
+        default_factory=lambda: (
+            WeightBand(Decimal("5"), Decimal("1.00")),
+            WeightBand(Decimal("10"), Decimal("1.10")),
+            WeightBand(Decimal("20"), Decimal("1.25")),
+        )
     )
-    #7 gives ">20 kg -> manual / special quote" with no formula, so there is
+    # 7 gives ">20 kg -> manual / special quote" with no formula, so there is
     # deliberately no multiplier band above 20 kg: the engine refuses instead of
     # inventing a price.
     manual_quote_above_kg: Optional[Decimal] = Decimal("20")
 
     # A.7 service-level multipliers
-    service_multipliers: dict[ServiceLevel, Decimal] = field(
+    service_multipliers: dict = field(
         default_factory=lambda: {
-            ServiceLevel.standard: Decimal("1.00"),
-            ServiceLevel.priority: Decimal("1.15"),
-            ServiceLevel.express: Decimal("1.30"),
+            "standard": Decimal("1.00"),
+            "priority": Decimal("1.15"),
+            "express": Decimal("1.30"),
         }
     )
 
-    #8 surge bands: <=1 -> 1.00, >1..2 -> 1.15, >2..3 -> 1.30, >3 -> 1.50.
+    # 8 surge bands: <=1 -> 1.00, >1..2 -> 1.15, >2..3 -> 1.30, >3 -> 1.50.
     # The customer never sees more than `customer_surge_cap`; beyond that the
     # pressure is expressed as a rider incentive instead (B.2).
-    surge_bands: tuple[SurgeBand, ...] = (
-        SurgeBand(Decimal("1"), Decimal("1.00")),
-        SurgeBand(Decimal("2"), Decimal("1.15")),
-        SurgeBand(Decimal("3"), Decimal("1.30")),
-        #8's ">3 -> 1.50" has no upper bound, so this band is open-ended.
-        SurgeBand(None, Decimal("1.50")),
+    surge_bands: tuple = field(
+        default_factory=lambda: (
+            SurgeBand(Decimal("1"), Decimal("1.00")),
+            SurgeBand(Decimal("2"), Decimal("1.15")),
+            SurgeBand(Decimal("3"), Decimal("1.30")),
+            # 8's ">3 -> 1.50" has no upper bound, so this band is open-ended.
+            SurgeBand(None, Decimal("1.50")),
+        )
     )
     customer_surge_cap: Decimal = Decimal("1.30")
     max_customer_price: Optional[Decimal] = Decimal("500")  # D#1
 
-    #12 profitability
+    # 12 profitability
     target_contribution: Decimal = Decimal("0.15")  # A.8 suggests 15-20%
     payment_cost_rate: Decimal = Decimal("0.015")  # PLACEHOLDER -- D#8 says measure
     failure_probability: Decimal = Decimal("0.08")  # B.4 example
     average_failure_cost: Decimal = Decimal("250")  # B.4 example
 
-    #11 delivery/basket ratio thresholds
+    # 11 delivery/basket ratio thresholds
     ratio_incentive: Decimal = Decimal("0.10")
     ratio_subsidy: Decimal = Decimal("0.20")
     ratio_basket_building: Decimal = Decimal("0.30")
     ratio_intervention: Decimal = Decimal("0.40")
 
-    #10.1 merchant subsidy caps
+    # 10.1 merchant subsidy caps
     maximum_delivery_subsidy: Optional[Decimal] = None
     free_delivery_threshold: Optional[Decimal] = None
 
@@ -158,8 +288,12 @@ class PricingConfig:
     # whole rider movement, which is the only profitable variant tested.
     charge_rider_detour_to_customer: bool = False
 
+    # Zone-aware pricing (15.1): zone-specific overrides for global parameters
+    # Keyed by zone code (e.g., "nyaribo", "embassy")
+    zone_overrides: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
     def weight_multiplier(self, package_weight_kg: Optional[Decimal]) -> Optional[Decimal]:
-        """§7 lookup. `None` when the order needs a manual quote."""
+        """Lookup. None when the order needs a manual quote."""
         if package_weight_kg is None:
             return Decimal("1.00")
         if self.manual_quote_above_kg is not None and package_weight_kg > self.manual_quote_above_kg:
@@ -167,13 +301,13 @@ class PricingConfig:
         for band in self.weight_bands:
             if band.max_kg is None or package_weight_kg <= band.max_kg:
                 return band.multiplier
-        return None  # pragma: no cover - unreachable while manual_quote_above_kg is set
+        return None  # unreachable while manual_quote_above_kg is set
 
     def surge_multiplier(self, supply_ratio: Optional[Decimal]) -> Decimal:
-        """§8. `supply_ratio = orders_waiting / available_riders`.
+        """8. `supply_ratio = orders_waiting / available_riders`.
 
         Ratios above the highest band take that band's multiplier rather than
-        falling back to 1.00:8 defines ">3 -> 1.50" with no upper limit, so a
+        falling back to 1.00: 8 defines ">3 -> 1.50" with no upper limit, so a
         severe shortage must still attract riders. Returning 1.00 here would
         quietly drop the surge exactly when demand is worst.
         """
@@ -191,13 +325,26 @@ class PricingConfig:
         raw = self.surge_multiplier(supply_ratio) * service_multiplier
         return min(raw, self.customer_surge_cap)
 
+    def get_zone_config(self, zone_code: Optional[str]) -> Dict[str, Any]:
+        """Get zone-specific configuration overrides."""
+        if not zone_code:
+            return {}
+        return self.zone_overrides.get(str(zone_code), {})
+
+    def get_param(self, zone_code: Optional[str], param: str, default: Any) -> Any:
+        """Get parameter value with zone override fallback."""
+        zone_config = self.get_zone_config(zone_code)
+        if param in zone_config:
+            return zone_config[param]
+        return getattr(self, param, default)
+
 
 @dataclass(frozen=True)
 class PricingInputs:
-    """§3 required inputs, plus the4 distances and12 basket value."""
+    """Required inputs, plus the distances, basket value, and zone info."""
 
     basket_value: Decimal
-    #4: the leg the customer is priced on by default...
+    # The leg the customer is priced on by default...
     merchant_to_customer_km: Decimal
     # ...and the rider's trip to collect, which the rider is always paid for.
     rider_to_merchant_km: Decimal = Decimal("0")
@@ -206,15 +353,24 @@ class PricingInputs:
     supply_ratio: Optional[Decimal] = None
     merchant_subsidy: Decimal = Decimal("0")
     ekshop_subsidy: Decimal = Decimal("0")
-    # Actual measured waiting,6. None before pickup.
+    # Actual measured waiting. None before pickup.
     actual_wait_minutes: Optional[Decimal] = None
+    # Zone-aware pricing (15.1): zone code for zone-specific pricing
+    zone_code: Optional[str] = None
+    # Zone-specific tier (small, medium, large, free, oversized) - can be name or code
+    pricing_tier: Optional[str] = None
+    # Optional: pass pre-resolved zone object from DB
+    zone: Optional["Zone"] = None  # type: ignore[name-defined]
+    # Latitude/longitude for resolving zone if zone not provided
+    latitude: Optional[Decimal] = None
+    longitude: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
 class PricingResult:
-    """The16 response, plus the20 status and decision."""
+    """The response, plus the status and decision."""
 
-    #16
+    # 16
     merchant_to_customer_km: Decimal
     rider_to_merchant_km: Decimal
     total_km: Decimal
@@ -243,6 +399,16 @@ class PricingResult:
     recommended_action: RecommendedAction
     reason: str
     requires_manual_quote: bool = False
+    # Zone-aware pricing (15.1)
+    zone_code: Optional[str] = None
+    zone_name: Optional[str] = None
+    zone_type: Optional[str] = None
+    pricing_tier: Optional[str] = None
+    pricing_tier_code: Optional[str] = None
+    tier_fee_range: Optional[Dict[str, Decimal]] = None
+    tier_min_fee: Optional[Decimal] = None
+    tier_max_fee: Optional[Decimal] = None
+    zone_metadata: Optional[Dict[str, Any]] = None
 
 
 class PricingError(ValueError):
@@ -256,9 +422,116 @@ def _dec(value, name: str) -> Decimal:
         raise PricingError(f"{name} must be a number, got {value!r}") from exc
 
 
+def _resolve_zone(inputs: PricingInputs, session=None):
+    """Resolve zone for pricing using zone_pricing helpers."""
+    try:
+        from app.models.zone_pricing import (
+            Zone,
+            get_zone_by_code,
+            get_zone_for_point,
+        )
+    except Exception:
+        return None
+
+    zone = inputs.zone
+    if isinstance(zone, Zone):
+        return zone
+
+    if inputs.zone_code:
+        try:
+            z = get_zone_by_code(str(inputs.zone_code))
+            if z is not None:
+                return z
+        except Exception:
+            pass
+
+    if inputs.latitude is not None and inputs.longitude is not None:
+        try:
+            lat = _dec(inputs.latitude, "latitude")
+            lon = _dec(inputs.longitude, "longitude")
+            z = get_zone_for_point(float(lat), float(lon))
+            if z is not None:
+                return z
+        except Exception:
+            pass
+
+    return None
+
+
+def _get_zone_pricing_tiers(zone):
+    """Get pricing tiers for a zone as dicts."""
+    tiers = []
+    if zone is None:
+        return tiers
+    try:
+        for zpt in getattr(zone, "pricing_tiers", []) or []:
+            tier = getattr(zpt, "pricing_tier", None)
+            if tier is None:
+                continue
+            tiers.append(
+                {
+                    "tier": tier,
+                    "min_fee": getattr(zpt, "min_fee", None),
+                    "max_fee": getattr(zpt, "max_fee", None),
+                    "base_fee": getattr(zpt, "base_fee", None),
+                }
+            )
+    except Exception:
+        tiers = []
+    return tiers
+
+
+def _get_zone_pricing_overrides(zone):
+    """Get pricing overrides for a zone."""
+    overrides = {}
+    if zone is None:
+        return overrides
+    try:
+        for override in getattr(zone, "pricing_overrides", []) or []:
+            param = getattr(override, "parameter_name", None)
+            if not param:
+                continue
+            overrides[param] = getattr(override, "parameter_value", None)
+    except Exception:
+        overrides = {}
+    return overrides
+
+
+def _apply_zone_tier_to_price(zone, tier_key: Optional[str], base_price: Decimal) -> Tuple[Decimal, Optional[Dict[str, Any]]]:
+    """Apply zone tier constraints (min/max/base) if defined."""
+    if zone is None or not tier_key:
+        return base_price, None
+
+    tiers = _get_zone_pricing_tiers(zone)
+    for t in tiers:
+        tier = t.get("tier")
+        tier_name = getattr(tier, "name", None) or getattr(tier, "code", None) or str(tier)
+        tier_code = getattr(tier, "code", None) or tier_name
+        if str(tier_key).lower() in (str(tier_name or "").lower(), str(tier_code or "").lower()):
+            min_f = t.get("min_fee")
+            max_f = t.get("max_fee")
+            base_f = t.get("base_fee")
+            price = base_price
+            if base_f is not None:
+                price = _dec(base_f, "tier_base_fee")
+            if min_f is not None and price < _dec(min_f, "tier_min_fee"):
+                price = _dec(min_f, "tier_min_fee")
+            if max_f is not None and price > _dec(max_f, "tier_max_fee"):
+                price = _dec(max_f, "tier_max_fee")
+            return _money(price), {
+                "tier_name": tier_name,
+                "tier_code": tier_code,
+                "min_fee": min_f,
+                "max_fee": max_f,
+                "base_fee": base_f,
+            }
+    return base_price, None
+
+
 def calculate(
     inputs: PricingInputs,
     config: Optional[PricingConfig] = None,
+    session=None,
 ) -> PricingResult:
     """Price one delivery. Implements5,6,7,8,10,11,12 and20.
 
@@ -266,7 +539,27 @@ def calculate(
     cannot produce a defensible price -- negative money, a missing distance, or
     an order over the manual-quote weight.
     """
-    config = config or PricingConfig()
+    # Resolve zone
+    zone = _resolve_zone(inputs, session=session)
+    resolved_zone_code = inputs.zone_code
+    if zone is not None:
+        resolved_zone_code = getattr(zone, "code", None) or resolved_zone_code
+        if not resolved_zone_code:
+            resolved_zone_code = getattr(zone, "name", None)
+
+    # Merge zone overrides into config if present
+    if config is None:
+        config = PricingConfig()
+    zone_overrides = _get_zone_pricing_overrides(zone)
+    if zone_overrides:
+        try:
+            # Create new config with merged overrides (zone_overrides keyed by param name)
+            merged_overrides = dict(getattr(config, "zone_overrides", {}))
+            # If overrides come from DB, we can apply by setting zone-specific overrides
+            # Also apply as direct overrides by updating config values if they match
+            object.__setattr__(config, "zone_overrides", merged_overrides)
+        except Exception:
+            pass
 
     basket_value = _dec(inputs.basket_value, "basket_value")
     d_mc = _dec(inputs.merchant_to_customer_km, "merchant_to_customer_km")
@@ -298,19 +591,38 @@ def calculate(
     )
 
     # ──5 customer price ────────────────────────────────────────────────────
-    base_price = _money(config.base_fare + config.customer_distance_rate * d_mc)
+    # Apply zone overrides for base rates if present
+    base_fare = config.get_param(resolved_zone_code, "base_fare", config.base_fare)
+    customer_distance_rate = config.get_param(resolved_zone_code, "customer_distance_rate", config.customer_distance_rate)
+    minimum_delivery_fare = config.get_param(resolved_zone_code, "minimum_delivery_fare", config.minimum_delivery_fare)
+
+    # Also apply DB zone overrides (parameter_name -> parameter_value)
+    if zone_overrides:
+        if "base_fare" in zone_overrides:
+            base_fare = _dec(zone_overrides["base_fare"], "zone_override_base_fare")
+        if "customer_distance_rate" in zone_overrides:
+            customer_distance_rate = _dec(zone_overrides["customer_distance_rate"], "zone_override_customer_distance_rate")
+        if "minimum_delivery_fare" in zone_overrides:
+            minimum_delivery_fare = _dec(zone_overrides["minimum_delivery_fare"], "zone_override_minimum_delivery_fare")
+        if "rider_base_fare" in zone_overrides:
+            object.__setattr__(config, "_zone_rider_base_fare", _dec(zone_overrides["rider_base_fare"], "zone_override_rider_base_fare"))
+        if "rider_distance_rate" in zone_overrides:
+            object.__setattr__(config, "_zone_rider_distance_rate", _dec(zone_overrides["rider_distance_rate"], "zone_override_rider_distance_rate"))
+        if "minimum_rider_payout" in zone_overrides:
+            object.__setattr__(config, "_zone_min_rider_payout", _dec(zone_overrides["minimum_rider_payout"], "zone_override_min_rider_payout"))
+
+    base_price_calc = _money(base_fare + customer_distance_rate * d_mc)
     surge_multiplier = config.customer_surge_effective(inputs.supply_ratio, service_multiplier)
 
     charged_km = d_total if config.charge_rider_detour_to_customer else d_mc
     # When the customer pays for the whole movement, the distance term is
     # recomputed on that distance rather than reusing the D_mc figure.
-    price_distance = (
-        config.base_fare + config.customer_distance_rate * charged_km
-        if config.charge_rider_detour_to_customer
-        else base_price
-    )
-    adjusted = price_distance * weight_multiplier * surge_multiplier
-    customer_delivery_price = max(config.minimum_delivery_fare, _money(adjusted))
+    if config.charge_rider_detour_to_customer:
+        price_distance_calc = base_fare + customer_distance_rate * charged_km
+    else:
+        price_distance_calc = base_price_calc
+    adjusted = price_distance_calc * weight_multiplier * surge_multiplier
+    customer_delivery_price = max(minimum_delivery_fare, _money(adjusted))
 
     ceiling_breached = (
         config.max_customer_price is not None
@@ -335,7 +647,7 @@ def calculate(
     total_subsidy = applied_merchant_subsidy + ekshop_subsidy
     customer_payment = _money(max(Decimal("0"), customer_delivery_price - total_subsidy))
 
-    # ──6 rider payout, always on the full movement (§4) ────────────────────
+    # ──6 rider payout, always on the full movement (4) ────────────────────
     chargeable_wait = Decimal("0")
     if inputs.actual_wait_minutes is not None:
         chargeable_wait = max(
@@ -353,6 +665,12 @@ def calculate(
     )
 
     # ──12 profitability, always on the gross price (B.1) ───────────────────
+    # Apply zone tier pricing if specified
+    tier_key = inputs.pricing_tier or getattr(zone, "default_pricing_tier", None) if zone else inputs.pricing_tier
+    tier_info = None
+    if tier_key:
+        customer_delivery_price, tier_info = _apply_zone_tier_to_price(zone, tier_key, customer_delivery_price)
+
     payment_cost = _money(customer_delivery_price * config.payment_cost_rate)
     expected_exception_cost = _money(config.failure_probability * config.average_failure_cost)
     expected_delivery_cost = _money(
@@ -399,12 +717,25 @@ def calculate(
         ceiling_breached=ceiling_breached,
     )
 
+    # Build tier fields
+    tier_fee_range = None
+    tier_min_fee = None
+    tier_max_fee = None
+    if tier_info:
+        tier_min_fee = tier_info.get("min_fee")
+        tier_max_fee = tier_info.get("max_fee")
+        if tier_min_fee is not None or tier_max_fee is not None:
+            tier_fee_range = {
+                "min": _money(_dec(tier_min_fee, "tier_min")) if tier_min_fee is not None else Decimal("0"),
+                "max": _money(_dec(tier_max_fee, "tier_max")) if tier_max_fee is not None else Decimal("0"),
+            }
+
     return PricingResult(
         merchant_to_customer_km=d_mc,
         rider_to_merchant_km=d_rm,
         total_km=_rate(d_total),
         charged_km=charged_km,
-        base_price=_money(price_distance),
+        base_price=_money(price_distance_calc),
         weight_multiplier=weight_multiplier,
         surge_multiplier=surge_multiplier,
         service_multiplier=service_multiplier,
@@ -427,6 +758,15 @@ def calculate(
         status=status,
         recommended_action=action,
         reason=reason,
+        zone_code=resolved_zone_code,
+        zone_name=getattr(zone, "name", None) if zone else None,
+        zone_type=getattr(zone, "zone_type", None).value if zone and getattr(zone, "zone_type", None) else None,
+        pricing_tier=tier_info.get("tier_name") if tier_info else tier_key,
+        pricing_tier_code=tier_info.get("tier_code") if tier_info else tier_key,
+        tier_fee_range=tier_fee_range,
+        tier_min_fee=tier_min_fee if tier_min_fee is not None else (tier_fee_range.get("min") if tier_fee_range else None),
+        tier_max_fee=tier_max_fee if tier_max_fee is not None else (tier_fee_range.get("max") if tier_fee_range else None),
+        zone_metadata=getattr(zone, "metadata", None) if zone else None,
     )
 
 
@@ -437,7 +777,15 @@ def _manual_quote(
     d_rm: Decimal,
     d_total: Decimal,
 ) -> PricingResult:
-    """§7's ">20 kg -> manual / special quote" has no formula, so nothing is invented."""
+    """7's ">20 kg -> manual / special quote" has no formula, so nothing is invented."""
+    # Resolve zone for manual quote result
+    zone = _resolve_zone(inputs)
+    resolved_zone_code = inputs.zone_code
+    if zone is not None:
+        resolved_zone_code = getattr(zone, "code", None) or resolved_zone_code
+        if not resolved_zone_code:
+            resolved_zone_code = getattr(zone, "name", None)
+
     return PricingResult(
         merchant_to_customer_km=d_mc,
         rider_to_merchant_km=d_rm,
@@ -470,6 +818,9 @@ def _manual_quote(
             f"manual quote and defines no formula"
         ),
         requires_manual_quote=True,
+        zone_code=resolved_zone_code,
+        zone_name=getattr(zone, "name", None) if zone else None,
+        zone_type=getattr(zone, "zone_type", None).value if zone and getattr(zone, "zone_type", None) else None,
     )
 
 
@@ -481,7 +832,7 @@ def _recommend(
     ratio: Optional[Decimal],
     ceiling_breached: bool,
 ) -> tuple[RecommendedAction, str]:
-    """§12 for LOSS_MAKING,11 for a high delivery/basket ratio.
+    """12 for LOSS_MAKING,11 for a high delivery/basket ratio.
 
     The specification is explicit that the system "must not automatically reject
     a below-target order; it returns a pricing recommendation", so this never
