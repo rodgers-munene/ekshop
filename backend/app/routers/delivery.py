@@ -600,37 +600,27 @@ async def optimize_route(
         matrix = await get_route_matrix(coords)
     except Exception:
         logger.warning("Route matrix unavailable, falling back to haversine", exc_info=True)
-        matrix = [[0.0 if i == j else _haversine(*coords[i], *coords[j]) for j in range(len(coords))] for i in range(len(coords))]
+        matrix = [[{"distance_km": 0.0 if i == j else _haversine_distance(*coords[i], *coords[j]), "duration_min": None} for j in range(len(coords))] for i in range(len(coords))]
 
-    def leg_values(i: int, j: int) -> tuple[float, float | None]:
-        leg = matrix[i][j]
+    # Use 2-opt optimization for better routes
+    from app.services.routing import optimize_route_2opt
+    optimized_path, total_dist, total_dur = optimize_route_2opt(coords, matrix)
+
+    # Update stops with optimized distances
+    for i in range(len(optimized_path) - 1):
+        curr_idx = optimized_path[i]
+        next_idx = optimized_path[i + 1]
+        leg = matrix[optimized_path[i]][optimized_path[i + 1]]
         if isinstance(leg, dict):
-            dist = leg.get("distance_km")
+            dist = leg.get("distance_km", 0.0)
             dur = leg.get("duration_min")
-            if dist is None:
-                dist = _haversine(*coords[i], *coords[j])
-            return float(dist), (float(dur) if dur is not None else None)
-        return float(leg), None
-
-    unvisited = set(range(len(coords)))
-    path = [0]
-    unvisited.discard(0)
-    total_dist = 0.0
-    total_dur = 0.0
-
-    while unvisited:
-        last = path[-1]
-        next_idx = min(unvisited, key=lambda i: leg_values(last, i)[0])
-        dist, dur = leg_values(last, next_idx)
-        total_dist += dist
-        if dur is not None:
-            total_dur += dur
+        else:
+            dist = float(leg) if leg else 0.0
+            dur = None
         stops[next_idx].distance_from_previous_km = round(dist, 2)
         stops[next_idx].duration_from_previous_min = round(dur, 2) if dur is not None else None
-        path.append(next_idx)
-        unvisited.discard(next_idx)
 
-    ordered = [stops[i] for i in path]
+    ordered = [stops[i] for i in optimized_path]
     return RouteOptimizationResponse(
         origin_lat=coords[0][0] if coords else None,
         origin_lng=coords[0][1] if coords else None,
