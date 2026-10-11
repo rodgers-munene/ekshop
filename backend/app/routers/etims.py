@@ -2,7 +2,7 @@
 
 import uuid
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -16,7 +16,7 @@ from app.models.etims import (
 )
 from app.schemas.etims import (
     EtimsInvoiceRead, EtimsInvoiceItemRead, EtimsCreditNoteRead, EtimsCreditNoteItemRead,
-    EtimsQueueRead, EtimsQueueListResponse,
+    EtimsQueueListResponse,
 )
 from app.services import etims as etims_service
 
@@ -36,7 +36,6 @@ def list_invoices(
     if status:
         query = query.filter(EtimsInvoice.status == status)
     query = query.order_by(EtimsInvoice.created_at.desc())
-    total = query.count()
     skip = (page - 1) * limit
     return query.offset(skip).limit(limit).all()
 
@@ -98,7 +97,6 @@ def list_credit_notes(
     if status:
         query = query.filter(EtimsCreditNote.status == status)
     query = query.order_by(EtimsCreditNote.created_at.desc())
-    total = query.count()
     skip = (page - 1) * limit
     return query.offset(skip).limit(limit).all()
 

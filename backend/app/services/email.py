@@ -279,7 +279,6 @@ def send_invoice_email(to: str, invoice: dict) -> None:
     delivery_address = e(str(invoice.get("delivery_address", "")))
     payment_reference = e(str(invoice.get("payment_reference") or ""))
     payment_status = e(str(invoice.get("payment_status", "")))
-    currency = e(str(invoice.get("currency", "KES")))
     subtotal = e(str(invoice.get("subtotal", "0")))
     delivery_fee = e(str(invoice.get("delivery_fee", "0")))
     total = e(str(invoice.get("total", "0")))

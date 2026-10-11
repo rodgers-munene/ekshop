@@ -10,7 +10,7 @@ from app.services.subscriptions import run_billing_cycle
 from app.services.email import _send, send_abandoned_cart_email
 from app.services import dashboard_metrics, reports, etims as etims_service
 from app.services.reports import EAT
-from app.models.commerce import Order, Cart
+from app.models.commerce import Order, Cart, OrderGroup, OrderGroupStatus
 from app.models.shop import Shop
 from app.models.user import User
 
@@ -413,7 +413,6 @@ def process_etims_queue(
 
     # Import here to avoid circular dependency at module load time
     import asyncio
-    from app.services import etims as etims_service
 
     processed = asyncio.run(etims_service.process_queue_batch(db, batch_size))
     return {"status": "completed", "processed": processed, "batch_size": batch_size}

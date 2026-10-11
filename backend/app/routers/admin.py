@@ -8,7 +8,7 @@ from fastapi.responses import Response
 from sqlalchemy import Numeric, cast, func, or_
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.payment import Payment, PaymentStatus
+from app.models.payment import Payment, PaymentStatus, PaymentIntent
 
 from app.core.config import settings
 from app.dependencies.auth import require_admin
@@ -72,8 +72,6 @@ from app.schemas.admin import (
     ShopListResponse,
     SupplyDemandRow,
     UserListResponse,
-    SellerAnalyticsListResponse,
-    SellerAnalytics,
 )
 from app.schemas.shop import ShopRead
 from app.schemas.user import UserRead
@@ -87,7 +85,6 @@ from app.services.dashboard_metrics import (
     get_margin_leakage_metrics,
     get_operations_delivery_metrics,
     get_sales_demand_metrics,
-    get_seller_analytics,
 )
 import html
 import logging
@@ -437,7 +434,6 @@ def get_stats_trend(
 
 def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOverviewPeriodMetrics:
     from app.models.commerce import OrderGroup, OrderGroupStatus
-    from app.models.delivery import Delivery
 
     figs = _period_figures(db, since, until)
     new_buyers = (
@@ -905,27 +901,6 @@ def get_merchant_metrics(
 ):
     since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_merchant_activity_metrics(db, since, until)
-
-
-@router.get("/metrics/sellers", response_model=SellerAnalyticsListResponse)
-def get_seller_analytics(
-    period: Optional[str] = Query(None, pattern=PERIOD_PATTERN),
-    days: int = Query(30, ge=1, le=365),
-    date_from: Optional[date] = Query(
-        None, description="Inclusive start date, YYYY-MM-DD. Overrides `period`."
-    ),
-    date_to: Optional[date] = Query(
-        None, description="Inclusive end date, YYYY-MM-DD. Overrides `period`."
-    ),
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    search: Optional[str] = Query(None, description="Search by shop name or seller name"),
-    status_filter: Optional[str] = Query(None, description="Filter by shop status"),
-    db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
-):
-    since, until, _label = _resolve_window(period, days, date_from, date_to)
-    return dashboard_metrics.get_seller_analytics(db, since, until, page, limit, search, status_filter)
 
 
 @router.get("/metrics/sales", response_model=SalesDemandMetrics)

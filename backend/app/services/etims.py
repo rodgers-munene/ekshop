@@ -5,24 +5,21 @@ Implements the queue-on-failure pattern for KRA eTIMS submission.
 
 import logging
 import uuid
-import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from decimal import Decimal
 
 import httpx
 from sqlalchemy.orm import Session
-from sqlalchemy import func, select, and_
 
 from app.core.config import settings
 from app.models.etims import (
     EtimsInvoice, EtimsInvoiceItem, EtimsCreditNote, EtimsCreditNoteItem, EtimsQueue,
     EtimsInvoiceStatus, EtimsDocumentType, EtimsQueueStatus,
 )
-from app.models.commerce import OrderGroup, Order, OrderItem
+from app.models.commerce import OrderGroup, Order
 from app.models.payment import Payment
 from app.models.user import User
-from app.models.delivery import DeliveryAgent
 
 logger = logging.getLogger(__name__)
 

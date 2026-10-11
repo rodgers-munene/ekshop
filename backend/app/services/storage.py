@@ -48,7 +48,7 @@ def key_from_url(url: str) -> str | None:
     """Recover the S3 object key from a public URL produced by upload_product_image."""
     if settings.AWS_S3_PUBLIC_URL and url.startswith(settings.AWS_S3_PUBLIC_URL):
         return url[len(settings.AWS_S3_PUBLIC_URL.rstrip("/")) + 1:]
-    marker = f".amazonaws.com/"
+    marker = ".amazonaws.com/"
     if marker in url:
         return url.split(marker, 1)[1]
     return None

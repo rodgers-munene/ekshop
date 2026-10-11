@@ -219,7 +219,6 @@ class GPSFraudDetectionService:
         expected_lng: float,
         distance_km: float,
         time_delta_sec: int,
-        speed_kmh: float,
         description: str,
         evidence: dict,
     ) -> GPSFraudAlert:
@@ -247,8 +246,6 @@ class GPSFraudDetectionService:
         from math import radians, sin, cos, sqrt, atan2
         R = 6371
         lat1, lng1, lat2, lng2 = map(radians, [lat1, lng1, lat2, lng2])
-        dlat = lat2 - lat1
-        dlng = lng2 - lng1
         a = sin((lat2 - lat1) / 2)**2 + cos(lat1) * cos(lat2) * sin((lng2 - lng1) / 2)**2
         return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 

@@ -1,6 +1,5 @@
 import logging
 import math
-import random
 from typing import List, Tuple, Optional, Dict, Any
 
 import httpx

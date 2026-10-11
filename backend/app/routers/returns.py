@@ -255,7 +255,6 @@ def update_return_status(
         if payload.status not in valid_transitions[return_req.status]:
             raise HTTPException(status_code=400, detail=f"Invalid transition from {return_req.status.value} to {payload.status.value}")
 
-    old_status = return_req.status
     return_req.status = payload.status
     if payload.admin_notes is not None:
         return_req.admin_notes = payload.admin_notes

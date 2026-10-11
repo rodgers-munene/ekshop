@@ -3,9 +3,8 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from typing import Optional
 from sqlalchemy import (
-    Column, String, Text, DateTime, Enum, ForeignKey, Index, Numeric, Boolean, JSON
+    Column, String, Text, DateTime, Enum, ForeignKey, Index, Numeric, JSON
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship

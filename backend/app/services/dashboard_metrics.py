@@ -16,9 +16,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.analytics import UserEvent, EventType, IssueReport
-from app.models.catalog import Product
+from app.models.catalog import Product, ProductStatus
 from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus, OrderItem
-from app.models.commerce import Cart, CartItem
+from app.models.commerce import Cart, CartItem, ReturnRequest
 from app.models.delivery import Delivery, DeliveryAgent, DeliveryAgentStatus, DeliveryStatus
 from app.models.shop import Shop, ShopStatus
 from app.models.user import User, UserRole, UserStatus, EmailVerification, EmailVerificationPurpose
@@ -475,7 +475,6 @@ def get_cart_abandonment_metrics(db: Session, since: datetime, until: Optional[d
 # ── Merchant Master Health ─────────────────────────────────────────────────────
 
 def get_merchant_master_health(db: Session, since: datetime, until: Optional[datetime] = None) -> List[dict]:
-    end = _bound(since, until)
     since_30d = datetime.now(timezone.utc) - timedelta(days=30)
 
     shops = db.query(Shop).filter(Shop.status == ShopStatus.active).all()
@@ -894,26 +893,6 @@ def get_acquisition_metrics(db: Session, since: datetime, until: datetime) -> di
         .scalar()
         or 0
     )
-    # Users who had their first paid order in this period
-    first_order_subq = (
-        db.query(OrderGroup.buyer_id, func.min(OrderGroup.created_at).label("first_at"))
-        .filter(OrderGroup.status == OrderGroupStatus.paid)
-        .group_by(OrderGroup.buyer_id)
-        .subquery()
-    )
-    first_time_buyers = (
-        db.query(func.count(first_order_subq.c.buyer_id))
-        .filter(first_order_subq.c.first_at >= since, first_order_subq.c.first_at < until)
-        .scalar()
-        or 0
-    )
-    # Returning buyers: had previous orders before this period but also ordered in this period
-    buyers_with_previous = (
-        db.query(func.count(OrderGroup.buyer_id.distinct()))
-        .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at < since)
-        .scalar()
-        or 0
-    )
     returning_buyers = (
         db.query(func.count(OrderGroup.buyer_id))
         .filter(
@@ -1191,7 +1170,7 @@ def get_seller_analytics(
     status_filter: Optional[str] = None,
 ) -> dict:
     """Get detailed analytics for all sellers/merchants with pagination."""
-    from sqlalchemy import cast, func, and_, or_, case
+    from sqlalchemy import cast, func, or_, case
     from sqlalchemy.orm import selectinload
 
     end = _bound(since, until)

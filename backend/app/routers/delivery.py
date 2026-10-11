@@ -1,5 +1,6 @@
 import uuid
 import secrets
+import random
 import math
 import logging
 from datetime import datetime, timedelta, timezone
@@ -63,7 +64,7 @@ from app.services.delivery_pricing import (
     calculate_delivery_fee_from_cart_total,
     get_region,
 )
-from app.services.routing import get_route_eta_distance, get_route_matrix
+from app.services.routing import get_route_eta_distance, get_route_matrix, _haversine_distance
 from app.services import fleet, storage
 from app.services.mpesa import get_access_token, initiate_b2c_payment, initiate_b2c_reversal
 
@@ -607,7 +608,6 @@ async def optimize_route(
 
     # Update stops with optimized distances
     for i in range(len(optimized_path) - 1):
-        curr_idx = optimized_path[i]
         next_idx = optimized_path[i + 1]
         leg = matrix[optimized_path[i]][optimized_path[i + 1]]
         if isinstance(leg, dict):

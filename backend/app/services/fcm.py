@@ -1,6 +1,5 @@
 """FCM (Firebase Cloud Messaging) service for push notifications."""
 
-import json
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
@@ -263,7 +262,7 @@ async def send_push_notification(
     except FCMError as e:
         logger.error(f"Failed to send push notification to user {user_id}: {e}")
         return False
-    except Exception as e:
+    except Exception:
         logger.exception(f"Unexpected error sending push to user {user_id}")
         return False
 
