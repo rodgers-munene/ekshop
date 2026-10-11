@@ -27,3 +27,5 @@ backend/docs/
 kenya-latest.osm.pbf
 *.xlsx
 *.docx
+*.csv
+*.pdf
