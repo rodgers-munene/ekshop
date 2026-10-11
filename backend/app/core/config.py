@@ -205,6 +205,18 @@ class Settings(BaseSettings):
     ETIMS_QUEUE_RETRY_DELAY_SECONDS: int = 300  # 5 minutes between retries
     ETIMS_QUEUE_BATCH_SIZE: int = 50
 
+    # --- FCM / Push Notifications --------------------------------------------
+    FCM_ENABLED: bool = False
+    FCM_PROJECT_ID: str | None = None
+    FCM_PRIVATE_KEY_ID: str | None = None
+    FCM_PRIVATE_KEY: str | None = None  # PEM format, \n escaped
+    FCM_CLIENT_EMAIL: str | None = None
+    FCM_CLIENT_ID: str | None = None
+    FCM_AUTH_URI: str = "https://accounts.google.com/o/oauth2/auth"
+    FCM_TOKEN_URI: str = "https://oauth2.googleapis.com/token"
+    FCM_AUTH_PROVIDER_CERT_URL: str = "https://www.googleapis.com/oauth2/v1/certs"
+    FCM_CLIENT_CERT_URL: str | None = None
+
     @property
     def MPESA_BASE_URL(self) -> str:
         return (

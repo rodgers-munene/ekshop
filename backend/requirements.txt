@@ -17,6 +17,8 @@ fastapi==0.137.2
 greenlet==3.5.2
 h11==0.16.0
 httpcore==1.0.9
+google-auth==2.38.0
+google-auth-httplib2==0.2.0
 httpx==0.28.1
 idna==3.18
 jmespath==1.1.0

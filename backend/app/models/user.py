@@ -41,6 +41,7 @@ class User(Base):
     avatar_url = Column(String(500))
     lat = Column(Float)
     lng = Column(Float)
+    fcm_token = Column(String(512))  # FCM device token for push notifications
     role = Column(Enum(UserRole, native_enum=False), default=UserRole.buyer, nullable=False)
     status = Column(Enum(UserStatus, native_enum=False), default=UserStatus.pending, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
