@@ -1176,3 +1176,274 @@ def get_churn_risks_insight(db: Session, since: datetime, until: Optional[dateti
             }
         )
     return results
+
+
+# ─── Seller Analytics ───
+
+
+def get_seller_analytics(
+    db: Session,
+    since: datetime,
+    until: Optional[datetime] = None,
+    page: int = 1,
+    limit: int = 20,
+    search: Optional[str] = None,
+    status_filter: Optional[str] = None,
+) -> dict:
+    """Get detailed analytics for all sellers/merchants with pagination."""
+    from decimal import Decimal
+    from sqlalchemy import cast, func, and_, or_, case
+    from sqlalchemy.orm import selectinload
+
+    end = _bound(since, until)
+
+    # Build base query for shops
+    shops_query = db.query(Shop).options(
+        selectinload(Shop.seller)
+    ).filter(Shop.status != ShopStatus.deleted)
+
+    if search:
+        search_term = f"%{search}%"
+        shops_query = shops_query.join(User, User.id == Shop.seller_id).filter(
+            or_(
+                Shop.name.ilike(search_term),
+                User.first_name.ilike(search_term),
+                User.last_name.ilike(search_term),
+                (User.first_name + " " + User.last_name).ilike(search_term),
+            )
+        )
+
+    if status_filter:
+        shops_query = shops_query.filter(Shop.status == status_filter)
+
+    total = shops_query.count()
+    shops = (
+        shops_query.order_by(Shop.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+
+    for shop in shops:
+        seller = shop.seller
+
+        # Period orders
+        orders_7d = db.query(func.count(Order.id)).filter(
+            Order.shop_id == shop.id,
+            Order.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
+            Order.created_at < end,
+            Order.status != OrderStatus.pending,
+        ).scalar() or 0
+
+        orders_30d = db.query(func.count(Order.id)).filter(
+            Order.shop_id == shop.id,
+            Order.created_at >= since,
+            Order.created_at < end,
+            Order.status != OrderStatus.pending,
+        ).scalar() or 0
+
+        # GMV
+        gmv_7d = db.query(func.coalesce(func.sum(cast(Order.total, Numeric)), 0)).filter(
+            Order.shop_id == shop.id,
+            Order.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
+            Order.created_at < end,
+            Order.status == OrderStatus.delivered,
+        ).scalar() or Decimal("0")
+
+        gmv_30d = db.query(func.coalesce(func.sum(cast(Order.total, Numeric)), 0)).filter(
+            Order.shop_id == shop.id,
+            Order.created_at >= since,
+            Order.created_at < end,
+            Order.status == OrderStatus.delivered,
+        ).scalar() or Decimal("0")
+
+        # Revenue (commission) - only if PLATFORM_COMMISSION_RATE is set
+        revenue_7d = None
+        revenue_30d = None
+        if settings.PLATFORM_COMMISSION_RATE:
+            commission_rate = settings.PLATFORM_COMMISSION_RATE
+            revenue_7d = str((gmv_7d * commission_rate).quantize(Decimal("0.01")))
+            revenue_30d = str((gmv_30d * commission_rate).quantize(Decimal("0.01")))
+
+        # Average order value
+        avg_order_value_7d = str((gmv_7d / max(orders_7d, 1)).quantize(Decimal("0.01"))) if orders_7d else "0.00"
+        avg_order_value_30d = str((gmv_30d / max(orders_30d, 1)).quantize(Decimal("0.01"))) if orders_30d else "0.00"
+
+        # Cancelled orders
+        cancelled_7d = db.query(func.count(Order.id)).filter(
+            Order.shop_id == shop.id,
+            Order.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
+            Order.created_at < end,
+            Order.status == OrderStatus.cancelled,
+        ).scalar() or 0
+
+        cancelled_30d = db.query(func.count(Order.id)).filter(
+            Order.shop_id == shop.id,
+            Order.created_at >= since,
+            Order.created_at < end,
+            Order.status == OrderStatus.cancelled,
+        ).scalar() or 0
+
+        cancellation_rate_7d = round((cancelled_7d / max(orders_7d, 1)) * 100, 2) if orders_7d else 0.0
+        cancellation_rate_30d = round((cancelled_30d / max(orders_30d, 1)) * 100, 2) if orders_30d else 0.0
+
+        # Dispatch & delivery metrics
+        delivery_data = db.query(
+            func.avg(func.extract('epoch', Delivery.picked_at - Order.created_at) / 3600).label("avg_dispatch"),
+            func.avg(func.extract('epoch', Delivery.delivered_at - Delivery.picked_at) / 3600).label("avg_delivery"),
+        ).select_from(Order).join(Delivery, Delivery.order_id == Order.id, isouter=True).filter(
+            Order.shop_id == shop.id,
+            Order.created_at >= since,
+            Order.created_at < end,
+            Delivery.delivered_at.isnot(None),
+        ).first()
+
+        avg_dispatch_time_hrs = round(float(delivery_data.avg_dispatch or 0), 2) if delivery_data and delivery_data.avg_dispatch else 0.0
+        avg_delivery_time_hrs = round(float(delivery_data.avg_delivery or 0), 2) if delivery_data and delivery_data.avg_delivery else 0.0
+
+        # On-time delivery rate
+        on_time_result = db.query(
+            func.count(Order.id).label("total"),
+            func.count(case((Delivery.delivered_at <= Order.estimated_at, 1))).label("on_time"),
+        ).select_from(Order).join(Delivery, Delivery.order_id == Order.id, isouter=True).filter(
+            Order.shop_id == shop.id,
+            Order.created_at >= since,
+            Order.created_at < end,
+            Order.status == OrderStatus.delivered,
+        ).first()
+
+        on_time_delivery_rate = 0.0
+        if on_time_result and on_time_result.total:
+            on_time_delivery_rate = round((on_time_result.on_time / on_time_result.total) * 100, 2)
+
+        # Product metrics
+        total_products = db.query(func.count(Product.id)).filter(Product.shop_id == shop.id).scalar() or 0
+        active_products = db.query(func.count(Product.id)).filter(
+            Product.shop_id == shop.id,
+            Product.status == ProductStatus.active,
+        ).scalar() or 0
+        out_of_stock_products = db.query(func.count(Product.id)).filter(
+            Product.shop_id == shop.id,
+            Product.status == ProductStatus.active,
+            Product.stock_quantity == 0,
+        ).scalar() or 0
+        low_stock_products = db.query(func.count(Product.id)).filter(
+            Product.shop_id == shop.id,
+            Product.status == ProductStatus.active,
+            Product.stock_quantity > 0,
+            Product.stock_quantity <= 10,
+        ).scalar() or 0
+
+        products_updated_7d = db.query(func.count(func.distinct(Product.id))).filter(
+            Product.shop_id == shop.id,
+            Product.updated_at >= datetime.now(timezone.utc) - timedelta(days=7),
+        ).scalar() or 0
+
+        # Customer metrics
+        unique_customers_7d = db.query(func.count(func.distinct(OrderGroup.buyer_id))).join(
+            Order, Order.group_id == OrderGroup.id
+        ).filter(
+            Order.shop_id == shop.id,
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
+            OrderGroup.created_at < end,
+        ).scalar() or 0
+
+        unique_customers_30d = db.query(func.count(func.distinct(OrderGroup.buyer_id))).join(
+            Order, Order.group_id == OrderGroup.id
+        ).filter(
+            Order.shop_id == shop.id,
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= since,
+            OrderGroup.created_at < end,
+        ).scalar() or 0
+
+        repeat_customers_30d = db.query(func.count(func.distinct(OrderGroup.buyer_id))).join(
+            Order, Order.group_id == OrderGroup.id
+        ).filter(
+            Order.shop_id == shop.id,
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= since,
+            OrderGroup.created_at < end,
+        ).group_by(OrderGroup.buyer_id).having(func.count(OrderGroup.id) > 1).count()
+
+        repeat_customer_rate_30d = round((repeat_customers_30d / max(unique_customers_30d, 1)) * 100, 2) if unique_customers_30d else 0.0
+
+        # Performance metrics
+        avg_prep_time_min = shop.prep_time_minutes or 30
+
+        dispatch_sla_breach_count = db.query(func.count(Delivery.id)).join(
+            Order, Delivery.order_id == Order.id
+        ).filter(
+            Order.shop_id == shop.id,
+            Delivery.assigned_at.isnot(None),
+            Delivery.picked_at.is_(None),
+            Delivery.assigned_at < datetime.now(timezone.utc) - timedelta(hours=2),
+        ).scalar() or 0
+
+        customer_complaints_30d = db.query(func.count(ReturnRequest.id)).filter(
+            ReturnRequest.shop_id == shop.id,
+            ReturnRequest.created_at >= since,
+            ReturnRequest.created_at < end,
+        ).scalar() or 0
+
+        # Rating trend
+        rating_trend = "stable"
+        if shop.rating_avg:
+            rating_val = float(shop.rating_avg)
+            if rating_val >= 4.5:
+                rating_trend = "improving"
+            elif rating_val < 3.5:
+                rating_trend = "declining"
+
+        results.append({
+            "seller_id": str(seller.id),
+            "seller_name": f"{seller.first_name} {seller.last_name}",
+            "shop_name": shop.name,
+            "shop_slug": shop.slug,
+            "shop_status": shop.status.value if hasattr(shop.status, 'value') else str(shop.status),
+            "county": shop.county,
+            "town": shop.town,
+            "is_verified": shop.is_verified,
+            "rating_avg": str(shop.rating_avg) if shop.rating_avg else "0.0",
+            "rating_count": shop.rating_count or 0,
+            "total_products": total_products,
+            "active_products": active_products,
+            "orders_7d": orders_7d,
+            "orders_30d": orders_30d,
+            "gmv_7d": str(gmv_7d.quantize(Decimal("0.01"))),
+            "gmv_30d": str(gmv_30d.quantize(Decimal("0.01"))),
+            "revenue_7d": revenue_7d,
+            "revenue_30d": revenue_30d,
+            "avg_order_value_7d": avg_order_value_7d,
+            "avg_order_value_30d": avg_order_value_30d,
+            "cancelled_orders_7d": cancelled_7d,
+            "cancelled_orders_30d": cancelled_30d,
+            "cancellation_rate_7d": cancellation_rate_7d,
+            "cancellation_rate_30d": cancellation_rate_30d,
+            "avg_dispatch_time_hrs": round(avg_dispatch_time_hrs, 2),
+            "avg_delivery_time_hrs": round(avg_delivery_time_hrs, 2),
+            "on_time_delivery_rate": on_time_delivery_rate,
+            "total_products": total_products,
+            "active_products": active_products,
+            "out_of_stock_products": out_of_stock_products,
+            "low_stock_products": low_stock_products,
+            "products_updated_7d": products_updated_7d,
+            "unique_customers_7d": unique_customers_7d,
+            "unique_customers_30d": unique_customers_30d,
+            "repeat_customers_30d": repeat_customers_30d,
+            "repeat_customer_rate_30d": repeat_customer_rate_30d,
+            "avg_prep_time_min": avg_prep_time_min,
+            "dispatch_sla_breach_count": dispatch_sla_breach_count,
+            "customer_complaints_30d": customer_complaints_30d,
+            "rating_trend": rating_trend,
+        })
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "results": results,
+    }

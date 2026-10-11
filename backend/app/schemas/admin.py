@@ -373,6 +373,61 @@ class MerchantMasterHealth(BaseModel):
     owner: str
 
 
+class SellerAnalytics(BaseModel):
+    """Detailed analytics for a single seller/merchant."""
+    seller_id: uuid.UUID
+    seller_name: str
+    shop_name: str
+    shop_slug: str
+    shop_status: str
+    county: Optional[str] = None
+    town: Optional[str] = None
+    is_verified: bool
+    rating_avg: str
+    rating_count: int
+    total_products: int
+    active_products: int
+    # Period metrics
+    orders_7d: int
+    orders_30d: int
+    gmv_7d: str
+    gmv_30d: str
+    revenue_7d: Optional[str] = None
+    revenue_30d: Optional[str] = None
+    avg_order_value_7d: str
+    avg_order_value_30d: str
+    cancelled_orders_7d: int
+    cancelled_orders_30d: int
+    cancellation_rate_7d: float
+    cancellation_rate_30d: float
+    avg_dispatch_time_hrs: float
+    avg_delivery_time_hrs: float
+    on_time_delivery_rate: float
+    # Product metrics
+    total_products: int
+    active_products: int
+    out_of_stock_products: int
+    low_stock_products: int
+    products_updated_7d: int
+    # Customer metrics
+    unique_customers_7d: int
+    unique_customers_30d: int
+    repeat_customers_30d: int
+    repeat_customer_rate_30d: float
+    # Performance
+    avg_prep_time_min: int
+    dispatch_sla_breach_count: int
+    customer_complaints_30d: int
+    rating_trend: str  # "improving", "stable", "declining"
+
+
+class SellerAnalyticsListResponse(BaseModel):
+    total: int
+    page: int
+    limit: int
+    results: List[SellerAnalytics]
+
+
 class OrderControlTowerRow(BaseModel):
     order_id: str
     received: datetime

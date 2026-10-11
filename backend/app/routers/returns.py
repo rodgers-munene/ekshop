@@ -5,6 +5,7 @@ from typing import Optional
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import desc
 
+from app.core.config import settings
 from app.dependencies.database import get_db
 from app.dependencies.auth import get_current_active_user, require_admin
 from app.models.user import User, UserRole
@@ -17,6 +18,10 @@ from app.schemas.commerce import (
     ReturnStatusUpdate,
 )
 from app.services.notifications import create_notification
+from app.services import etims as etims_service
+import logging
+
+logger = logging.getLogger(__name__)
 
 returns_router = APIRouter(prefix="/returns", tags=["returns"])
 
@@ -262,6 +267,14 @@ def update_return_status(
 
     db.commit()
     db.refresh(return_req)
+
+    # If refunded, create eTIMS credit note and queue for submission
+    if payload.status == ReturnStatus.refunded and settings.ETIMS_ENABLED:
+        try:
+            credit_note = etims_service.create_credit_note_from_return(db, return_req.id)
+            etims_service.queue_credit_note_submission(db, credit_note.id)
+        except etims_service.EtimsError as e:
+            logger.warning(f"Failed to create eTIMS credit note for return {return_req.id}: {e}")
 
     # Notify buyer
     from app.services.notifications import create_notification
