@@ -28,8 +28,7 @@ class OrderStatus(str, enum.Enum):
     shipped = "shipped"
     delivered = "delivered"
     cancelled = "cancelled"
-    refunded = "refunded"
-
+    refunded = "refunded"`r`n`r`nclass OrderSource(str, enum.Enum):`r`n    marketplace = "marketplace"`r`n    first_party = "first_party"`r`n
 
 class ServiceLevel(str, enum.Enum):
     """Delivery service level (spec9).
@@ -50,8 +49,7 @@ class ReturnStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     received = "received"
-    refunded = "refunded"
-    cancelled = "cancelled"
+    refunded = "refunded"`r`n`r`nclass OrderSource(str, enum.Enum):`r`n    marketplace = "marketplace"`r`n    first_party = "first_party"`r`n    cancelled = "cancelled"
 
 
 class ReturnReason(str, enum.Enum):
@@ -198,6 +196,7 @@ class Order(Base):
     group_id = Column(UUID(as_uuid=True), ForeignKey("order_groups.id", ondelete="CASCADE"), nullable=False)
     shop_id = Column(UUID(as_uuid=True), ForeignKey("shops.id"), nullable=False)
     buyer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    source = Column(Enum(OrderSource, native_enum=False), default=OrderSource.marketplace, nullable=False)
     status = Column(Enum(OrderStatus, native_enum=False), default=OrderStatus.pending, nullable=False)
     subtotal = Column(String(20), nullable=False)
     delivery_fee = Column(String(20), default="0.00")
@@ -315,3 +314,7 @@ class ReturnItem(Base):
 
     return_request = relationship("ReturnRequest", back_populates="items")
     order_item = relationship("OrderItem", back_populates="return_items")
+
+
+
+

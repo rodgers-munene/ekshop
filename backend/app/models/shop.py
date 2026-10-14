@@ -39,6 +39,8 @@ class Shop(Base):
     total_sales = Column(Integer, default=0)
     is_verified = Column(Boolean, default=False, nullable=False)
     is_featured = Column(Boolean, default=False, nullable=False)
+    # Platform-owned shop (Ekshop as merchant) - exempt from payment/tier requirements
+    is_platform_owned = Column(Boolean, default=False, nullable=False)
     status = Column(Enum(ShopStatus, native_enum=False), default=ShopStatus.pending, nullable=False)
     # Prep time management
     prep_time_minutes = Column(Integer, default=30, nullable=False)
