@@ -737,6 +737,10 @@ export interface AdminTrendPoint {
   revenue_earned: number | null;
   commission_rate_configured: boolean;
   orders: number;
+  /** Goods Ekshop sells as its own merchant (first-party). */
+  gmv_1p: number;
+  /** Goods sold by outside merchants (marketplace). gmv_1p + gmv_3p = gmv. */
+  gmv_3p: number;
 }
 
 export interface PayerActivity {
@@ -883,6 +887,14 @@ export interface AdminOverviewPeriodMetrics {
   new_shops: number;
   new_products: number;
   cart_abandonment_rate: number;
+  /** 1P/3P split: Ekshop's own goods vs goods sold by outside merchants. */
+  gmv_1p: string;
+  gmv_3p: string;
+  orders_1p: number;
+  orders_3p: number;
+  /** 1P recognises the gross sale; 3P recognises commission only. */
+  revenue_1p: string | null;
+  revenue_3p: string | null;
 }
 
 export interface AdminOverviewTotals {
@@ -900,6 +912,11 @@ gmv_total: string;
   commission_rate_configured: boolean;
   cash_received_total: string;
   refunds_total: string;
+  /** Lifetime 1P/3P split. */
+  gmv_1p_total: string;
+  gmv_3p_total: string;
+  orders_1p_total: number;
+  orders_3p_total: number;
   }
 
 export interface PresenceUser {
@@ -1080,11 +1097,15 @@ export interface OperationsDeliveryMetrics {
 
 export interface MarginLeakageTrendPoint {
   label: string;
+  /** Goods value only, on the same basis as admin GMV. */
   gmv: number;
-  platform_commission: number;
-  mpesa_fees: number;
-  net_profit: number;
-  gross_margin_pct: number;
+  gmv_1p: number;
+  gmv_3p: number;
+  /** null when the rate behind it is not configured. */
+  platform_commission: number | null;
+  mpesa_fees: number | null;
+  net_profit: number | null;
+  gross_margin_pct: number | null;
   aov: number;
 }
 
@@ -1092,16 +1113,23 @@ export interface MarginLeakageMetrics {
   period: string;
   start: string;
   end: string;
+  /** Goods value only (1P + 3P). */
   gmv: string;
+  gmv_1p: string;
+  gmv_3p: string;
+  /** Goods + delivery + tax: what actually moved through the platform. */
+  total_transacted: string;
   orders: number;
   average_order_value: string;
-  platform_commission: string;
-  mpesa_fees: string;
-  server_cost: string;
-  net_profit: string;
-  gross_margin_pct: number;
-  commission_rate_pct: number;
-  mpesa_rate_pct: number;
+  /** null when the rate behind it is not configured. Never shown as zero. */
+  platform_commission: string | null;
+  mpesa_fees: string | null;
+  server_cost: string | null;
+  net_profit: string | null;
+  gross_margin_pct: number | null;
+  commission_rate_pct: number | null;
+  mpesa_rate_pct: number | null;
+  rates_configured: boolean | null;
   trend: MarginLeakageTrendPoint[];
 }
 

@@ -189,6 +189,24 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
               hint="Value of goods only, all time"
             />
             <StatCard
+              label="GMV — Ekshop 1P"
+              value={formatKES(parseFloat(data.totals.gmv_1p_total))}
+              onClick={() => setDrill(ordersSpec())}
+              hint="Goods Ekshop owns and sells itself. Ekshop is the merchant of record, so this is gross revenue and no commission applies to it."
+            />
+            <StatCard
+              label="GMV — Marketplace 3P"
+              value={formatKES(parseFloat(data.totals.gmv_3p_total))}
+              onClick={() => setDrill(ordersSpec())}
+              hint="Goods sold by outside merchants. Ekshop's cut is the commission rate only, never the goods value."
+            />
+            <StatCard
+              label="Orders — 1P / 3P"
+              value={`${data.totals.orders_1p_total} / ${data.totals.orders_3p_total}`}
+              onClick={() => setDrill(ordersSpec())}
+              hint="Per-shop fulfilment units, split by channel. A mixed basket counts once in each channel it touches."
+            />
+            <StatCard
               label="Total transacted"
               value={formatKES(parseFloat(data.totals.total_transacted_total))}
               onClick={() => setDrill(ordersSpec())}
@@ -204,8 +222,8 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
               onClick={() => setDrill(ordersSpec())}
               hint={
                 data.totals.revenue_total == null
-                  ? "No commission rate configured. Nothing in the data model records one."
-                  : "Commission on goods, all time"
+                  ? "No commission rate configured, so the marketplace leg is unknown. Ekshop's own first-party sales still count."
+                  : "First-party gross sales plus commission on marketplace goods, all time"
               }
             />
           </div>
@@ -220,6 +238,18 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
                     label: "GMV (goods)",
                     color: "text-gold",
                     values: data.trend.map((pt) => pt.gmv),
+                  },
+                  {
+                    key: "gmv_1p",
+                    label: "GMV — Ekshop 1P",
+                    color: "text-forest",
+                    values: data.trend.map((pt) => pt.gmv_1p),
+                  },
+                  {
+                    key: "gmv_3p",
+                    label: "GMV — Marketplace 3P",
+                    color: "text-amber",
+                    values: data.trend.map((pt) => pt.gmv_3p),
                   },
                   {
                     key: "transacted",

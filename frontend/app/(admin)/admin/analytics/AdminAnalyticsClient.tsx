@@ -275,6 +275,20 @@ export default function AdminAnalyticsClient({
             <StatCard label="Total orders" value={overview.totals.total_orders} />
             <StatCard label="GMV (goods)" value={formatKES(overview.totals.gmv_total)} />
             <StatCard
+              label="GMV — Ekshop 1P"
+              value={formatKES(overview.totals.gmv_1p_total)}
+              hint="Goods Ekshop sells itself. Gross revenue; no commission applies."
+            />
+            <StatCard
+              label="GMV — Marketplace 3P"
+              value={formatKES(overview.totals.gmv_3p_total)}
+              hint="Goods from outside merchants. Ekshop keeps commission only."
+            />
+            <StatCard
+              label="Orders — 1P / 3P"
+              value={`${overview.totals.orders_1p_total} / ${overview.totals.orders_3p_total}`}
+            />
+            <StatCard
               label="Total transacted"
               value={formatKES(overview.totals.total_transacted_total)}
             />
@@ -293,6 +307,17 @@ export default function AdminAnalyticsClient({
               label="Period GMV"
               value={formatKES(overview.metrics.gmv)}
             />
+            <StatCard
+              label="Period GMV — 1P"
+              value={formatKES(overview.metrics.gmv_1p)}
+              hint="Ekshop's own first-party sales."
+            />
+            <StatCard
+              label="Period GMV — 3P"
+              value={formatKES(overview.metrics.gmv_3p)}
+              hint="Marketplace goods from outside merchants."
+            />
+            <StatCard label="Period orders — 1P / 3P" value={`${overview.metrics.orders_1p} / ${overview.metrics.orders_3p}`} />
             <StatCard
               label="Period transacted"
               value={formatKES(overview.metrics.total_transacted)}
