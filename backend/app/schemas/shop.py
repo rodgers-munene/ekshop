@@ -43,6 +43,7 @@ class ShopRead(BaseModel):
     status: ShopStatus
     prep_time_minutes: int
     max_prep_time_minutes: int
+    is_platform_owned: bool | None = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
