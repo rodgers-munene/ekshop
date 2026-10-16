@@ -15,6 +15,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -97,7 +98,12 @@ class Zone(Base):
 
     # Relationships
     tier_configs = relationship("ZonePricingTier", back_populates="zone", cascade="all, delete-orphan")
-    shops = relationship("Shop", back_populates="zone")
+    shops = relationship(
+        "Shop",
+        secondary="shop_zone_assignments",
+        viewonly=True,
+        lazy="select",
+    )
     pricing_overrides = relationship("ZonePricingOverride", back_populates="zone", cascade="all, delete-orphan")
 
     __table_args__ = (

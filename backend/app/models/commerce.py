@@ -28,7 +28,20 @@ class OrderStatus(str, enum.Enum):
     shipped = "shipped"
     delivered = "delivered"
     cancelled = "cancelled"
-    refunded = "refunded"`r`n`r`nclass OrderSource(str, enum.Enum):`r`n    marketplace = "marketplace"`r`n    first_party = "first_party"`r`n
+    refunded = "refunded"
+
+
+class OrderSource(str, enum.Enum):
+    """Where an order was sold.
+
+    `marketplace` -- a third-party merchant's goods; the platform earns a
+    commission and the merchant keeps the rest.
+    `first_party` -- Ekshop's own shop (is_platform_owned); the platform is
+    merchant of record, keeps the whole goods value, and earns no commission.
+    """
+
+    marketplace = "marketplace"
+    first_party = "first_party"
 
 class ServiceLevel(str, enum.Enum):
     """Delivery service level (spec9).
@@ -49,7 +62,8 @@ class ReturnStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     received = "received"
-    refunded = "refunded"`r`n`r`nclass OrderSource(str, enum.Enum):`r`n    marketplace = "marketplace"`r`n    first_party = "first_party"`r`n    cancelled = "cancelled"
+    refunded = "refunded"
+    cancelled = "cancelled"
 
 
 class ReturnReason(str, enum.Enum):

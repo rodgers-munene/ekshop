@@ -1,7 +1,7 @@
 from app.models.user import User, EmailVerification, PasswordReset, RefreshToken, NotificationPreference
 from app.models.shop import Shop, ShopPaymentMethod
 from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview
-from app.models.commerce import UserAddress, Cart, CartItem, Wishlist, OrderGroup, Order, OrderItem
+from app.models.commerce import UserAddress, Cart, CartItem, Wishlist, OrderGroup, Order, OrderItem, OrderSource
 from app.models.geography import County, SubCounty, Ward
 from app.models.payment import Payment, PaymentIntent
 from app.models.delivery import DeliveryAgent, Delivery, DeliveryEvent, Notification, DeliveryRateSettings
