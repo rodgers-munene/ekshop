@@ -35,12 +35,13 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import Numeric, cast, func
+from sqlalchemy import Numeric, cast, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.commerce import OrderGroup, Order, OrderItem
+from app.models.commerce import OrderGroup, Order, OrderItem, OrderSource
 from app.models.payment import Payment, PaymentStatus
+from app.models.shop import Shop
 from app.models.user import User
 
 EAT = timezone(timedelta(hours=3), "EAT")
@@ -101,6 +102,10 @@ class TradingSummary:
     cash_received: Decimal = Decimal("0.00")
     refunds: Decimal = Decimal("0.00")
     gmv: Decimal = Decimal("0.00")
+    # 1P/3P split of `gmv`: goods Ekshop owns and sells itself vs goods sold by
+    # outside merchants. gmv_1p + gmv_3p == gmv.
+    gmv_1p: Decimal = Decimal("0.00")
+    gmv_3p: Decimal = Decimal("0.00")
     total_transacted: Decimal = Decimal("0.00")
     orders: int = 0
     payments: int = 0
@@ -239,6 +244,27 @@ def build_trading_summary(
         .all()
     )
 
+    # Goods Ekshop sells as its own merchant. Subtracted from the total to get
+    # the marketplace leg, which is the only leg commission can be taken from.
+    gmv_1p_rows = (
+        db.query(
+            paid_pairs.c.day.label("day"),
+            func.sum(cast(OrderItem.line_total, Numeric)).label("gmv_1p"),
+        )
+        .select_from(paid_pairs)
+        .join(Order, Order.group_id == paid_pairs.c.gid)
+        .join(Shop, Shop.id == Order.shop_id)
+        .join(OrderItem, OrderItem.order_id == Order.id)
+        .filter(
+            or_(
+                Order.source == OrderSource.first_party,
+                Shop.is_platform_owned.is_(True),
+            )
+        )
+        .group_by(paid_pairs.c.day)
+        .all()
+    )
+
     # Per-day cash and refunds, for the daily table.
     day_col = func.date_trunc("day", func.timezone("Africa/Nairobi", instant))
     cash_rows = (
@@ -273,6 +299,10 @@ def build_trading_summary(
     refunds_by_day = {r.day.date(): r[1] for r in refund_rows}
     orders_by_day = {r.day.date(): (int(r.orders), _q(r.transacted)) for r in basket_rows}
     gmv_by_day = {r.day.date(): _q(r.gmv) for r in gmv_rows}
+    gmv_1p_by_day = {r.day.date(): _q(r.gmv_1p) for r in gmv_1p_rows}
+
+    gmv_total = sum(gmv_by_day.values(), Decimal("0.00"))
+    gmv_1p_total = sum(gmv_1p_by_day.values(), Decimal("0.00"))
 
     summary = TradingSummary(
         period_label=period_label,
@@ -284,16 +314,21 @@ def build_trading_summary(
         orders=sum(v[0] for v in orders_by_day.values()),
         payments=int(payments or 0),
         payers=int(payers),
-        gmv=sum(gmv_by_day.values(), Decimal("0.00")),
+        gmv=gmv_total,
+        gmv_1p=gmv_1p_total,
+        gmv_3p=max(gmv_total - gmv_1p_total, Decimal("0.00")),
         total_transacted=sum((v[1] for v in orders_by_day.values()), Decimal("0.00")),
     )
 
     # Commission is a configured rate or nothing. A plausible-looking default is
-    # worse than a blank, because a blank gets investigated.
+    # worse than a blank, because a blank gets investigated. It is taken on the
+    # marketplace leg only: Ekshop is the merchant on its own first-party sales,
+    # so commission on those would be Ekshop paying itself and reporting the
+    # payment as revenue.
     rate = settings.PLATFORM_COMMISSION_RATE
     if rate is not None:
         summary.commission_rate = Decimal(rate)
-        summary.platform_revenue = _q(summary.gmv * Decimal(rate))
+        summary.platform_revenue = _q(summary.gmv_3p * Decimal(rate))
 
     fee_rate = getattr(settings, "MPESA_FEE_RATE", None)
     if fee_rate is not None:
@@ -435,6 +470,8 @@ def summary_lines(summary: TradingSummary) -> List[tuple[str, str]]:
         ("Refunds paid out", kes(summary.refunds)),
         ("Net cash in", kes(summary.net_cash)),
         ("GMV (goods value)", kes(summary.gmv)),
+        ("GMV — Ekshop 1P", kes(summary.gmv_1p)),
+        ("GMV — Marketplace 3P", kes(summary.gmv_3p)),
         ("Total transacted", kes(summary.total_transacted)),
         ("Baskets paid", f"{summary.orders:,}"),
         ("Payments received", f"{summary.payments:,}"),

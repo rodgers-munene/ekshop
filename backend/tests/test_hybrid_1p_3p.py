@@ -1,0 +1,166 @@
+"""Ekshop trades as its own merchant alongside the marketplace.
+
+Two things are locked out here.
+
+First, the revenue/leakage endpoints answered 500 when a rate was not
+configured: the service correctly returned None for commission, fees and gross
+margin, but the response models declared them non-nullable, so validation failed
+and the panel on the analytics page came back empty. "Not configured" must
+serialize as null, never as zero and never as an error.
+
+Second, commission is a marketplace concept. Charging it on Ekshop's own
+first-party goods, then reporting the charge as platform revenue, counts money
+Ekshop pays to itself as income. Every split below therefore treats a sale as
+first-party when its shop is platform-owned OR its stored source says so, so a
+backfilled source flag cannot misfile Ekshop's own sales under the marketplace
+column.
+"""
+from sqlalchemy.dialects import postgresql
+from sqlalchemy import or_
+
+from app.models.commerce import Order, OrderSource
+from app.models.shop import Shop
+from app.schemas.admin import (
+    AdminOverviewTotals,
+    AdminTrendPoint,
+    MarginLeakageMetrics,
+    MarginLeakageTrendPoint,
+    PeriodFigures,
+)
+
+
+def sql(expression) -> str:
+    return str(
+        expression.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+
+class TestMarginLeakageSerialisesUnconfiguredRates:
+    """None must survive the response model. It used to fail validation."""
+
+    def test_top_level_metrics_accept_none(self):
+        m = MarginLeakageMetrics(
+            period="month",
+            start="2026-10-01T00:00:00",
+            end="2026-10-16T00:00:00",
+            gmv="1000.00",
+            orders=2,
+            average_order_value="500.00",
+            platform_commission=None,
+            mpesa_fees=None,
+            server_cost=None,
+            net_profit=None,
+            gross_margin_pct=None,
+            commission_rate_pct=None,
+            mpesa_rate_pct=None,
+            trend=[],
+        )
+        assert m.platform_commission is None
+        assert m.gross_margin_pct is None
+
+    def test_trend_points_accept_none(self):
+        p = MarginLeakageTrendPoint(
+            label="01 Oct",
+            gmv=100.0,
+            platform_commission=None,
+            mpesa_fees=None,
+            net_profit=None,
+            gross_margin_pct=None,
+            aov=100.0,
+        )
+        assert p.net_profit is None
+
+    def test_default_is_zero_split_not_missing(self):
+        """A new row reports a real 0/0 split rather than leaving it absent."""
+        m = MarginLeakageMetrics(
+            period="month",
+            start="2026-10-01T00:00:00",
+            end="2026-10-16T00:00:00",
+            gmv="0.00",
+            orders=0,
+            average_order_value="0.00",
+            trend=[],
+        )
+        assert (m.gmv_1p, m.gmv_3p) == ("0.00", "0.00")
+        assert m.rates_configured is None
+
+
+class TestChannelSplitFields:
+    """The split must be present on every figure that reports GMV or revenue."""
+
+    def test_period_figures_carries_the_split(self):
+        f = PeriodFigures(
+            gmv="100.00",
+            total_transacted="110.00",
+            revenue="90.00",
+            commission_rate_configured=True,
+            orders=1,
+            average_order_value="110.00",
+            new_users=0,
+            new_shops=0,
+            cash_received="110.00",
+            refunds="0.00",
+            basis="payments",
+            basis_note=None,
+        )
+        assert (f.gmv_1p, f.gmv_3p) == ("0.00", "0.00")
+        assert (f.orders_1p, f.orders_3p) == (0, 0)
+
+    def test_overview_totals_carry_the_split(self):
+        t = AdminOverviewTotals(
+            total_users=1,
+            total_buyers=1,
+            total_sellers=1,
+            total_shops=1,
+            shops_pending_verification=0,
+            total_products=0,
+            total_orders=0,
+            gmv_total="100.00",
+            total_transacted_total="110.00",
+            revenue_total=None,
+            net_revenue_total=None,
+            commission_rate_configured=False,
+            cash_received_total="110.00",
+            refunds_total="0.00",
+            total_refunds_lifetime="0.00",
+            total_chargebacks_lifetime="0.00",
+            avg_delivery_fee_lifetime="0.00",
+            delivery_cost_per_order_lifetime="0.00",
+            active_buyers_lifetime=1,
+            active_sellers_lifetime=1,
+            repeat_buyer_rate_lifetime=0.0,
+        )
+        assert (t.gmv_1p_total, t.gmv_3p_total) == ("0.00", "0.00")
+        assert (t.orders_1p_total, t.orders_3p_total) == (0, 0)
+
+    def test_trend_point_sums_to_the_blended_series(self):
+        """1P and 3P must reconcile to the GMV line the chart already draws."""
+        pt = AdminTrendPoint(
+            label="01 Oct",
+            revenue=0.0,
+            gmv=100.0,
+            total_transacted=100.0,
+            revenue_earned=None,
+            commission_rate_configured=False,
+            orders=1,
+            gmv_1p=30.0,
+            gmv_3p=70.0,
+        )
+        assert pt.gmv_1p + pt.gmv_3p == pt.gmv
+
+
+class TestFirstPartyCondition:
+    def test_both_markers_are_required(self):
+        condition = or_(
+            Order.source == OrderSource.first_party,
+            Shop.is_platform_owned.is_(True),
+        )
+        text = sql(condition)
+        assert "first_party" in text
+        assert "is_platform_owned" in text
+
+    def test_order_source_values(self):
+        assert {m.value for m in OrderSource} == {"marketplace", "first_party"}

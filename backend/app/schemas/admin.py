@@ -643,28 +643,42 @@ class AdminProductListResponse(BaseModel):
 
 class MarginLeakageTrendPoint(BaseModel):
     label: str
+    # GMV here is goods value, split by channel so commission is never charged
+    # on Ekshop's own first-party sales.
     gmv: float
-    platform_commission: float
-    mpesa_fees: float
-    net_profit: float
-    gross_margin_pct: float
-    aov: float
+    gmv_1p: float = 0.0
+    gmv_3p: float = 0.0
+    # Any figure whose rate is not configured is unknown, so it is null rather
+    # than zero -- a zero would read as "this cost nothing".
+    platform_commission: Optional[float] = None
+    mpesa_fees: Optional[float] = None
+    net_profit: Optional[float] = None
+    gross_margin_pct: Optional[float] = None
+    aov: float = 0.0
 
 
 class MarginLeakageMetrics(BaseModel):
     period: str
     start: datetime
     end: datetime
+    # Goods value only (1P + 3P), on the same basis as admin GMV.
     gmv: str
+    # Goods Ekshop sells as its own merchant vs goods from outside merchants.
+    gmv_1p: str = "0.00"
+    gmv_3p: str = "0.00"
+    # Money actually moved through the platform (goods + delivery + tax).
+    total_transacted: str = "0.00"
     orders: int
     average_order_value: str
-    platform_commission: str
-    mpesa_fees: str
-    server_cost: str
-    net_profit: str
-    gross_margin_pct: float
-    commission_rate_pct: float
-    mpesa_rate_pct: float
+    platform_commission: Optional[str] = None
+    mpesa_fees: Optional[str] = None
+    server_cost: Optional[str] = None
+    net_profit: Optional[str] = None
+    gross_margin_pct: Optional[float] = None
+    commission_rate_pct: Optional[float] = None
+    mpesa_rate_pct: Optional[float] = None
+    # Tells the UI to print "not configured" instead of an empty or zero figure.
+    rates_configured: Optional[bool] = None
     trend: List[MarginLeakageTrendPoint]
 
 

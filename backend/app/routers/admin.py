@@ -1314,8 +1314,16 @@ def check_admin_thresholds(
     min_delivery = automation.alert_min_on_time_delivery_rate
 
     margin = get_margin_leakage_metrics(db, since)
-    margin_pct = float(margin.get("gross_margin_pct", 100))
-    if automation.alert_gross_margin_enabled and margin_pct < min_margin:
+    # None here means a rate is not configured, which is not a margin of 0 and
+    # is not a margin of 100 either -- it is unknown, so no alert can be raised
+    # on it. Casting it used to raise TypeError and fail the whole check.
+    margin_value = margin.get("gross_margin_pct")
+    margin_pct = float(margin_value) if margin_value is not None else None
+    if (
+        margin_pct is not None
+        and automation.alert_gross_margin_enabled
+        and margin_pct < min_margin
+    ):
         alerts.append({
             "level": "high",
             "metric": "gross_margin_pct",

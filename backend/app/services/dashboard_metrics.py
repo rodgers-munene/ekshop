@@ -756,7 +756,11 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
         OrderGroup.created_at < end,
     )
     order_count = paid_groups.count()
-    gmv = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
+    # Money that actually moved (goods + delivery + tax). This is the basis for
+    # the M-Pesa fee, because that fee is charged on what the customer paid.
+    total_transacted = sum(
+        (Decimal(g.total) for g in paid_groups.all()), Decimal("0")
+    ).quantize(Decimal("0.01"))
 
     # --- 1P/3P split -------------------------------------------------------
     # Commission is a marketplace concept: it applies to goods Ekshop sells on
@@ -765,6 +769,9 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
     # and then reported it as platform revenue it had just given back.
     gmv_1p = _gmv_for_channel(db, since, end, first_party=True)
     gmv_3p = _gmv_for_channel(db, since, end, first_party=False)
+    # GMV is goods value only, on the same basis as the admin overview's GMV,
+    # so this monitor and the dashboard cannot disagree about the same window.
+    gmv = (gmv_1p + gmv_3p).quantize(Decimal("0.01"))
 
     # Anything that depends on an unconfigured rate stays None. It is never
     # defaulted to zero, because a zero reads as "this cost nothing" and would
@@ -775,7 +782,9 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
         else None
     )
     mpesa_fees = (
-        (gmv * MPESA_RATE).quantize(Decimal("0.01")) if MPESA_RATE is not None else None
+        (total_transacted * MPESA_RATE).quantize(Decimal("0.01"))
+        if MPESA_RATE is not None
+        else None
     )
     server_cost = (
         (Decimal(order_count) * SERVER_COST_PER_ORDER).quantize(Decimal("0.01"))
@@ -799,36 +808,97 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
             if platform_commission
             else None
         )
-    average_order_value = (gmv / Decimal(order_count)).quantize(Decimal("0.01")) if order_count else Decimal("0")
+    average_order_value = (
+        (total_transacted / Decimal(order_count)).quantize(Decimal("0.01"))
+        if order_count
+        else Decimal("0")
+    )
 
     day_col = func.date_trunc("day", OrderGroup.created_at)
-    rows = (
+
+    # Money moved per day: the basis for the M-Pesa fee (charged on what the
+    # customer actually paid) and for the order count.
+    paid_day_rows = (
         db.query(
             day_col.label("day"),
-            func.sum(cast(OrderGroup.total, Numeric)).label("gmv"),
+            func.sum(cast(OrderGroup.total, Numeric)).label("transacted"),
             func.count(OrderGroup.id).label("orders"),
         )
-        .filter(OrderGroup.status == OrderGroupStatus.paid, OrderGroup.created_at >= since)
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= since,
+            OrderGroup.created_at < end,
+        )
         .group_by(day_col)
         .all()
     )
-    by_day = {row.day.date(): row for row in rows}
+    paid_by_day = {row.day.date(): row for row in paid_day_rows}
+
+    # Goods value per day, and how much of it Ekshop sells itself. Commission
+    # follows the marketplace line only: Ekshop cannot commission its own sales,
+    # and charging it does was what made platform revenue look larger than it
+    # was.
+    goods_rows = (
+        db.query(
+            day_col.label("day"),
+            func.sum(cast(OrderItem.line_total, Numeric)).label("gmv"),
+        )
+        .select_from(OrderItem)
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(OrderGroup, OrderGroup.id == Order.group_id)
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= since,
+            OrderGroup.created_at < end,
+        )
+        .group_by(day_col)
+        .all()
+    )
+    gmv_by_day = {row.day.date(): row.gmv for row in goods_rows}
+
+    goods_1p_rows = (
+        db.query(
+            day_col.label("day"),
+            func.sum(cast(OrderItem.line_total, Numeric)).label("gmv1p"),
+        )
+        .select_from(OrderItem)
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(Shop, Shop.id == Order.shop_id)
+        .join(OrderGroup, OrderGroup.id == Order.group_id)
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= since,
+            OrderGroup.created_at < end,
+            or_(
+                Order.source == OrderSource.first_party,
+                Shop.is_platform_owned.is_(True),
+            ),
+        )
+        .group_by(day_col)
+        .all()
+    )
+    gmv_1p_by_day = {row.day.date(): row.gmv1p for row in goods_1p_rows}
 
     trend = []
     days_span = max((end - since).days, 1)
     today = datetime.now(timezone.utc).date()
     for i in range(days_span - 1, -1, -1):
         day = today - timedelta(days=i)
-        row = by_day.get(day)
-        day_gmv = Decimal(row.gmv) if row and row.gmv else Decimal("0")
-        day_orders = int(row.orders) if row else 0
+        paid = paid_by_day.get(day)
+        day_transacted = (
+            Decimal(paid.transacted) if paid and paid.transacted else Decimal("0")
+        )
+        day_orders = int(paid.orders) if paid else 0
+        day_gmv = Decimal(gmv_by_day.get(day) or 0).quantize(Decimal("0.01"))
+        day_gmv_1p = Decimal(gmv_1p_by_day.get(day) or 0).quantize(Decimal("0.01"))
+        day_gmv_3p = (day_gmv - day_gmv_1p).quantize(Decimal("0.01"))
         day_commission = (
-            (day_gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
+            (day_gmv_3p * COMMISSION_RATE).quantize(Decimal("0.01"))
             if COMMISSION_RATE is not None
             else None
         )
         day_mpesa = (
-            (day_gmv * MPESA_RATE).quantize(Decimal("0.01"))
+            (day_transacted * MPESA_RATE).quantize(Decimal("0.01"))
             if MPESA_RATE is not None
             else None
         )
@@ -849,11 +919,17 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
                 if day_commission
                 else None
             )
-        day_aov = float((day_gmv / Decimal(day_orders)).quantize(Decimal("0.01"))) if day_orders else 0.0
+        day_aov = (
+            float((day_transacted / Decimal(day_orders)).quantize(Decimal("0.01")))
+            if day_orders
+            else 0.0
+        )
         trend.append(
             {
                 "label": day.strftime("%d %b"),
                 "gmv": float(day_gmv),
+                "gmv_1p": float(day_gmv_1p),
+                "gmv_3p": float(day_gmv_3p),
                 "platform_commission": float(day_commission) if day_commission is not None else None,
                 "mpesa_fees": float(day_mpesa) if day_mpesa is not None else None,
                 "net_profit": float(day_profit) if day_profit is not None else None,
@@ -869,6 +945,7 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
         "gmv": str(gmv),
         "gmv_1p": str(gmv_1p),
         "gmv_3p": str(gmv_3p),
+        "total_transacted": str(total_transacted),
         "orders": order_count,
         "average_order_value": str(average_order_value),
         "platform_commission": (
