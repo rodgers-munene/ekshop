@@ -101,6 +101,16 @@ class PeriodFigures(BaseModel):
     # back to order rows because no payment was recorded in the window.
     basis: str
     basis_note: Optional[str]
+    # 1P/3P segmentation. Ekshop trades as its own merchant (first-party), so
+    # GMV splits into goods Ekshop owns (gross revenue) and goods sold by
+    # third-party merchants (revenue = commission only).
+    gmv_1p: str = "0.00"
+    gmv_3p: str = "0.00"
+    orders_1p: int = 0
+    orders_3p: int = 0
+    # Revenue split: 1P recognises gross sale value, 3P recognises take-rate.
+    revenue_1p: Optional[str] = None
+    revenue_3p: Optional[str] = None
 
 
 class PeriodToDateMetrics(BaseModel):
@@ -173,6 +183,10 @@ class AdminTrendPoint(BaseModel):
     revenue_earned: Optional[float]
     commission_rate_configured: bool
     orders: int
+    # Daily 1P/3P GMV split so the trend chart can plot marketplace and
+    # first-party as separate lines instead of one blended series.
+    gmv_1p: float = 0.0
+    gmv_3p: float = 0.0
 
 
 class PayerActivity(BaseModel):
@@ -505,6 +519,13 @@ class AdminOverviewPeriodMetrics(BaseModel):
     new_shops: int
     new_products: int
     cart_abandonment_rate: float
+    # 1P/3P segmentation (Ekshop as first-party merchant alongside marketplace).
+    gmv_1p: str = "0.00"
+    gmv_3p: str = "0.00"
+    orders_1p: int = 0
+    orders_3p: int = 0
+    revenue_1p: Optional[str] = None
+    revenue_3p: Optional[str] = None
 
 
 class AdminOverviewTotals(BaseModel):
@@ -529,6 +550,11 @@ class AdminOverviewTotals(BaseModel):
     active_buyers_lifetime: int
     active_sellers_lifetime: int
     repeat_buyer_rate_lifetime: float
+    # Lifetime 1P/3P split.
+    gmv_1p_total: str = "0.00"
+    gmv_3p_total: str = "0.00"
+    orders_1p_total: int = 0
+    orders_3p_total: int = 0
 
 
 class AdminOverviewRead(BaseModel):

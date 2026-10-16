@@ -11,13 +11,13 @@ from decimal import Decimal
 
 from typing import List, Optional
 
-from sqlalchemy import Numeric, cast, desc, func
+from sqlalchemy import Numeric, cast, desc, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.analytics import UserEvent, EventType, IssueReport
 from app.models.catalog import Product, ProductStatus
-from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus, OrderItem
+from app.models.commerce import Order, OrderGroup, OrderGroupStatus, OrderStatus, OrderItem, OrderSource
 from app.models.commerce import Cart, CartItem, ReturnRequest
 from app.models.delivery import Delivery, DeliveryAgent, DeliveryAgentStatus, DeliveryStatus
 from app.models.shop import Shop, ShopStatus
@@ -30,6 +30,40 @@ def _hours_between(a: datetime, b: datetime) -> float:
 
 def _bound(since: datetime, until: Optional[datetime]) -> datetime:
     return until or datetime.now(timezone.utc)
+
+
+def _gmv_for_channel(
+    db: Session,
+    since: datetime,
+    until: datetime,
+    first_party: bool = True,
+) -> Decimal:
+    """Goods value (line items) of paid orders in a window for one channel.
+
+    A row is first-party when its shop is platform-owned *or* its stored source
+    says so, so a backfilled source flag can never misfile Ekshop's own sales
+    under the marketplace column.
+    """
+    q = (
+        db.query(func.coalesce(func.sum(cast(OrderItem.line_total, Numeric)), 0))
+        .select_from(OrderItem)
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(Shop, Shop.id == Order.shop_id)
+        .join(OrderGroup, OrderGroup.id == Order.group_id)
+        .filter(
+            OrderGroup.status == OrderGroupStatus.paid,
+            OrderGroup.created_at >= since,
+            OrderGroup.created_at < until,
+        )
+    )
+    condition = or_(
+        Order.source == OrderSource.first_party,
+        Shop.is_platform_owned.is_(True),
+    )
+    if not first_party:
+        condition = ~condition
+    value = q.filter(condition).scalar()
+    return Decimal(value or 0).quantize(Decimal("0.01"))
 
 
 # ── Merchant activity & engagement ──────────────────────────────────────────
@@ -724,11 +758,19 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
     order_count = paid_groups.count()
     gmv = sum((Decimal(g.total) for g in paid_groups.all()), Decimal("0"))
 
+    # --- 1P/3P split -------------------------------------------------------
+    # Commission is a marketplace concept: it applies to goods Ekshop sells on
+    # a merchant's behalf, never to goods Ekshop sells as the merchant. Without
+    # this split the leakage monitor charged commission on Ekshop's own sales
+    # and then reported it as platform revenue it had just given back.
+    gmv_1p = _gmv_for_channel(db, since, end, first_party=True)
+    gmv_3p = _gmv_for_channel(db, since, end, first_party=False)
+
     # Anything that depends on an unconfigured rate stays None. It is never
     # defaulted to zero, because a zero reads as "this cost nothing" and would
     # quietly overstate the result.
     platform_commission = (
-        (gmv * COMMISSION_RATE).quantize(Decimal("0.01"))
+        (gmv_3p * COMMISSION_RATE).quantize(Decimal("0.01"))
         if COMMISSION_RATE is not None
         else None
     )
@@ -825,6 +867,8 @@ def get_margin_leakage_metrics(db: Session, since: datetime, until: Optional[dat
         "start": since,
         "end": end,
         "gmv": str(gmv),
+        "gmv_1p": str(gmv_1p),
+        "gmv_3p": str(gmv_3p),
         "orders": order_count,
         "average_order_value": str(average_order_value),
         "platform_commission": (

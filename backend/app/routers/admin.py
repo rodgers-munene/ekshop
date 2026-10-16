@@ -18,6 +18,7 @@ from app.models.commerce import (
     OrderGroupStatus,
     Order,
     OrderItem,
+    OrderSource,
     OrderStatus,
 )
 from app.models.catalog import Product, Category
@@ -252,13 +253,80 @@ def _paid_money_between(db: Session, start: datetime, end: datetime) -> dict:
     )
     gmv_total = Decimal(gmv or 0).quantize(Decimal("0.01"))
 
+    # --- 1P/3P split -------------------------------------------------------
+    # Ekshop trades as its own merchant, so GMV must separate goods Ekshop owns
+    # (first-party: gross revenue, no commission) from goods sold by outside
+    # merchants (marketplace: revenue is commission only). An order counts as
+    # first-party when it was placed on a platform-owned shop, regardless of the
+    # stored source flag, so a backfilled row can never be miscounted.
+    gmv_1p_rows = (
+        db.query(func.coalesce(func.sum(cast(OrderItem.line_total, Numeric)), 0))
+        .select_from(OrderItem)
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(Shop, Shop.id == Order.shop_id)
+        .join(paid_groups, paid_groups.c.order_group_id == Order.group_id)
+        .filter(
+            or_(
+                Order.source == OrderSource.first_party,
+                Shop.is_platform_owned.is_(True),
+            )
+        )
+        .scalar()
+    )
+    gmv_1p = Decimal(gmv_1p_rows or 0).quantize(Decimal("0.01"))
+    gmv_3p = (gmv_total - gmv_1p).quantize(Decimal("0.01"))
+
+    # Child order counts by channel. A mixed basket produces one child order per
+    # shop, so these count fulfilment units rather than baskets.
+    orders_1p = (
+        db.query(func.count(Order.id))
+        .join(Shop, Shop.id == Order.shop_id)
+        .join(paid_groups, paid_groups.c.order_group_id == Order.group_id)
+        .filter(
+            or_(
+                Order.source == OrderSource.first_party,
+                Shop.is_platform_owned.is_(True),
+            )
+        )
+        .scalar()
+        or 0
+    )
+    orders_total_children = (
+        db.query(func.count(Order.id))
+        .join(paid_groups, paid_groups.c.order_group_id == Order.group_id)
+        .scalar()
+        or 0
+    )
+    orders_3p = max(orders_total_children - orders_1p, 0)
+
+    rate = settings.PLATFORM_COMMISSION_RATE
+    # 1P revenue is the gross sale (Ekshop is merchant of record). 3P revenue is
+    # the take-rate only. When no commission rate is configured the 3P leg is
+    # unknown, so it is reported as None rather than guessed at.
+    revenue_1p = gmv_1p
+    revenue_3p = (gmv_3p * Decimal(rate)).quantize(Decimal("0.01")) if rate is not None else None
+
+    if rate is not None:
+        revenue = str((revenue_1p + revenue_3p).quantize(Decimal("0.01")))
+    elif gmv_1p > 0:
+        # Commission unknown, but the 1P leg is real money Ekshop keeps.
+        revenue = str(revenue_1p)
+    else:
+        revenue = None
+
     return {
         "gmv": gmv_total,
         "total_transacted": total_transacted,
         "orders": orders,
         "cash_received": cash_total,
         "refunds": _refunds_between(db, start, end),
-        "revenue": _commission(gmv_total),
+        "revenue": revenue,
+        "gmv_1p": gmv_1p,
+        "gmv_3p": gmv_3p,
+        "orders_1p": orders_1p,
+        "orders_3p": orders_3p,
+        "revenue_1p": str(revenue_1p),
+        "revenue_3p": str(revenue_3p) if revenue_3p is not None else None,
     }
 
 
@@ -316,6 +384,12 @@ def _period_figures(db: Session, start: datetime, end: datetime) -> PeriodFigure
         refunds=str(money["refunds"]),
         basis="payments",
         basis_note=None,
+        gmv_1p=str(money["gmv_1p"]),
+        gmv_3p=str(money["gmv_3p"]),
+        orders_1p=money["orders_1p"],
+        orders_3p=money["orders_3p"],
+        revenue_1p=money["revenue_1p"],
+        revenue_3p=money["revenue_3p"],
     )
 
 
@@ -566,6 +640,12 @@ def _overview_period(db: Session, since: datetime, until: datetime) -> AdminOver
         new_shops=figs.new_shops,
         new_products=new_products,
         cart_abandonment_rate=sales["cart_abandonment_rate"],
+        gmv_1p=figs.gmv_1p,
+        gmv_3p=figs.gmv_3p,
+        orders_1p=figs.orders_1p,
+        orders_3p=figs.orders_3p,
+        revenue_1p=figs.revenue_1p,
+        revenue_3p=figs.revenue_3p,
     )
 
 
@@ -682,6 +762,10 @@ def get_stats_overview(
             active_buyers_lifetime=lifetime_active_buyers,
             active_sellers_lifetime=lifetime_active_sellers,
             repeat_buyer_rate_lifetime=round(lifetime_repeat_buyer_rate, 2),
+            gmv_1p_total=str(lifetime["gmv_1p"]),
+            gmv_3p_total=str(lifetime["gmv_3p"]),
+            orders_1p_total=lifetime["orders_1p"],
+            orders_3p_total=lifetime["orders_3p"],
         ),
         trend=_trend_points(db, 14),
     )
@@ -775,6 +859,28 @@ def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
     )
     gmv_by_day = {row.day.date(): row.gmv for row in gmv_rows}
 
+    # First-party GMV by day: goods Ekshop owns and sells itself. Subtracting
+    # this from the blended series gives the marketplace (3P) line.
+    gmv_1p_rows = (
+        db.query(
+            paid_pairs.c.day.label("day"),
+            func.sum(cast(OrderItem.line_total, Numeric)).label("gmv1p"),
+        )
+        .select_from(paid_pairs)
+        .join(Order, Order.group_id == paid_pairs.c.gid)
+        .join(Shop, Shop.id == Order.shop_id)
+        .join(OrderItem, OrderItem.order_id == Order.id)
+        .filter(
+            or_(
+                Order.source == OrderSource.first_party,
+                Shop.is_platform_owned.is_(True),
+            )
+        )
+        .group_by(paid_pairs.c.day)
+        .all()
+    )
+    gmv_1p_by_day = {row.day.date(): row.gmv1p for row in gmv_1p_rows}
+
     points: List[AdminTrendPoint] = []
     today = datetime.now(timezone.utc).date()
     for i in range(days - 1, -1, -1):
@@ -782,6 +888,7 @@ def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
         row = by_day.get(day)
         transacted = float(row.transacted) if row and row.transacted else 0.0
         gmv = float(gmv_by_day.get(day) or 0.0)
+        gmv_1p = float(gmv_1p_by_day.get(day) or 0.0)
         points.append(
             AdminTrendPoint(
                 label=day.strftime("%d %b"),
@@ -794,6 +901,8 @@ def _trend_points(db: Session, days: int) -> List[AdminTrendPoint]:
                 ),
                 commission_rate_configured=settings.PLATFORM_COMMISSION_RATE is not None,
                 orders=int(row.orders) if row else 0,
+                gmv_1p=gmv_1p,
+                gmv_3p=round(gmv - gmv_1p, 2),
             )
         )
     return points
