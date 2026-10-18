@@ -23,6 +23,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.models.shop import Shop, ShopStatus
+from app.schemas.market_expansion import MarketExpansionRead
 from app.services import market_expansion as mx
 
 
@@ -291,6 +292,7 @@ class TestReport:
         assert report["study"]["anchors"] == len(report["layers"]["anchors"]["features"])
         assert len(report["candidates"]) == 12
         assert report["coverage"]["summary"]["shops_pinned"] == 0
+        assert report["coverage_error"] is None
 
     def test_a_missing_bundle_is_reported_not_raised(self, resolve, monkeypatch, tmp_path: Path):
         """The API answers 503 with instructions; it must not 500 while the
@@ -299,3 +301,47 @@ class TestReport:
         monkeypatch.setattr(mx, "BUNDLE_DIR", tmp_path / "market_expansion")
         assert mx.load_study() is None
         assert mx.build_report(FakeSession()) is None
+
+
+class BrokenSession:
+    """A database that refuses every query -- what a schema that has drifted
+    behind the models (a column added to a model without a migration) looks like
+    from the query's side."""
+
+    def query(self, *entities):
+        raise RuntimeError("column users.fcm_token does not exist")
+
+
+class TestCoverageOutage:
+    """The study is a committed file and needs no database; the coverage beside
+    it is a live join. These pin the rule that a database fault degrades the
+    page to the analysis rather than blanking it."""
+
+    def test_a_database_fault_does_not_take_the_study_down(self):
+        report = mx.build_report(BrokenSession())
+        assert report is not None, "the study must still be delivered"
+        assert report["coverage"] is None
+        assert report["coverage_error"]
+        # Everything drawn from the bundle is intact, live or not.
+        assert report["study"]["county"] == "Nyeri"
+        assert report["study"]["population"] == 825_665
+        assert len(report["candidates"]) == 12
+        assert len(report["layers"]["sublocations"]["features"]) == 196
+
+    def test_the_response_says_what_is_missing_rather_than_blaming_the_study(self):
+        error = mx.build_report(BrokenSession())["coverage_error"]
+        assert "database" in error.lower()
+        # The bundle is fine; the reader must not be sent to the exporter.
+        assert "exporter" not in error.lower()
+
+    def test_the_response_model_accepts_a_study_without_coverage(self):
+        parsed = MarketExpansionRead.model_validate(mx.build_report(BrokenSession()))
+        assert parsed.coverage is None
+        assert parsed.coverage_error
+        assert parsed.study.sublocation_polygons == 196
+
+    def test_a_working_database_still_reports_coverage(self, resolve):
+        resolve({})
+        report = mx.build_report(FakeSession())
+        assert report["coverage"] is not None
+        assert report["coverage_error"] is None

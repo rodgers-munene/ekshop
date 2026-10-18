@@ -292,11 +292,19 @@ def build_report(db: Session) -> Optional[dict[str, Any]]:
     The static layers ride along rather than living in the frontend's public
     directory so that the study data is versioned next to the other boundary
     files it is derived from, and so the page has a single request to make.
+
+    The two halves are deliberately not all-or-nothing. The study is a committed
+    bundle that needs no database at all; coverage is a live join against
+    whichever database the deployment happens to point at. If that join fails --
+    a schema that has drifted behind the models, a connection that is down --
+    the analysis must still be delivered, so the failure is reported in the
+    payload instead of taking the whole request with it. A blank tab would say
+    the study is missing when it is not.
     """
     study = load_study()
     if study is None:
         return None
-    return {
+    report: dict[str, Any] = {
         "study": {
             "source": study["candidates"].get("source"),
             "weights": study["candidates"].get("weights"),
@@ -305,5 +313,16 @@ def build_report(db: Session) -> Optional[dict[str, Any]]:
         },
         "layers": study["layers"],
         "candidates": study["candidates"].get("sites", []),
-        "coverage": build_coverage(db, study),
+        "coverage": None,
+        "coverage_error": None,
     }
+    try:
+        report["coverage"] = build_coverage(db, study)
+    except Exception:
+        logger.exception("market expansion: live coverage unavailable")
+        report["coverage_error"] = (
+            "Live coverage could not be read from the platform database, so "
+            "shop counts and paid orders are not shown. The study above is "
+            "complete and unaffected."
+        )
+    return report

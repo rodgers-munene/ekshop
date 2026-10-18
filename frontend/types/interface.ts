@@ -1429,9 +1429,13 @@ export interface MarketExpansionReport {
   study: MarketExpansionStudy;
   layers: Record<string, GeoJSON.FeatureCollection>;
   candidates: MarketExpansionCandidate[];
+  /** Null when the live join against the platform database failed. The study
+   * is a committed bundle and comes through regardless; only the shop counts,
+   * order counts and unserved flags are missing. */
   coverage: {
     shops: MarketExpansionShop[];
     sublocations: MarketExpansionSublocation[];
     summary: MarketExpansionCoverageSummary;
-  };
+  } | null;
+  coverage_error?: string | null;
 }

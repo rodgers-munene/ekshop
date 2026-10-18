@@ -90,8 +90,10 @@ export default function MarketExpansionMap({ report }: { report: MarketExpansion
       const L = (await import("leaflet")).default as typeof import("leaflet");
       if (cancelled || !containerRef.current) return;
 
-      const coverage = new Map(
-        report.coverage.sublocations.map((row) => [key(row.name), row]),
+      // The live join is optional: when the API could not read coverage the
+      // report arrives without it, and the map still draws the study.
+      const coverageRows = new Map(
+        (report.coverage?.sublocations ?? []).map((row) => [key(row.name), row]),
       );
       const describe = (row: MarketExpansionSublocation | undefined) =>
         row
@@ -105,6 +107,18 @@ export default function MarketExpansionMap({ report }: { report: MarketExpansion
                }
              </div>`
           : "";
+      // No coverage row for this polygon: fall back to the study's own numbers
+      // so a demand area is never a shape you can hover but not read.
+      const describeStudy = (feature: GeoJSON.Feature | undefined) => {
+        const props = feature?.properties ?? {};
+        if (!props.name) return "";
+        return `<div style="min-width:11rem">
+                  <b>${escapeHtml(props.name)}</b><br/>
+                  ${text(props.population)} people · ${text(props.area_km2)} km²<br/>
+                  ${text(props.density)} per km²<br/>
+                  <span style="color:#6B7280">live coverage not shown</span>
+                </div>`;
+      };
 
       map = L.map(containerRef.current, { scrollWheelZoom: true });
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -123,8 +137,10 @@ export default function MarketExpansionMap({ report }: { report: MarketExpansion
           weight: 0.5,
         }),
         onEachFeature: (feature, layer) => {
-          const row = coverage.get(key(feature?.properties?.name));
-          if (row) layer.bindTooltip(describe(row), { sticky: true });
+          const row = coverageRows.get(key(feature?.properties?.name));
+          layer.bindTooltip(row ? describe(row) : describeStudy(feature), {
+            sticky: true,
+          });
         },
       });
       groups.set("demand", demand);
@@ -195,7 +211,7 @@ export default function MarketExpansionMap({ report }: { report: MarketExpansion
       groups.set("reach", reach);
 
       const shops = L.layerGroup();
-      report.coverage.shops.forEach((shop) => {
+      (report.coverage?.shops ?? []).forEach((shop) => {
         shops.addLayer(
           L.circleMarker([shop.lat, shop.lng], {
             radius: 6,
@@ -238,7 +254,11 @@ export default function MarketExpansionMap({ report }: { report: MarketExpansion
   return (
     <div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2">
-        {MARKET_LAYERS.map(({ key: layerKey, label }) => (
+        {/* The Ekshop shops layer exists only in the live join; offering a
+         * toggle that draws nothing would read as "no shops here". */}
+        {MARKET_LAYERS.filter(
+          ({ key: layerKey }) => layerKey !== "shops" || report.coverage,
+        ).map(({ key: layerKey, label }) => (
           <label key={layerKey} className="flex items-center gap-1.5 text-xs text-ink">
             <input
               type="checkbox"

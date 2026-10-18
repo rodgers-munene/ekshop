@@ -78,7 +78,12 @@ class MarketExpansionCoverage(BaseModel):
 
 
 class MarketExpansionRead(BaseModel):
+    """Coverage is optional on purpose: the study is a committed bundle, the
+    coverage beside it is a live join. A database fault must not blank the
+    analysis, so the failure rides in the response instead of raising."""
+
     study: StudySummary
     layers: Dict[str, Any]
     candidates: List[CandidateSite]
-    coverage: MarketExpansionCoverage
+    coverage: Optional[MarketExpansionCoverage] = None
+    coverage_error: Optional[str] = None

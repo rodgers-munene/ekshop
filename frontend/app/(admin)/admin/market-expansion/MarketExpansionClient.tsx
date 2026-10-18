@@ -38,20 +38,20 @@ function MissingStudy({ detail }: { detail: string | null }) {
 }
 
 function Report({ report }: { report: MarketExpansionReport }) {
-  const { study, coverage, candidates } = report;
-  const summary = coverage.summary;
+  const { study, coverage, candidates, coverage_error: coverageError } = report;
+  const summary = coverage?.summary;
   const [onlyUnserved, setOnlyUnserved] = useState(true);
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return coverage.sublocations.filter((row) => {
+    return (coverage?.sublocations ?? []).filter((row) => {
       if (onlyUnserved && !row.unserved) return false;
       if (needle && !row.name.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [coverage.sublocations, onlyUnserved, query]);
+  }, [coverage, onlyUnserved, query]);
 
   return (
     <div className="space-y-6">
@@ -64,38 +64,59 @@ function Report({ report }: { report: MarketExpansionReport }) {
         {study.source && <p className="text-xs text-muted mt-1">{study.source}</p>}
       </header>
 
+      {!coverage && (
+        <div className="card p-4 border-l-4 border-gold">
+          <p className="text-sm font-semibold text-ink">Live coverage unavailable</p>
+          <p className="text-sm text-muted mt-1">
+            {coverageError ??
+              "The platform database could not be read, so shop counts and paid orders are not shown. The study below is complete."}
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Population in the study area"
           value={people(study.population)}
           hint={`Across ${study.sublocations} sub-locations.`}
         />
-        <StatCard
-          label="Unserved areas"
-          value={summary.unserved_sublocations}
-          hint="At least 2,000 residents and no Ekshop shop."
-        />
-        <StatCard
-          label="Population in unserved areas"
-          value={people(summary.unserved_population)}
-          hint="The addressable market with no local seller."
-        />
+        {summary && (
+          <StatCard
+            label="Unserved areas"
+            value={summary.unserved_sublocations}
+            hint="At least 2,000 residents and no Ekshop shop."
+          />
+        )}
+        {summary && (
+          <StatCard
+            label="Population in unserved areas"
+            value={people(summary.unserved_population)}
+            hint="The addressable market with no local seller."
+          />
+        )}
         <StatCard
           label="Candidate sites"
           value={candidates.length}
           hint="The study's top cells, at least 3 km apart."
         />
+        {summary && (
+          <StatCard
+            label="Ekshop shops in the area"
+            value={`${summary.shops_pinned} (${summary.shops_active} active)`}
+            hint="Pinned to a sub-location by coordinates."
+          />
+        )}
+        {summary && (
+          <StatCard
+            label="Paid orders attributed"
+            value={`${summary.paid_orders_attributed} of ${summary.paid_orders}`}
+            hint="Orders whose address names a sub-location in the study."
+          />
+        )}
         <StatCard
-          label="Ekshop shops in the area"
-          value={`${summary.shops_pinned} (${summary.shops_active} active)`}
-          hint="Pinned to a sub-location by coordinates."
+          label="Demand anchors mapped"
+          value={summary ? summary.anchor_count : study.anchors}
         />
-        <StatCard
-          label="Paid orders attributed"
-          value={`${summary.paid_orders_attributed} of ${summary.paid_orders}`}
-          hint="Orders whose address names a sub-location in the study."
-        />
-        <StatCard label="Demand anchors mapped" value={summary.anchor_count} />
         <StatCard
           label="Scored grid"
           value={`${study.scored_cells} cells`}
@@ -155,9 +176,12 @@ function Report({ report }: { report: MarketExpansionReport }) {
         )}
       </section>
 
-      <section className="card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <h2 className="font-bold text-ink">Sub-locations</h2>
+      {/* The sub-location table is the live join: without it there is nothing
+       * to page through, and an empty table would read as "no sub-locations". */}
+      {coverage && (
+        <section className="card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h2 className="font-bold text-ink">Sub-locations</h2>
           <div className="flex flex-wrap items-center gap-3">
             <input
               type="search"
@@ -214,7 +238,8 @@ function Report({ report }: { report: MarketExpansionReport }) {
             Show {Math.min(PAGE * 2, rows.length - limit)} more of {rows.length}
           </button>
         )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }
