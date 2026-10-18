@@ -1360,3 +1360,78 @@ export interface PaginatedResponse<T> {
   limit: number;
   results: T[];
 }
+
+// Market expansion (admin). The study layers are raw GeoJSON handed to Leaflet
+// as-is; only the numbers the page reads as numbers are typed field by field.
+export interface MarketExpansionStudy {
+  source: string | null;
+  weights: Record<string, number> | null;
+  county: string | null;
+  sublocations: number;
+  sublocation_polygons: number;
+  population: number;
+  scored_cells: number;
+  suitability_range: [number, number] | null;
+  anchors: number;
+}
+
+export interface MarketExpansionCandidateFactors {
+  demand: number | null;
+  access: number | null;
+  amenities: number | null;
+  anchor: number | null;
+}
+
+export interface MarketExpansionCandidate {
+  lat: number;
+  lng: number;
+  suitability: number | null;
+  pop_1km: number | null;
+  poi_count_1_5km: number | null;
+  road_m: number | null;
+  anchor_m: number | null;
+  factors: MarketExpansionCandidateFactors;
+}
+
+export interface MarketExpansionShop {
+  id: string;
+  name: string;
+  county: string | null;
+  town: string | null;
+  lat: number;
+  lng: number;
+  status: string;
+  is_verified: boolean;
+}
+
+export interface MarketExpansionSublocation {
+  name: string;
+  population: number | null;
+  density: number | null;
+  area_km2: number | null;
+  polygons: number;
+  shops: number;
+  orders: number;
+  unserved: boolean;
+}
+
+export interface MarketExpansionCoverageSummary {
+  shops_pinned: number;
+  shops_active: number;
+  paid_orders: number;
+  paid_orders_attributed: number;
+  unserved_sublocations: number;
+  unserved_population: number;
+  anchor_count: number;
+}
+
+export interface MarketExpansionReport {
+  study: MarketExpansionStudy;
+  layers: Record<string, GeoJSON.FeatureCollection>;
+  candidates: MarketExpansionCandidate[];
+  coverage: {
+    shops: MarketExpansionShop[];
+    sublocations: MarketExpansionSublocation[];
+    summary: MarketExpansionCoverageSummary;
+  };
+}

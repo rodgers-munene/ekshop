@@ -75,13 +75,15 @@ from app.schemas.admin import (
     SupplyDemandRow,
     UserListResponse,
 )
+from app.schemas.automation import AutomationSettingsRead, AutomationSettingsUpdate
+from app.schemas.market_expansion import MarketExpansionRead
 from app.schemas.shop import ShopRead
 from app.schemas.user import UserRead
-from app.schemas.automation import AutomationSettingsRead, AutomationSettingsUpdate
 from app.services import storage
 from app.services import email as email_service
 from app.services import dashboard_metrics, reports
 from app.services import automation as automation_service
+from app.services import market_expansion
 from app.services.dashboard_metrics import (
     get_cart_abandonment_metrics,
     get_margin_leakage_metrics,
@@ -1456,6 +1458,29 @@ def get_ecommerce_metrics(
 ):
     since, until, _label = _resolve_window(period, days, date_from, date_to)
     return dashboard_metrics.get_ecommerce_metrics(db, since, until)
+
+
+@router.get("/metrics/market-expansion", response_model=MarketExpansionRead)
+def get_market_expansion(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """The Nyeri expansion study plus what the platform already covers there.
+
+    Not date-windowed like the other metric routes: the study is a fixed
+    analysis and the coverage it is compared against is a running total, not a
+    period.
+    """
+    report = market_expansion.build_report(db)
+    if report is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "market expansion study bundle is missing; "
+                "run backend/scripts/export_market_expansion.py"
+            ),
+        )
+    return report
 
 
 # ── Drill-down lists (click a stat card, see the rows behind it) ─────────────
