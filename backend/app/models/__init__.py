@@ -39,7 +39,7 @@ __all__ = [
     "User", "EmailVerification", "PasswordReset", "RefreshToken", "NotificationPreference",
     "Shop", "ShopPaymentMethod",
     "Category", "Product", "ProductImage", "ProductVariant", "ProductReview",
-    "UserAddress", "Cart", "CartItem", "Wishlist", "OrderGroup", "Order", "OrderItem",
+    "UserAddress", "Cart", "CartItem", "Wishlist", "OrderGroup", "Order", "OrderItem", "OrderSource",
     "County", "SubCounty", "Ward",
     "Payment", "PaymentIntent",
     "DeliveryAgent", "Delivery", "DeliveryEvent", "Notification", "DeliveryRateSettings",
