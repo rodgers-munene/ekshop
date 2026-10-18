@@ -22,7 +22,7 @@ session revocation is still possible by revoking the refresh token.
 | `users` | Core identity. `status` controls access (`pending` → `active` → `suspended`). |
 | `email_verifications` | One-time tokens for email confirmation and 2FA. |
 | `password_resets` | One-time tokens for password recovery (1-hour TTL). |
-| `refresh_tokens` | Active sessions. Stores SHA-256 hash of the raw token. |
+| `refresh_tokens` | Active sessions. Stores SHA-256 hash of the raw token and, for admin sessions, when the login happened (`session_started_at`). |
 
 ---
 
@@ -50,6 +50,31 @@ session revocation is still possible by revoking the refresh token.
 - TTL: 7 days (configurable via `REFRESH_TOKEN_EXPIRE_DAYS` in `.env`).
 - **Token rotation**: every `/auth/refresh` call revokes the old token and issues
   a new pair. Using the same refresh token twice returns 401.
+
+### Admin sessions
+Admin sessions are the exception to silent renewal. A buyer or seller session can
+be extended for as long as its refresh token lives; an admin session cannot.
+
+- `ADMIN_SESSION_MINUTES` (default 60) is stamped on the refresh-token row as
+  `session_started_at` at login, and **copied onto every successor** on rotation.
+  Without the copy, each refresh would reset the clock and the cap would never
+  bite.
+- The access token issued to an admin is set to expire exactly at
+  `session_started_at + ADMIN_SESSION_MINUTES`, so the JWT itself carries the cap
+  and the browser needs no callback to know when the session dies.
+- `/auth/refresh` refuses an admin token once the window has passed: it revokes
+  the presented token and returns 401 (`app/services/sessions.py`). Rotation
+  cannot get around it.
+- The frontend never renews an admin token (`frontend/proxy.ts`), so an expired
+  admin cookie means the session is over: protected pages redirect to
+  `/login?reason=expired`, which explains why.
+- Idle timeout is enforced in the browser, not here: the server cannot tell an
+  idle tab from a busy one. `frontend/components/admin/AdminSessionGuard.tsx`
+  signs the admin out after `ADMIN_IDLE_MINUTES` (30) without input and sends
+  them to `/login?reason=idle`.
+
+**Frontend flow:** every normal `/auth/refresh` call uses the 15-minute
+`ACCESS_TOKEN_EXPIRE_MINUTES` TTL and the rotating 7-day refresh token.
 
 ### Email verification tokens
 - Generated with `secrets.token_urlsafe(32)` — URL-safe, unguessable.
@@ -318,7 +343,7 @@ def create_product(user: User = Depends(require_seller)):
 | `/verify-email` | 400 | Token not found, already used, or expired |
 | `/login` | 401 | Wrong email or password |
 | `/login` | 403 | Account pending (unverified) or suspended |
-| `/refresh` | 401 | Token not found, revoked, or expired |
+| `/refresh` | 401 | Token not found, revoked, or expired; or an admin session past its window |
 | `/logout` | 401 | Missing or invalid access token in header |
 | `/reset-password` | 400 | Token not found, already used, or expired |
 | Any protected route | 401 | Missing, invalid, or expired access token |

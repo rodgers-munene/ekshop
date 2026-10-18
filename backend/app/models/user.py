@@ -107,6 +107,10 @@ class RefreshToken(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     revoked_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    # When the login that started this chain of tokens happened. Rotation copies
+    # it onto the successor row, so an admin session's true age stays measurable
+    # even though every refresh issues a brand-new token.
+    session_started_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     user = relationship("User", back_populates="refresh_tokens")
 

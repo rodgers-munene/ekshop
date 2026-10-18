@@ -22,6 +22,7 @@ from app.dependencies.database import get_db
 from app.services import email as email_service
 from app.services import paystack
 from app.services.geography import resolve_county_name
+from app.services.sessions import SessionExpired, access_token_ttl, session_started_at_value
 from app.services.subscriptions import activate_subscription
 from app.models.shop import Shop, ShopStatus
 from app.models.subscription import (
@@ -395,19 +396,23 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     if user.status == UserStatus.suspended:
         raise HTTPException(status_code=403, detail="Account suspended. Contact support.")
 
+    now = datetime.now(timezone.utc)
+    # An admin session is capped (ADMIN_SESSION_MINUTES); everyone else gets the
+    # usual short-lived token that the frontend proxy renews.
     access_token = create_access_token(
         data={"sub": str(user.id), "role": user.role.value},
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        expires_delta=access_token_ttl(user.role.value, now, now),
     )
 
     raw_refresh = generate_refresh_token()
     db.add(RefreshToken(
         user_id=user.id,
         token_hash=hash_refresh_token(raw_refresh),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        session_started_at=now,
     ))
 
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = now
     db.commit()
 
     return TokenResponse(access_token=access_token, refresh_token=raw_refresh)
@@ -440,22 +445,40 @@ def refresh(raw_token: str, db: Session = Depends(get_db)):
         .first()
     )
 
-    if not stored or stored.expires_at < datetime.now(timezone.utc):
+    now = datetime.now(timezone.utc)
+    if not stored or stored.expires_at < now:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     user = db.query(User).filter(User.id == stored.user_id).first()
+    if not user:
+        # The account was deleted after the token was issued; the token is dead.
+        stored.revoked_at = now
+        db.commit()
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    stored.revoked_at = datetime.now(timezone.utc)
+    # The session may be renewed only inside its own window. For an admin that
+    # window is a fixed hour from login; the token that is being replaced is
+    # revoked first so a stale chain cannot be replayed after the cap.
+    session_start = session_started_at_value(stored.session_started_at, stored.created_at)
+    try:
+        ttl = access_token_ttl(user.role.value, session_start, now)
+    except SessionExpired as exc:
+        stored.revoked_at = now
+        db.commit()
+        raise HTTPException(status_code=401, detail=str(exc))
+
+    stored.revoked_at = now
 
     new_access = create_access_token(
         data={"sub": str(user.id), "role": user.role.value},
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        expires_delta=ttl,
     )
     new_raw_refresh = generate_refresh_token()
     db.add(RefreshToken(
         user_id=user.id,
         token_hash=hash_refresh_token(new_raw_refresh),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        session_started_at=session_start,
     ))
     db.commit()
 

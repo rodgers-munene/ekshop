@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     # docs/auth_pipeline.md documents.
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Admins get one absolute session window rather than a session that is
+    # silently renewed for as long as the refresh token lasts. The dashboard is
+    # the surface that can move money, so after this many minutes the admin must
+    # sign in again; /auth/refresh refuses to extend an admin session past it.
+    # See docs/auth_pipeline.md ("Admin sessions").
+    ADMIN_SESSION_MINUTES: int = 60
 
     # Comma-separated list of allowed frontend origins
     CORS_ORIGINS: str = "http://localhost:3000"

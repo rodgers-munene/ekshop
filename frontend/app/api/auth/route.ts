@@ -1,7 +1,31 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
+import { decodeJwtClaims, isExpired } from "@/lib/jwt";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL
+
+/**
+ * Session probe.
+ *
+ * Used by the admin session guard to notice that the access token has run out.
+ * It reads the cookie instead of calling the backend on purpose: the token
+ * lifetime is fixed at login and admin tokens are never renewed, so the cookie's
+ * own expiry is the session's expiry. This route is outside the proxy matcher, so
+ * no refresh can quietly extend what it reports.
+ */
+export async function GET() {
+  const cookieStore = await cookies();
+  const claims = decodeJwtClaims(cookieStore.get("ekshop_token")?.value);
+  if (isExpired(claims)) {
+    return NextResponse.json({ authenticated: false }, { status: 401 });
+  }
+  return NextResponse.json({
+    authenticated: true,
+    role: claims?.role ?? null,
+    expires_at: claims?.exp ?? null,
+  });
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json();

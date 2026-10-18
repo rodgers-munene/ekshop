@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { decodeJwtClaims, isExpired, isExpiringSoon } from "@/lib/jwt";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const PROTECTED_PAGES = [
@@ -48,22 +50,6 @@ const COOKIE_OPTS = {
   secure: process.env.NODE_ENV === "production",
 };
 
-function decodeExpiryMs(token: string): number | null {
-  try {
-    const payload = token.split(".")[1];
-    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
-    return typeof json.exp === "number" ? json.exp * 1000 : null;
-  } catch {
-    return null;
-  }
-}
-
-function isExpiringSoon(token: string | undefined): boolean {
-  if (!token) return true;
-  const expiryMs = decodeExpiryMs(token);
-  return expiryMs === null || expiryMs < Date.now() + 60_000; // refresh within 1 min of expiry
-}
-
 async function tryRefresh(refreshToken: string): Promise<{ access_token: string; refresh_token: string } | null> {
   try {
     const res = await fetch(`${BASE_URL}/auth/refresh?raw_token=${encodeURIComponent(refreshToken)}`, {
@@ -90,18 +76,40 @@ export async function proxy(request: NextRequest) {
   let accessToken = request.cookies.get("ekshop_token")?.value;
   const refreshToken = request.cookies.get("ekshop_refresh")?.value;
   const response = NextResponse.next();
+  const claims = decodeJwtClaims(accessToken);
+  const hadToken = Boolean(accessToken);
+  // A session only "ended" if there was one to end: someone who never signed in
+  // must not be told their session expired.
+  let sessionEnded = false;
 
-  if (isExpiringSoon(accessToken) && refreshToken) {
+  const clearSession = () => {
+    accessToken = undefined;
+    response.cookies.delete("ekshop_token");
+    response.cookies.delete("ekshop_refresh");
+  };
+
+  if (claims?.role === "admin") {
+    // Admin sessions are absolute: one login, a fixed window, then a fresh
+    // login. Renewing here would quietly defeat that cap, so an admin token is
+    // either still valid or the session is over.
+    if (isExpired(claims)) {
+      clearSession();
+      sessionEnded = true;
+    }
+  } else if (refreshToken && isExpiringSoon(claims)) {
     const refreshed = await tryRefresh(refreshToken);
     if (refreshed) {
       accessToken = refreshed.access_token;
       response.cookies.set("ekshop_token", refreshed.access_token, { ...COOKIE_OPTS, maxAge: 60 * 60 * 24 * 7 });
       response.cookies.set("ekshop_refresh", refreshed.refresh_token, { ...COOKIE_OPTS, maxAge: 60 * 60 * 24 * 30 });
     } else {
-      accessToken = undefined;
-      response.cookies.delete("ekshop_token");
-      response.cookies.delete("ekshop_refresh");
+      clearSession();
+      sessionEnded = hadToken;
     }
+  } else if (isExpired(claims)) {
+    // Ran out with nothing left to renew it with.
+    clearSession();
+    sessionEnded = hadToken;
   }
 
   // API routes: never redirect, let the route handler return its own 401.
@@ -113,6 +121,7 @@ export async function proxy(request: NextRequest) {
   if (isProtectedPage && !accessToken) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
+    if (sessionEnded) loginUrl.searchParams.set("reason", "expired");
     const redirect = NextResponse.redirect(loginUrl);
     response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
     return redirect;

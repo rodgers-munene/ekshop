@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import { AuthUser } from "@/store/authStore";
+import { ADMIN_IDLE_MINUTES, ADMIN_SESSION_MINUTES } from "@/lib/session";
 
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -27,6 +28,10 @@ function LoginPageInner() {
   // link is the only route to payment.
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+
+  // Why the visitor landed here without asking to: the proxy sends `expired`
+  // when a token ran out, the admin guard sends `idle` after inactivity.
+  const reason = searchParams.get("reason");
 
   const {
     register,
@@ -127,6 +132,24 @@ function LoginPageInner() {
               Create one
             </Link>
           </p>
+
+          {reason === "expired" && (
+            <div className="mb-6 rounded-lg border border-border bg-surface p-4">
+              <p className="text-sm font-medium mb-1">Your session ended</p>
+              <p className="text-muted text-xs">
+                Sign in again to carry on. Admin sessions last {ADMIN_SESSION_MINUTES} minutes.
+              </p>
+            </div>
+          )}
+
+          {reason === "idle" && (
+            <div className="mb-6 rounded-lg border border-border bg-surface p-4">
+              <p className="text-sm font-medium mb-1">You were signed out</p>
+              <p className="text-muted text-xs">
+                There was no activity for {ADMIN_IDLE_MINUTES} minutes, so we closed the session.
+              </p>
+            </div>
+          )}
 
           {unverifiedEmail && (
             <div className="mb-6 rounded-lg border border-border bg-surface p-4">
