@@ -309,23 +309,21 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), curren
     
     return product
 
-def _apply_radius(base_query, lat: float, lng: float, radius_km: float):
-    """Narrow a product query to shops within ``radius_km`` -- if anything is there.
+def _local_first(lat: float, lng: float, radius_km: float):
+    """Sort key that lifts shops inside ``radius_km`` above everything else.
 
-    Returns ``(query, radius_km)`` when the radius matched at least one product and
-    ``(base_query, None)`` when it matched none. The probe asks the database a
-    single question (``limit 1``) rather than counting, and it runs before the
-    search, paging and sorting clauses are added, so it sees exactly the rows the
-    caller's other filters allow.
+    This is an ordering, not a filter, and it is the whole point: a radius is a
+    statement about what is local, not about what exists. Narrowing the query to
+    it used to empty the page for a shopper in a thin area, and widening it back
+    to the unrestricted catalogue on failure made the label a lie -- the rows
+    came back unfiltered and unmarked. Ordering keeps the shopper's own town on
+    page one while still letting the rest of the catalogue be found, and it
+    leaves ``total`` honest, so paging does not hide stock either.
 
-    Emptying the page is the failure mode being avoided here: a radius is a
-    preference for what to show first, not a promise about what exists, and it
-    must never be the reason a shopper with a thin local catalogue sees nothing.
+    A shop with no coordinates cannot be claimed as local, so it sorts with the
+    out-of-range rows rather than among the nearby ones.
     """
-    in_radius = base_query.filter(within_radius(lat, lng, radius_km))
-    if in_radius.limit(1).first() is None:
-        return base_query, None
-    return in_radius, radius_km
+    return within_radius(lat, lng, radius_km).desc()
 
 
 # get product with limits and option for filter (Category, count, price, range, search term)
@@ -358,19 +356,13 @@ def get_products(
         base_query = base_query.filter(func.lower(Shop.county) == county.lower())
 
     # Hyperlocal feed. A radius here is a discovery aid, not a delivery promise,
-    # so it is applied only when it has something to show: at launch most shops
-    # have no pin and a shopper in a thin area would otherwise get an empty grid
-    # where they used to see stock. When the radius finds nothing we keep every
-    # other filter and serve the unrestricted catalogue, reporting radius_km=None
-    # so the UI can be honest about which one it got.
+    # so it orders the results and never removes any: the shopper's own area
+    # leads, the rest of the catalogue follows it. See _local_first.
     nearby_radius: Optional[float] = None
     origin: Optional[GeoPoint] = None
     if lat is not None and lng is not None:
-        base_query, nearby_radius = _apply_radius(
-            base_query, lat, lng, radius_km or settings.GEOFENCE_RADIUS_KM
-        )
-        if nearby_radius is not None:
-            origin = GeoPoint(lat, lng)
+        origin = GeoPoint(lat, lng)
+        nearby_radius = radius_km or settings.GEOFENCE_RADIUS_KM
 
     if category_slug:
         cat = db.query(Category).filter(Category.slug == category_slug).first()
@@ -416,11 +408,13 @@ def get_products(
 
     skip = (page - 1) * limit
 
-    # Nearest first when ranking a plain browse; but when there is a search term the
-    # best text match still comes first and proximity only breaks ties. Distance
-    # leading a search would push a weak match from the next street above the
-    # product the shopper actually typed.
+    # Local stock leads every ordering. A search term still decides what is a
+    # result at all, and relevance still outranks distance *within* the local
+    # group -- but a weak local match must not be pushed below a strong far one,
+    # because the far one may not be deliverable to this shopper at all.
     order_by = []
+    if origin is not None:
+        order_by.append(_local_first(origin.lat, origin.lng, nearby_radius))
     if relevance is not None:
         order_by.append(desc(relevance))
         if origin is not None:

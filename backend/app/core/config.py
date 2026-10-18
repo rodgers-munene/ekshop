@@ -100,13 +100,15 @@ class Settings(BaseSettings):
     DISTANCE_ALLOW_STRAIGHT_LINE_FALLBACK: bool = True
 
     # --- Hyperlocal discovery ------------------------------------------------
-    # How far from the shopper a product may be and still count as "near me".
-    # 30 km is a deliberate wide-open default for launch: the catalogue is thin
-    # outside the big towns, and a tight radius would show an empty grid where a
-    # shopper previously at least saw the county's stock. The feed applies this
-    # radius only when it finds something inside it (see routers/catalog.py), so
-    # this number sets the promise, not a hard gate that can empty the page.
-    GEOFENCE_RADIUS_KM: float = 30.0
+    # How far from the shopper a shop may be and still count as "near me".
+    # 3 km, not 30: Nyeri county is 3,341 km2 and its 196 sublocations average
+    # 6.5 km2 (roughly 2.5 km across), so a 30 km radius reached 85% of the
+    # county -- the whole launch market, which is not a locality. 3 km is one
+    # sublocation plus its immediate neighbours. The feed never hides anything
+    # because of this number; it only decides what is ranked as local (see
+    # routers/catalog.py), and the delivery side already treats 5 km as local
+    # (PING_RADIUS_KM, the zone lookup), so this sits inside that.
+    GEOFENCE_RADIUS_KM: float = 3.0
 
     # --- Platform commission -------------------------------------------------
     # What Ekshop keeps as a share of goods value. Deliberately unset rather than

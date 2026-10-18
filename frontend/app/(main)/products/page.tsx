@@ -114,9 +114,9 @@ export default async function ProductsPage({ searchParams }: Props) {
   const products = data?.results ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
-  // The feed reports a radius only when it actually applied one. When it does not,
-  // there was nothing in stock within range and it served the wider catalogue --
-  // so say that, instead of a "near you" label over products that are not.
+  // The feed reports the radius it ordered by, not one it filtered on: nearby
+  // stock leads and everything else still follows. So this is only a label for
+  // what counts as local to this shopper, never a claim that the count is local.
   const appliedRadius = data?.radius_km ?? null;
   const nearbyParams: Record<string, string> = isNearby
     ? { lat: lat!, lng: lng!, radius_km: String(requestedRadius) }
@@ -136,14 +136,12 @@ export default async function ProductsPage({ searchParams }: Props) {
                   ? "Shops near you"
                   : "All Products"}
           </h1>
-          <span className="text-sm text-muted">
-            {appliedRadius != null ? `${total} within ${appliedRadius} km` : `${total} products`}
-          </span>
+          <span className="text-sm text-muted">{total} products</span>
         </div>
-        {isNearby && appliedRadius == null && (
+        {isNearby && appliedRadius != null && (
           <p className="text-xs text-muted mt-2">
-            Nothing in stock within {requestedRadius} km yet, so everything is shown. Nearby
-            shops are listed below.
+            Sorted by how close each shop is to you: everything within {appliedRadius} km is
+            listed first, and stock further away is marked &ldquo;outside your area&rdquo; below it.
           </p>
         )}
         {county && !isNearby && (
@@ -258,7 +256,7 @@ export default async function ProductsPage({ searchParams }: Props) {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard key={product.id} product={product} nearbyRadius={appliedRadius} />
                 ))}
               </div>
 

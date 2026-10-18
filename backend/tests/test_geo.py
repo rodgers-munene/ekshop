@@ -1,6 +1,6 @@
 """Tests for hyperlocal discovery: the distance maths, the radius rule, the ranking.
 
-No database is involved. The radius decision is a pure function (``_apply_radius``)
+No database is involved. The radius decision is a pure function (``_local_first``)
 and the ranking is pure Python, so both are exercised directly; the SQL formula is
 checked by inspecting the statement it compiles to, since asserting its *value*
 would need Postgres and the point here is that the right formula is wired up at
@@ -11,7 +11,8 @@ from types import SimpleNamespace
 
 from sqlalchemy.dialects import postgresql
 
-from app.routers.catalog import _apply_radius
+from app.core.config import settings
+from app.routers.catalog import _local_first
 from app.services import recommendations as rec_service
 from app.services.distance import GeoPoint, haversine_metres
 from app.services.geo import (
@@ -28,21 +29,40 @@ def _sql(expr) -> str:
 
 
 class TestProximityWeight:
-    def test_bands_step_down_with_distance(self):
-        assert proximity_weight(0.0, 30.0) == 5.0
-        assert proximity_weight(2.0, 30.0) == 5.0
-        assert proximity_weight(2.1, 30.0) == 3.5
-        assert proximity_weight(5.0, 30.0) == 3.5
-        assert proximity_weight(5.1, 30.0) == 2.0
-        assert proximity_weight(30.0, 30.0) == 2.0
-        assert proximity_weight(30.1, 30.0) == 1.0
+    def test_bands_are_thirds_of_the_fence(self):
+        # Bands are a statement about the fence, so they move with it. With a
+        # 3 km fence: 1 km is walkable, 2 km is the same township, 3 km is the
+        # edge of local.
+        assert proximity_weight(0.0, 3.0) == 5.0
+        assert proximity_weight(1.0, 3.0) == 5.0
+        assert proximity_weight(1.1, 3.0) == 3.5
+        assert proximity_weight(2.0, 3.0) == 3.5
+        assert proximity_weight(2.1, 3.0) == 2.0
+        assert proximity_weight(3.0, 3.0) == 2.0
+        assert proximity_weight(3.1, 3.0) == 1.0
+
+    def test_the_same_township_scores_the_same_at_any_fence(self):
+        # The regression this guards: with fixed kilometre bands, a 3 km fence
+        # made "within 5 km" the second band, so a shop *outside* the fence still
+        # scored like a neighbour while the innermost band became unreachable.
+        for radius in (3.0, 10.0, 30.0):
+            assert proximity_weight(radius / 2, radius) == 3.5
+            assert proximity_weight(radius * 1.5, radius) == 1.0
+
+    def test_outside_the_fence_is_never_boosted(self):
+        assert proximity_weight(4.0, 3.0) == 1.0
+        assert proximity_weight(4.0, 3.0) < proximity_weight(2.5, 3.0)
+
+    def test_a_fence_of_zero_boosts_nothing(self):
+        # Guards the division in the bands; a zero radius cannot have an inside.
+        assert proximity_weight(0.0, 0.0) == 1.0
 
     def test_unknown_distance_is_neutral_never_nearest(self):
         # A shop with no pin must not outrank a pinned shop 1 km away. Treating
         # "unknown" as 0 km would do exactly that, on a catalogue that is mostly
         # unpinned at launch, so it is pinned here.
-        assert proximity_weight(None, 30.0) == 1.0
-        assert proximity_weight(None, 30.0) < proximity_weight(1.0, 30.0)
+        assert proximity_weight(None, 3.0) == 1.0
+        assert proximity_weight(None, 3.0) < proximity_weight(1.0, 3.0)
 
     def test_boost_is_bounded(self):
         for away in (None, 0.0, 1.0, 12.0, 500.0):
@@ -102,40 +122,36 @@ class TestRadiusSql:
         assert "-0.269" in wide
 
 
-class _FakeQuery:
-    """Just enough of a query to answer the one question _apply_radius asks."""
+class TestLocalFirst:
+    """The radius orders the feed; it never removes anything from it.
 
-    def __init__(self, found, calls=None):
-        self.found = found
-        self.calls = calls if calls is not None else []
+    Filtering on the radius used to empty the page for a shopper whose own area
+    had no stock, and the fallback that widened the query back out returned rows
+    as if nothing had happened -- no marker, no ordering, and a count that
+    claimed they were local. These pin the ordering contract instead.
+    """
 
-    def filter(self, *args, **kwargs):
-        self.calls.append(args)
-        return _FakeQuery(self.found, self.calls)
+    def test_in_range_rows_sort_ahead_of_everything_else(self):
+        sql = _sql(_local_first(-0.4169, 36.9510, 3.0))
+        # DESC on a boolean puts true first in Postgres.
+        assert sql.endswith("DESC")
 
-    def limit(self, n):
-        assert n == 1, "the probe must ask for one row, not count the table"
-        return self
+    def test_the_sort_key_reuses_the_one_radius_definition(self):
+        # Same clause as the (still available) radius filter, so "local" cannot
+        # come to mean one thing when ranking and another when filtering.
+        clause = _sql(within_radius(0.0, 0.0, 3.0))
+        assert _sql(_local_first(0.0, 0.0, 3.0)) == f"({clause}) DESC"
 
-    def first(self):
-        return object() if self.found else None
+    def test_a_shop_without_a_pin_is_not_sorted_as_local(self):
+        # "No coordinates" cannot be claimed as near, so those rows belong with
+        # the far group rather than sprinkled through page one.
+        assert "shops.lat IS NOT NULL" in _sql(_local_first(0.0, 0.0, 3.0))
 
-
-class TestApplyRadius:
-    def test_applies_radius_when_something_is_in_range(self):
-        base = _FakeQuery(found=True)
-        query, radius = _apply_radius(base, -1.2921, 36.8219, 30.0)
-        assert query is not base
-        assert radius == 30.0
-        assert len(base.calls) == 1
-
-    def test_drops_radius_when_nothing_is_in_range(self):
-        # The launch-area case: pinned shops exist, but none of them sell anything
-        # the buyer can see. An empty grid is a worse answer than a far-away grid.
-        base = _FakeQuery(found=False)
-        query, radius = _apply_radius(base, -1.2921, 36.8219, 30.0)
-        assert query is base
-        assert radius is None
+    def test_the_default_fence_stays_inside_the_delivery_fence(self):
+        # Discovery must not promise more reach than dispatch does: the rider
+        # fleet dispatches within PING_RADIUS_KM and the zone lookup uses 5 km.
+        assert 0 < settings.GEOFENCE_RADIUS_KM <= settings.PING_RADIUS_KM
+        assert settings.GEOFENCE_RADIUS_KM <= 5.0
 
 
 def _product(name, county, lat=None, lng=None, trending=10.0):

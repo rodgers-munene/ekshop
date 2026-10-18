@@ -155,10 +155,10 @@ class ProductListResponse(BaseModel):
     page: int
     limit: int
     results: List[ProductRead]
-    # Set only when a radius actually shaped this page; None means the results are
-    # the unrestricted catalogue (no location given, or nothing within range), so
-    # the UI can say which of the two it is showing instead of implying a promise
-    # it did not keep.
+    # The radius these results were ordered by: shops inside it come first, and
+    # anything past it (or a shop with no pin, whose distance is unknown) is
+    # still returned but marked as not local by its own distance_km. None means
+    # no location was given, so there is no local/not-local split to label.
     radius_km: Optional[float] = None
 
 class ProductUpdate(BaseModel):

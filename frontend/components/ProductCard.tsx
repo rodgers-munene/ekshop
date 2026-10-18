@@ -33,13 +33,24 @@ function ProductImage({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({
+  product,
+  nearbyRadius,
+}: {
+  product: Product;
+  /** Set only on a geolocated feed; marks the results that are not local. */
+  nearbyRadius?: number | null;
+}) {
   const primaryImage = product.images?.find((i) => i.is_primary) ?? product.images?.[0];
   const hasDiscount =
     product.compare_price &&
     parseFloat(product.compare_price) > parseFloat(product.price);
   const ratingAvg = product.rating_avg ? parseFloat(product.rating_avg) : 0;
   const addItem = useCartStore((state) => state.addItem);
+  // A shop with no pin has no distance, and an unknown distance is not local.
+  const isOutsideArea =
+    nearbyRadius != null &&
+    (product.distance_km == null || product.distance_km > nearbyRadius);
 
   function handleQuickAdd(e: React.MouseEvent) {
     e.preventDefault();
@@ -92,6 +103,9 @@ export default function ProductCard({ product }: { product: Product }) {
         )}
         {product.distance_km != null && (
           <p className="text-xs text-gold">{product.distance_km} km away</p>
+        )}
+        {isOutsideArea && (
+          <p className="text-[10px] uppercase tracking-wide text-muted">Outside your area</p>
         )}
         <h3 className="text-sm font-medium leading-tight line-clamp-2">
           {decodeHtml(product.name)}

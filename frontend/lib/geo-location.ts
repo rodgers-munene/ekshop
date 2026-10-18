@@ -1,6 +1,14 @@
 export const LOCATION_COOKIE = "ekshop_loc";
 
-export const DEFAULT_RADIUS_KM = 30;
+/**
+ * How far "near you" reaches, in km, when the shopper has not chosen otherwise.
+ *
+ * 3, not 30: Nyeri county is 3,341 km² and its sublocations average 6.5 km²
+ * (about 2.5 km across), so 30 km covered most of the county -- every launch
+ * market at once, which is not a neighbourhood. This matches the backend's
+ * GEOFENCE_RADIUS_KM, which orders results by it rather than hiding any.
+ */
+export const DEFAULT_RADIUS_KM = 3;
 
 export interface CustomerLocation {
   lat: number;

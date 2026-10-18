@@ -87,16 +87,19 @@ def proximity_weight(away_km: Optional[float], radius_km: float) -> float:
     """Ranking multiplier for a product whose shop is this far away.
 
     A boost, never a filter: far products sink, they do not disappear. Bands are
-    deliberately coarse -- pickup and same-day delivery are the real reasons
-    nearness matters, and those turn on a handful of kilometres, not on metres.
+    stated as thirds of the local fence rather than as fixed kilometres, because
+    they are a statement about the fence: what counts as "walkable", "same
+    township" and "far edge of local" has to move when the fence moves. Fixed
+    bands left the inner ones unreachable once the fence came inside 5 km -- every
+    out-of-range shop still scored as if it were round the corner.
     An unknown distance is neutral, never "nearest".
     """
-    if away_km is None:
+    if away_km is None or radius_km <= 0:
         return 1.0
-    if away_km <= 2:
+    if away_km > radius_km:
+        return 1.0
+    if away_km <= radius_km / 3:
         return 5.0
-    if away_km <= 5:
+    if away_km <= 2 * radius_km / 3:
         return 3.5
-    if away_km <= radius_km:
-        return 2.0
-    return 1.0
+    return 2.0
