@@ -20,3 +20,22 @@ export async function DELETE() {
   const data = await res.json().catch(() => ({}));
   return NextResponse.json(data, { status: res.status });
 }
+
+// The storefront sends the whole cart after every change, so the server copy the
+// admin abandonment report reads keeps up with the local one.
+export async function PUT(request: Request) {
+  const token = await getToken();
+  if (!token) return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+
+  const body = await request.text();
+  const res = await fetch(`${BASE_URL}/cart/`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  return NextResponse.json(data, { status: res.status });
+}

@@ -12,6 +12,43 @@ class CartItemCreate(BaseModel):
     quantity: int = 1
 
 
+# Bounds on a whole-cart replace. This endpoint is called automatically by the
+# storefront after every cart change, so it is a path a client can reach without
+# a user noticing, and an unbounded list is an unbounded write.
+MAX_CART_LINES = 100
+MAX_CART_QUANTITY = 999
+
+
+class CartItemReplace(BaseModel):
+    product_id: uuid.UUID
+    variant_id: Optional[uuid.UUID] = None
+    quantity: int = 1
+
+    @field_validator("quantity")
+    @classmethod
+    def quantity_is_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("quantity must be at least 1")
+        if v > MAX_CART_QUANTITY:
+            raise ValueError(f"quantity must be at most {MAX_CART_QUANTITY}")
+        return v
+
+
+class CartReplace(BaseModel):
+    """The cart as the shopper sees it. An empty list is a legitimate value: it
+    means the cart was emptied, and it is how a client clears it now that the
+    cart is no longer only a checkout-time concern."""
+
+    items: List[CartItemReplace] = []
+
+    @field_validator("items")
+    @classmethod
+    def items_are_bounded(cls, v: List[CartItemReplace]) -> List[CartItemReplace]:
+        if len(v) > MAX_CART_LINES:
+            raise ValueError(f"a cart may hold at most {MAX_CART_LINES} lines")
+        return v
+
+
 class CheckoutCreate(BaseModel):
     address_id: uuid.UUID
     notes: Optional[str] = None

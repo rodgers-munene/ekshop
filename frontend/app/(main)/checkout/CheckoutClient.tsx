@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, RefreshCw, Smartphone, MapPin } from "lucide-react";
-import { useCartStore } from "@/store/cartStore";
+import { useCartStore, syncCartToServer } from "@/store/cartStore";
 import { UserAddress, GeoSelection } from "@/types/interface";
 import { formatKES, resolveImageUrl as resolveImg, decodeHtml } from "@/lib/utils";
 import LocationPicker from "@/components/geo/LocationPicker";
@@ -178,22 +178,10 @@ export default function CheckoutClient({ addresses, buyNow }: { addresses: UserA
       // 0. Sync the local cart to the server cart so the backend (which
       // checks out from the server-side cart, not the request body) sees
       // the same items the user is looking at.
-      await fetch("/api/cart", { method: "DELETE" });
-      for (const item of items) {
-        const syncRes = await fetch("/api/cart/items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            product_id: item.product_id,
-            variant_id: item.variant_id,
-            quantity: item.quantity,
-          }),
-        });
-        if (!syncRes.ok) {
-          const syncJson = await syncRes.json().catch(() => ({}));
-          toast.error(syncJson.detail ?? "Could not sync your cart. Try again.");
-          return;
-        }
+      const sync = await syncCartToServer(items);
+      if (!sync.ok) {
+        toast.error(sync.detail ?? "Could not sync your cart. Try again.");
+        return;
       }
 
       // 1. Create order

@@ -1,4 +1,5 @@
 from decimal import Decimal
+import logging
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 import uuid
 
@@ -16,6 +17,7 @@ from app.schemas.commerce import (
     CartRead,
     CartItemRead,
     CartItemCreate,
+    CartReplace,
     CheckoutCreate,
     OrderGroupRead,
     OrderRead,
@@ -35,6 +37,8 @@ from app.services.inventory import InventoryReservation
 cart_router = APIRouter(prefix="/cart", tags=["cart"])
 checkout_router = APIRouter(prefix="/checkout", tags=["checkout"])
 orders_router = APIRouter(prefix="/orders", tags=["orders"])
+
+logger = logging.getLogger(__name__)
 
 # cart
 @cart_router.get(
@@ -182,6 +186,87 @@ def clear_cart(
     db.execute(delete(CartItem).where(CartItem.cart_id == cart.id))
     db.commit()
     
+
+@cart_router.put(
+    "/",
+    response_model=CartRead,
+    status_code=status.HTTP_200_OK,
+    summary="Replace the cart with this list of items",
+)
+def replace_cart(
+    payload: CartReplace,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Mirror the client's cart onto the server.
+
+    The storefront owns the cart in local storage and calls this after every
+    change, so the server copy is what the abandoned-cart metrics can actually
+    see. It is a replace, not a merge: the payload is the whole cart, and an
+    empty list is a legitimate way to empty it (the shopper cleared the cart).
+
+    Rows that survive a change keep their identity and their `added_at`, so a
+    quantity tweak does not look like a brand new addition. A product the
+    catalogue no longer has is dropped instead of failing the request: one
+    delisted product must not stop a shopper's other items from being recorded,
+    and the local cart is the only copy of their intent.
+    """
+    cart = db.query(Cart).filter(Cart.user_id == current_user.id).first()
+    if not cart:
+        cart = Cart(user_id=current_user.id)
+        db.add(cart)
+        db.flush()  # generates cart.id before we use it below
+
+    # Collapse repeated lines so the replace cannot trip the (cart_id, product_id,
+    # variant_id) uniqueness the way a naive insert would.
+    wanted: dict = {}
+    for line in payload.items:
+        key = (line.product_id, line.variant_id)
+        wanted[key] = wanted.get(key, 0) + line.quantity
+
+    if wanted:
+        known_ids = {
+            row[0]
+            for row in db.query(Product.id)
+            .filter(Product.id.in_([key[0] for key in wanted]))
+            .all()
+        }
+        missing = [key for key in wanted if key[0] not in known_ids]
+        for key in missing:
+            del wanted[key]
+        if missing:
+            logger.warning(
+                "cart sync for user %s dropped %d line(s) for products that no longer exist",
+                current_user.id,
+                len(missing),
+            )
+
+    kept: set = set()
+    for row in db.query(CartItem).filter(CartItem.cart_id == cart.id).all():
+        key = (row.product_id, row.variant_id)
+        if key in wanted and key not in kept:
+            kept.add(key)
+            if row.quantity != wanted[key]:
+                row.quantity = wanted[key]
+        else:
+            # removed by the shopper, or the duplicate half of an older row
+            db.delete(row)
+
+    for key, quantity in wanted.items():
+        if key not in kept:
+            db.add(
+                CartItem(
+                    cart_id=cart.id,
+                    product_id=key[0],
+                    variant_id=key[1],
+                    quantity=quantity,
+                )
+            )
+
+    db.commit()
+
+    return cart
+
 
 # Inventory reservations
 @cart_router.post(

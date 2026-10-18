@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { useAuthStore } from "./authStore"
 
 export interface CartItem {
     product_id: string;
@@ -29,13 +30,67 @@ export interface CartState {
     totalPrice: () => number;
 }
 
+export interface SyncResult {
+    ok: boolean;
+    detail?: string;
+}
+
+/**
+ * Mirror the cart onto the server.
+ *
+ * The cart lives in local storage, but a basket that is filled and then
+ * deserted is only visible to the admin "cart abandonment" report if the
+ * server has a copy of it. This sends the whole cart as a replace rather than
+ * merging deltas, so it is idempotent: whatever the last call sent is the cart.
+ * An empty list is meaningful -- it is how the shopper clearing their cart (or
+ * finishing an order) is recorded.
+ */
+export async function syncCartToServer(items: CartItem[]): Promise<SyncResult> {
+    try {
+        const res = await fetch("/api/cart", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                items: items.map((i) => ({
+                    product_id: i.product_id,
+                    variant_id: i.variant_id ?? null,
+                    quantity: i.quantity,
+                })),
+            }),
+        })
+        if (res.ok) return { ok: true }
+        const data = await res.json().catch(() => ({}))
+        return { ok: false, detail: data?.detail }
+    } catch {
+        return { ok: false }
+    }
+}
+
+// Browsers raise a change event per tap, so wait for the shopper to settle
+// before writing. Every write carries the whole cart, so the last one wins and
+// nothing is lost by collapsing the burst.
+const SYNC_DELAY_MS = 400
+let syncTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleServerSync() {
+    if (typeof window === "undefined") return
+    if (syncTimer) clearTimeout(syncTimer)
+    syncTimer = setTimeout(() => {
+        syncTimer = null
+        // A signed-out shopper has no server cart to write to; asking anyway
+        // would only collect 401s.
+        if (!useAuthStore.getState().isAuthenticated) return
+        void syncCartToServer(useCartStore.getState().items)
+    }, SYNC_DELAY_MS)
+}
+
 export const useCartStore = create<CartState>()(
     persist(
         (set, get) => ({
             items: [],
             buyNowItem: null,
 
-            addItem: (item) =>
+            addItem: (item) => {
                 set((state) => {
                     const existing = state.items.find(
                         (i) => i.product_id === item.product_id && i.variant_id === item.variant_id
@@ -54,7 +109,9 @@ export const useCartStore = create<CartState>()(
 
                     // product not in cart - add it as a new entry
                     return { items: [...state.items, item] };
-                }),
+                });
+                scheduleServerSync();
+            },
 
             removeItem: (product_id, variant_id) => {
                 set((state) => {
@@ -62,18 +119,27 @@ export const useCartStore = create<CartState>()(
                         items: state.items.filter((i) => !(i.product_id === product_id && i.variant_id === variant_id))
                     }
                 });
+                scheduleServerSync();
             },
 
-            updateQuantity: (product_id, quantity, variant_id) =>
+            updateQuantity: (product_id, quantity, variant_id) => {
                 set((state) => ({
                     items: state.items.map((i) =>
                         i.product_id === product_id && i.variant_id === variant_id
                             ? { ...i, quantity }
                             : i
                     ),
-                })),
+                }));
+                scheduleServerSync();
+            },
 
-            clearCart: () => set({ items: [] }),
+            clearCart: () => {
+                set({ items: [] });
+                // Emptied carts are written through too: the backend does not
+                // clear the server cart when an order is placed, so without this
+                // a paid basket would keep being reported as abandoned.
+                scheduleServerSync();
+            },
 
             setBuyNowItem: (item) => set({ buyNowItem: item }),
             clearBuyNow: () => set({ buyNowItem: null }),
