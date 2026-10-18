@@ -26,6 +26,7 @@ from app.services.fraud import FraudDetectionService, evaluate_order_fraud, get_
 from app.models.delivery import Delivery, DeliveryStatus
 from app.models.order_notifications import OrderNotificationRecipient
 from app.models.shop import Shop, ShopStatus
+from app.models.subscription import SubscriptionStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.analytics import HeroSlide, Promotion
 from app.schemas.admin import (
@@ -1660,6 +1661,31 @@ def toggle_shop_featured(shop_id: uuid.UUID, db: Session = Depends(get_db), _: U
     if not shop:
         raise HTTPException(404, "Shop not found")
     shop.is_featured = not shop.is_featured
+    db.commit()
+    db.refresh(shop)
+    return shop
+
+
+@router.patch("/shops/{shop_id}/platform", response_model=ShopRead)
+def toggle_shop_platform_owned(shop_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    shop = db.query(Shop).filter(Shop.id == shop_id).first()
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+
+    shop.is_platform_owned = not shop.is_platform_owned
+
+    if shop.is_platform_owned:
+        now = datetime.now(timezone.utc)
+        shop.status = ShopStatus.active
+        shop.is_verified = True
+        if shop.seller:
+            shop.seller.status = UserStatus.active
+        subscription = shop.subscription
+        if subscription:
+            subscription.status = SubscriptionStatus.active
+            subscription.current_period_start = now
+            subscription.current_period_end = now + timedelta(days=3650)
+
     db.commit()
     db.refresh(shop)
     return shop

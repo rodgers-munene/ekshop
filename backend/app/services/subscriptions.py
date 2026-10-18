@@ -110,6 +110,8 @@ def send_renewal_reminders(db: Session) -> int:
             .all()
         )
         for subscription in subscriptions:
+            if subscription.shop.is_platform_owned:
+                continue
             try:
                 email_service.send_subscription_reminder_email(
                     subscription.shop.seller.email,
@@ -149,6 +151,8 @@ def expire_overdue_subscriptions(db: Session) -> int:
     )
 
     for subscription in subscriptions:
+        if subscription.shop.is_platform_owned:
+            continue
         if subscription.status == SubscriptionStatus.trialing:
             if subscription.authorization_code:
                 try:
@@ -220,7 +224,7 @@ def expire_overdue_subscriptions(db: Session) -> int:
                 body=f"Renew within {PAST_DUE_GRACE_DAYS} days to keep {shop.name} live.",
             )
 
-    return len(subscriptions)
+    return sum(1 for subscription in subscriptions if not subscription.shop.is_platform_owned)
 
 
 def suspend_cancelled_subscriptions(db: Session) -> int:
@@ -237,6 +241,8 @@ def suspend_cancelled_subscriptions(db: Session) -> int:
     )
 
     for subscription in subscriptions:
+        if subscription.shop.is_platform_owned:
+            continue
         subscription.status = SubscriptionStatus.cancelled
         shop = subscription.shop
         shop.status = ShopStatus.suspended
@@ -253,7 +259,7 @@ def suspend_cancelled_subscriptions(db: Session) -> int:
             body=f"{shop.name} is hidden from Ekshop until you renew your subscription.",
         )
 
-    return len(subscriptions)
+    return sum(1 for subscription in subscriptions if not subscription.shop.is_platform_owned)
 
 
 def run_billing_cycle(db: Session) -> dict:

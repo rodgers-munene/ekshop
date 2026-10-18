@@ -39,6 +39,17 @@ categories_router = APIRouter(prefix="/categories", tags=["categories"])
 products_router = APIRouter(prefix="/products", tags=["products"])
 
 
+def product_cap_for(shop: Shop) -> Optional[int]:
+    """Published products a shop may list.
+
+    A platform-owned shop is Ekshop trading as itself, not a subscriber, so no
+    plan limit applies to it.
+    """
+    if shop.is_platform_owned:
+        return None
+    return shop.subscription.plan.max_products if shop.subscription else None
+
+
 def notify_back_in_stock_subscribers(db: Session, product: Product, variant) -> None:
     """Notify all subscribers when a product/variant comes back in stock."""
     from datetime import datetime, timezone
@@ -266,7 +277,7 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), curren
     if not shop:
         raise HTTPException(status_code=404, detail="Shop doesn't exist.")
 
-    max_products = shop.subscription.plan.max_products if shop.subscription else None
+    max_products = product_cap_for(shop)
     if max_products is not None:
         current_count = db.query(func.count(Product.id)).filter(
             Product.shop_id == shop.id,
