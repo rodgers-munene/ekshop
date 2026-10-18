@@ -40,7 +40,10 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
     to: isoDay(),
   });
   const [data, setData] = useState<AdminOverview | null>(initial);
-  const [loading, setLoading] = useState(false);
+  // Start in the loading state when there is no server-rendered payload, so the
+  // first client frame shows the skeleton instead of "Could not load" before
+  // the fetch has even begun.
+  const [loading, setLoading] = useState(!initial);
   const [drill, setDrill] = useState<DrillSpec | null>(null);
 
   // A custom range travels as explicit bounds rather than as `period`, so the
@@ -72,46 +75,61 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
 
   const { metrics: m, previous: p } = data ?? { metrics: {} as AdminOverview["metrics"], previous: {} as AdminOverview["previous"] };
 
+  // The period metrics arrive as Decimal strings ("1235.00"); the cards display
+  // them through formatKES ("Ksh 1,235"). Comparisons must use the raw numbers,
+  // never the formatted strings — parseFloat("Ksh 1,235") is NaN and the change
+  // line would render "NaN%".
+  const num = (v: unknown): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
   const summary = [
     {
       label: "Total transacted",
       value: formatKES(m.total_transacted),
-      prev: parseFloat(p.total_transacted),
+      raw: num(m.total_transacted),
+      prev: num(p.total_transacted),
       spec: ordersSpec(period),
       hint: "Goods + delivery + tax in the selected period",
     },
     {
       label: "GMV (goods)",
       value: formatKES(m.gmv),
-      prev: parseFloat(p.gmv),
+      raw: num(m.gmv),
+      prev: num(p.gmv),
       spec: ordersSpec(period),
       hint: "Value of goods only",
     },
     {
       label: "Paid orders",
       value: m.orders,
-      prev: p.orders,
+      raw: num(m.orders),
+      prev: num(p.orders),
       spec: ordersSpec(period),
       hint: "Recent paid order groups",
     },
     {
       label: "Avg. order value",
       value: formatKES(m.average_order_value),
-      prev: parseFloat(p.average_order_value),
+      raw: num(m.average_order_value),
+      prev: num(p.average_order_value),
       spec: ordersSpec(period),
       hint: "Recent paid orders",
     },
     {
       label: "New users",
       value: m.new_users,
-      prev: p.new_users,
+      raw: num(m.new_users),
+      prev: num(p.new_users),
       spec: usersSpec(),
       hint: "Latest signups",
     },
     {
       label: "New shops",
       value: m.new_shops,
-      prev: p.new_shops,
+      raw: num(m.new_shops),
+      prev: num(p.new_shops),
       spec: shopsSpec(),
       hint: "Latest shops",
     },
@@ -144,7 +162,7 @@ export default function AdminOverviewClient({ initial }: { initial: AdminOvervie
                 label={s.label}
                 value={s.value}
                 change={{
-                  current: typeof s.value === "string" ? parseFloat(s.value) : s.value,
+                  current: s.raw,
                   previous: s.prev,
                   label: "prev period",
                 }}

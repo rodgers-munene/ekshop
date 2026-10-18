@@ -33,7 +33,7 @@ export const orderColumns: DrillColumn[] = [
 ];
 
 export const userColumns: DrillColumn[] = [
-  { key: "name", label: "Name", render: (r) => `${r.first_name} ${r.last_name}` },
+  { key: "name", label: "Name", render: (r) => [r.first_name, r.last_name].filter(Boolean).join(" ") || "—" },
   { key: "email", label: "Email", render: (r) => <span className="text-xs">{r.email}</span> },
   { key: "role", label: "Role", render: (r) => r.role },
   { key: "status", label: "Status", render: (r) => r.status },

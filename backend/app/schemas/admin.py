@@ -347,7 +347,7 @@ class CartAbandonedProduct(BaseModel):
 class TopPurchasedProduct(BaseModel):
     product_id: Optional[uuid.UUID] = None
     name: str
-    slug: Optional[str]
+    slug: Optional[str] = None
     units: int
     revenue: str
 

@@ -3,7 +3,12 @@ import { twMerge } from "tailwind-merge";
 
 
 export function formatKES(amount: number | string): string {
-    const num = typeof amount === "string" ? parseFloat(amount): amount
+    // Accept raw backend decimals ("1235.00"), already-formatted strings
+    // ("Ksh 1,235") and numbers. A missing or unparseable value must never
+    // print "KshNaN" on a dashboard — show a dash instead.
+    const cleaned = typeof amount === "string" ? amount.replace(/[^0-9.-]/g, "") : amount;
+    const num = typeof cleaned === "number" ? cleaned : Number(cleaned);
+    if (cleaned === "" || !Number.isFinite(num)) return "\u2014";
     return new Intl.NumberFormat("en-KE", {
         style: "currency",
         currency: "KES",

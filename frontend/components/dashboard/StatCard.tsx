@@ -61,6 +61,12 @@ export default function StatCard({
 }
 
 function ChangeLine({ current, previous, label }: { current: number; previous: number; label: string }) {
+  // A malformed pair (undefined metric, unparseable string) must never render
+  // "NaN%"; hide the line instead of showing a fake number.
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) {
+    return null;
+  }
+
   // No baseline to compare against — a percentage would be infinite/meaningless.
   if (previous === 0) {
     return (

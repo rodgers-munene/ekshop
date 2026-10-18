@@ -107,3 +107,64 @@ class TestOrderCountingBasis:
 
         assert OrderGroupStatus.paid.value == "paid"
         assert OrderGroupStatus.pending_payment.value != OrderGroupStatus.paid.value
+
+
+class TestPanelQueriesExecute:
+    """Two dashboard panels shipped dead: their queries raised before returning
+    anything, the router swallowed the 500, and the panel silently never
+    rendered. These stub the query chain so the failure becomes a test failure
+    instead of an empty panel."""
+
+    @staticmethod
+    def _stub_db():
+        from unittest.mock import MagicMock
+
+        db = MagicMock()
+        query = db.query.return_value
+        for method in ("filter", "join", "group_by", "order_by", "limit"):
+            getattr(query, method).return_value = query
+        query.count.return_value = 0
+        query.scalar.return_value = 0
+        query.all.return_value = []
+        return db, query
+
+    def test_supply_demand_matrix_is_empty_not_a_name_error(self):
+        from datetime import datetime, timedelta, timezone
+
+        from app.services.dashboard_metrics import get_supply_demand_matrix
+
+        db, _ = self._stub_db()
+        # No categories means the loop body never runs. The append used to sit
+        # after the loop, so an empty catalogue raised NameError on an unbound
+        # cat_id and the whole panel 500'd.
+        assert get_supply_demand_matrix(db, datetime.now(timezone.utc) - timedelta(days=7)) == []
+
+    def test_supply_demand_matrix_emits_one_row_per_category(self):
+        from datetime import datetime, timedelta, timezone
+
+        from app.services.dashboard_metrics import get_supply_demand_matrix
+
+        db, query = self._stub_db()
+        query.all.return_value = [("cat-1", 4), ("cat-2", 6)]
+        rows = get_supply_demand_matrix(db, datetime.now(timezone.utc) - timedelta(days=7))
+        # Two categories must produce two rows; the old placement of the
+        # append produced one row carrying whichever category was last.
+        assert [r["category_area"] for r in rows] == ["cat-1", "cat-2"]
+        assert rows[0]["products_live"] == 4
+        assert rows[1]["products_live"] == 6
+
+    def test_ecommerce_metrics_validate_against_their_response_model(self):
+        from datetime import datetime, timedelta, timezone
+
+        from app.schemas.admin import EcommerceMetrics
+        from app.services.dashboard_metrics import get_ecommerce_metrics
+
+        db, _ = self._stub_db()
+        since = datetime.now(timezone.utc) - timedelta(days=7)
+        payload = get_ecommerce_metrics(db, since, datetime.now(timezone.utc))
+        # The old code called .all() on an in_() expression, which raised
+        # AttributeError on every request regardless of data, and the row
+        # builder omitted `slug`, which the response model requires.
+        EcommerceMetrics.model_validate(payload)
+        assert payload["top_products"] == []
+        assert payload["transactions"] == 0

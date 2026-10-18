@@ -671,20 +671,20 @@ def get_supply_demand_matrix(db: Session, since: datetime, until: Optional[datet
         demand_score = min(100, orders_in_period * 5)
         supply_score = min(100, active_shops * 10)
         gap = demand_score - supply_score
-    rows.append(
-        {
-            "category_area": str(cat_id),
-            "searches_views": 0,
-            "cart_adds": 0,
-            "orders": orders_in_period,
-            "active_shops": active_shops,
-            "products_live": products_live,
-            "demand_score": demand_score,
-            "supply_score": supply_score,
-            "gap": gap,
-            "action": "Acquire supply" if gap > 0 else "Stable",
-        }
-    )
+        rows.append(
+            {
+                "category_area": str(cat_id),
+                "searches_views": 0,
+                "cart_adds": 0,
+                "orders": orders_in_period,
+                "active_shops": active_shops,
+                "products_live": products_live,
+                "demand_score": demand_score,
+                "supply_score": supply_score,
+                "gap": gap,
+                "action": "Acquire supply" if gap > 0 else "Stable",
+            }
+        )
     return rows
 
 
@@ -1138,14 +1138,17 @@ def get_ecommerce_metrics(db: Session, since: datetime, until: datetime) -> dict
         .limit(5)
         .all()
     )
-    products_map = {
-        p.id: p for p in db.query(Product).filter(Product.id.in_([r.product_id for r in top_products if r.product_id]).all())
-    }
+    product_ids = [r.product_id for r in top_products if r.product_id]
+    products_map = {}
+    if product_ids:
+        products_map = {p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
     top_products_data = []
     for r in top_products:
         product = products_map.get(r.product_id)
         top_products_data.append({
+            "product_id": product.id if product else r.product_id,
             "name": product.name if product else "Unknown",
+            "slug": product.slug if product else None,
             "units": int(r.units),
             "revenue": str(Decimal(r.revenue or 0).quantize(Decimal("0.01"))),
         })
