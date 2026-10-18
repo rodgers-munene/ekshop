@@ -63,6 +63,17 @@ export default function AdminSellersPage() {
     refresh();
   }
 
+  async function togglePlatform(shopId: string, currentlyPlatform: boolean) {
+    const question = currentlyPlatform
+      ? "Return this shop to the marketplace as a normal seller? Subscriptions and product limits apply again."
+      : "Mark this shop as an Ekshop-owned (1P) shop? Subscriptions and product limits will no longer apply.";
+    if (!confirm(question)) return;
+    const res = await fetch(`/api/admin/shops/${shopId}/platform`, { method: "PATCH" });
+    if (!res.ok) { toast.error("Could not update platform status"); return; }
+    toast.success(currentlyPlatform ? "Shop returned to the marketplace" : "Shop marked as Ekshop-owned (1P)");
+    refresh();
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Sellers</h1>
@@ -93,6 +104,11 @@ export default function AdminSellersPage() {
                 <div className="flex items-center gap-1.5">
                   <p className="font-medium truncate">{shop.name}</p>
                   {shop.is_verified && <BadgeCheck size={14} className="text-info shrink-0" />}
+                  {shop.is_platform_owned && (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full uppercase bg-navy text-white shrink-0">
+                      1P
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-muted truncate">{shop.county ?? "Unknown"} · {shop.slug}</p>
               </div>
@@ -111,6 +127,16 @@ export default function AdminSellersPage() {
                   }`}
                 >
                   {shop.is_featured ? "Unfeature" : "Feature"}
+                </button>
+                <button
+                  onClick={() => togglePlatform(shop.id, shop.is_platform_owned)}
+                  className={`text-xs py-1.5 px-3 rounded-md border ${
+                    shop.is_platform_owned
+                      ? "border-navy text-navy hover:bg-navy/5"
+                      : "border-border text-muted hover:bg-ink/5"
+                  }`}
+                >
+                  {shop.is_platform_owned ? "Remove 1P" : "Make 1P"}
                 </button>
                 <button onClick={() => suspend(shop.id)} className="text-xs py-1.5 px-3 rounded-md border border-danger text-danger hover:bg-danger/5">
                   Suspend

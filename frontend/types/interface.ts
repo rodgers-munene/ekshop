@@ -38,6 +38,7 @@ export interface Shop {
   seller_id?: string;
   is_verified: boolean;
   is_featured: boolean;
+  is_platform_owned: boolean;
   rating_avg: string;
   rating_count: number;
   total_sales: string;
