@@ -11,6 +11,7 @@ import { useCartStore } from "@/store/cartStore";
 import { AnimatePresence, motion } from "motion/react"
 import { Product, ProductListResponse, Shop } from "@/types/interface";
 import { formatKES, resolveImageUrl, decodeHtml } from "@/lib/utils";
+import { buildLocationParams, readCustomerLocation } from "@/lib/geo-location";
 import NotificationBell from "@/components/layout/NotificationBell";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -57,10 +58,16 @@ export default function Navbar() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const searchLocation = mounted ? readCustomerLocation() : null;
+  const locKey = searchLocation ? `${searchLocation.lat},${searchLocation.lng}` : "none";
+
   const { data: suggestions = [], isFetching: suggestionsLoading } = useQuery({
-    queryKey: ["search-suggestions", debouncedQuery],
+    // The key carries the location: the same query from two different places must
+    // not share a cached result, or one shopper's suggestions get ranked by
+    // another one's town.
+    queryKey: ["search-suggestions", debouncedQuery, locKey],
     queryFn: () =>
-      fetch(`${API_URL}/products/?q=${encodeURIComponent(debouncedQuery)}&limit=6`)
+      fetch(`${API_URL}/products/?q=${encodeURIComponent(debouncedQuery)}&limit=6${buildLocationParams(readCustomerLocation())}`)
         .then((r) => r.json())
         .then((data: ProductListResponse) => data.results ?? []),
     enabled: debouncedQuery.length >= 2,

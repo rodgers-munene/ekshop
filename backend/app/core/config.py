@@ -99,6 +99,15 @@ class Settings(BaseSettings):
     # be presented as a firm price by accident.
     DISTANCE_ALLOW_STRAIGHT_LINE_FALLBACK: bool = True
 
+    # --- Hyperlocal discovery ------------------------------------------------
+    # How far from the shopper a product may be and still count as "near me".
+    # 30 km is a deliberate wide-open default for launch: the catalogue is thin
+    # outside the big towns, and a tight radius would show an empty grid where a
+    # shopper previously at least saw the county's stock. The feed applies this
+    # radius only when it finds something inside it (see routers/catalog.py), so
+    # this number sets the promise, not a hard gate that can empty the page.
+    GEOFENCE_RADIUS_KM: float = 30.0
+
     # --- Platform commission -------------------------------------------------
     # What Ekshop keeps as a share of goods value. Deliberately unset rather than
     # given a plausible default: the admin dashboard used to label GMV as

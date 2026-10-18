@@ -124,6 +124,7 @@ export interface Product {
   variants?: ProductVariant[];
   rating_avg?: string;
   rating_count?: number;
+  distance_km?: number | null;
   created_at: string;
 }
 
@@ -132,6 +133,7 @@ export interface ProductListResponse {
   page: number;
   limit: number;
   results: Product[];
+  radius_km?: number | null;
 }
 
 // Orders

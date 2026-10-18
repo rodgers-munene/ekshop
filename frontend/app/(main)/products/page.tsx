@@ -3,7 +3,8 @@ import Link from "next/link";
 import { serverFetch } from "@/lib/server-api";
 import { Category, ProductListResponse, Shop } from "@/types/interface";
 import ProductCard from "@/components/ProductCard";
-import { Crosshair } from "lucide-react";
+import NearMeButton from "@/components/geo/NearMeButton";
+import { DEFAULT_RADIUS_KM } from "@/lib/geo-location";
 
 interface Props {
   searchParams: Promise<{
@@ -13,6 +14,7 @@ interface Props {
     page?: string;
     lat?: string;
     lng?: string;
+    radius_km?: string;
   }>;
 }
 
@@ -74,44 +76,24 @@ function NearbyShops({ shops }: { shops: Shop[] }) {
   );
 }
 
-function NearMeButton() {
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        if (!navigator.geolocation) {
-          alert("Geolocation is not supported by your browser");
-          return;
-        }
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const params = new URLSearchParams(window.location.search);
-            params.set("lat", String(pos.coords.latitude));
-            params.set("lng", String(pos.coords.longitude));
-            window.location.search = params.toString();
-          },
-          () => {
-            alert("Couldn't get your location. Check browser permissions.");
-          },
-          { enableHighAccuracy: true, timeout: 10000 }
-        );
-      }}
-      className="w-full flex items-center justify-center gap-2 text-xs py-2 px-3 rounded-md border border-border hover:border-amber transition-colors"
-    >
-      <Crosshair size={14} />
-      Use my location
-    </button>
-  );
-}
-
 export default async function ProductsPage({ searchParams }: Props) {
-  const { category, q, county, page, lat, lng } = await searchParams;
+  const { category, q, county, page, lat, lng, radius_km } = await searchParams;
   const currentPage = parseInt(page ?? "1");
+
+  const isNearby = Boolean(lat && lng);
+  const requestedRadius = Number(radius_km) > 0 ? Number(radius_km) : DEFAULT_RADIUS_KM;
 
   const params = new URLSearchParams();
   if (category) params.set("category_slug", category);
   if (q) params.set("q", q);
   if (county) params.set("county", county);
+  // The coordinates were previously only used for the small "nearby shops" list
+  // and never sent to the product feed, so "Use my location" reordered nothing.
+  if (isNearby) {
+    params.set("lat", lat!);
+    params.set("lng", lng!);
+    params.set("radius_km", String(requestedRadius));
+  }
   params.set("page", String(currentPage));
   params.set("limit", "20");
 
@@ -124,15 +106,21 @@ export default async function ProductsPage({ searchParams }: Props) {
       console.error("CATEGORIES ERROR:", e.message);
       return [];
     }),
-    lat && lng
-      ? serverFetch<Shop[]>(`/shops/nearby?lat=${lat}&lng=${lng}&radius_km=20`).catch(() => [])
+    isNearby
+      ? serverFetch<Shop[]>(`/shops/nearby?lat=${lat}&lng=${lng}&radius_km=${requestedRadius}`).catch(() => [])
       : Promise.resolve([]),
   ]);
 
   const products = data?.results ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
-  const isNearby = Boolean(lat && lng);
+  // The feed reports a radius only when it actually applied one. When it does not,
+  // there was nothing in stock within range and it served the wider catalogue --
+  // so say that, instead of a "near you" label over products that are not.
+  const appliedRadius = data?.radius_km ?? null;
+  const nearbyParams: Record<string, string> = isNearby
+    ? { lat: lat!, lng: lng!, radius_km: String(requestedRadius) }
+    : {};
 
   return (
     <div className="w-full px-4 md:px-6 py-4">
@@ -148,8 +136,16 @@ export default async function ProductsPage({ searchParams }: Props) {
                   ? "Shops near you"
                   : "All Products"}
           </h1>
-          <span className="text-sm text-muted">{isNearby ? `${nearby.length} nearby` : `${total} products`}</span>
+          <span className="text-sm text-muted">
+            {appliedRadius != null ? `${total} within ${appliedRadius} km` : `${total} products`}
+          </span>
         </div>
+        {isNearby && appliedRadius == null && (
+          <p className="text-xs text-muted mt-2">
+            Nothing in stock within {requestedRadius} km yet, so everything is shown. Nearby
+            shops are listed below.
+          </p>
+        )}
         {county && !isNearby && (
           <div className="mt-2">
             <Link
@@ -209,7 +205,7 @@ export default async function ProductsPage({ searchParams }: Props) {
               </button>
             </form>
             <div className="mt-3">
-              <NearMeButton />
+              <NearMeButton radiusKm={requestedRadius} />
             </div>
           </div>
 
@@ -271,7 +267,7 @@ export default async function ProductsPage({ searchParams }: Props) {
                 <div className="flex items-center justify-center gap-2 mt-4 card py-6">
                   {currentPage > 1 && (
                     <Link
-                      href={`/products?${new URLSearchParams({ ...(category ? { category } : {}), ...(q ? { q } : {}), ...(county ? { county } : {}), page: String(currentPage - 1) })}`}
+                      href={`/products?${new URLSearchParams({ ...(category ? { category } : {}), ...(q ? { q } : {}), ...(county ? { county } : {}), ...nearbyParams, page: String(currentPage - 1) })}`}
                       className="px-4 py-2 rounded-full border border-border text-sm hover:bg-navy hover:text-white hover:border-navy transition-colors"
                     >
                       ← Prev
@@ -282,7 +278,7 @@ export default async function ProductsPage({ searchParams }: Props) {
                   </span>
                   {currentPage < totalPages && (
                     <Link
-                      href={`/products?${new URLSearchParams({ ...(category ? { category } : {}), ...(q ? { q } : {}), ...(county ? { county } : {}), page: String(currentPage + 1) })}`}
+                      href={`/products?${new URLSearchParams({ ...(category ? { category } : {}), ...(q ? { q } : {}), ...(county ? { county } : {}), ...nearbyParams, page: String(currentPage + 1) })}`}
                       className="px-4 py-2 rounded-full border border-border text-sm hover:bg-navy hover:text-white hover:border-navy transition-colors"
                     >
                       Next →

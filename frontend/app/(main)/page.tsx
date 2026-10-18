@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { serverFetch } from "@/lib/server-api";
 import { resolveImageUrl, decodeHtml, seededShuffle, todaysSeed } from "@/lib/utils";
+import { LOCATION_COOKIE, buildLocationParams, parseLocationCookie } from "@/lib/geo-location";
 import { Product, Category, ProductListResponse, PaginatedResponse, ShopSummary, HeroSlide, Promotion } from "@/types/interface";
 import ProductRail from "@/components/ProductRail";
 import HeroSlideshow from "@/components/HeroSlideshow";
@@ -19,17 +20,21 @@ import Marquee from "@/components/Marquee";
 export default async function HomePage() {
   const cookieStore = await cookies();
   const isLoggedIn = Boolean(cookieStore.get("ekshop_token")?.value);
+  // Where the shopper last agreed to be. "Use my location" on the product feed
+  // writes this, so the rails below can be hyperlocal before anyone logs in.
+  const location = parseLocationCookie(cookieStore.get(LOCATION_COOKIE)?.value);
+  const loc = buildLocationParams(location);
 
   const [trending, categories, newArrivalsRes, heroSlides, featuredShopsRes, curatedDeals, activityProducts] = await Promise.all([
-    serverFetch<Product[]>("/recommendations/trending?limit=20").catch(() => []),
+    serverFetch<Product[]>(`/recommendations/trending?limit=20${loc}`).catch(() => []),
     serverFetch<Category[]>("/categories/").catch(() => []),
-    serverFetch<ProductListResponse>("/products/?limit=8").catch(() => null),
+    serverFetch<ProductListResponse>(`/products/?limit=8${loc}`).catch(() => null),
     serverFetch<HeroSlide[]>("/hero-slides").catch(() => []),
     serverFetch<PaginatedResponse<ShopSummary>>("/shops/?featured=true&limit=6").catch(() => null),
     serverFetch<Promotion[]>("/deals/?limit=8").catch(() => []),
     // Personalized picks (weighted by this buyer's views/carts/purchases and, when
     // known, boosted toward their county) — only worth fetching once logged in.
-    isLoggedIn ? serverFetch<Product[]>("/recommendations?limit=12").catch(() => []) : Promise.resolve([]),
+    isLoggedIn ? serverFetch<Product[]>(`/recommendations?limit=12${loc}`).catch(() => []) : Promise.resolve([]),
   ]);
 
   const featuredProduct = trending[0] ?? null;
@@ -62,7 +67,7 @@ export default async function HomePage() {
   const candidateCategories = seededShuffle(categories, dailySeed).slice(0, 6);
   const candidateResults = await Promise.all(
     candidateCategories.map((category) =>
-      serverFetch<ProductListResponse>(`/products/?category_slug=${category.slug}&limit=16`).catch(() => null)
+      serverFetch<ProductListResponse>(`/products/?category_slug=${category.slug}&limit=16${loc}`).catch(() => null)
     )
   );
   const categoryRails = candidateCategories

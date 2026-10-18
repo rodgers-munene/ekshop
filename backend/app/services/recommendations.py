@@ -9,8 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.models.analytics import UserEvent, ProductScore, UserPreference, EventType, SearchTerm
 from app.models.catalog import Category, Product, ProductStatus
+from app.core.config import settings
 from app.services.catalog import with_active_shop
 from app.services.delivery_pricing import get_region
+from app.services.distance import GeoPoint
+from app.services.geo import distance_km as geo_distance_km
+from app.services.geo import proximity_weight
 
 # Overfetch factor for geo-boosted candidate pools: we pull a larger trending-sorted
 # batch, then re-rank it by proximity before trimming to the requested limit, so the
@@ -32,14 +36,36 @@ def _geo_weight(buyer_county: Optional[str], shop_county: Optional[str]) -> floa
     return 1.0
 
 
-def _rank_with_geo_boost(products: List[Product], buyer_county: Optional[str], limit: int) -> List[Product]:
-    if not buyer_county:
+def _rank_with_geo_boost(
+    products: List[Product],
+    buyer_county: Optional[str],
+    limit: int,
+    origin: Optional[GeoPoint] = None,
+) -> List[Product]:
+    """Re-rank a candidate batch by proximity. Proximity only ever boosts.
+
+    Both signals multiply the trending score and neither drops a product: a rail
+    with two items in it is worse for a new buyer than a rail with two far items,
+    and the catalogue is thin enough outside the big towns that filtering here
+    would routinely empty a section. Nearest-first ordering is the job of the
+    product feed (routers/catalog.py), which can say so on the page.
+    """
+    if not buyer_county and origin is None:
         return products[:limit]
 
+    radius = settings.GEOFENCE_RADIUS_KM
     scored = []
     for idx, p in enumerate(products):
         base = float(p.score.trending_score) if p.score and p.score.trending_score else 0.0
-        weight = _geo_weight(buyer_county, p.shop.county if p.shop else None)
+        shop = p.shop
+        weight = _geo_weight(buyer_county, shop.county if shop else None)
+        if origin is not None:
+            away = geo_distance_km(
+                origin.lat, origin.lng,
+                shop.lat if shop else None,
+                shop.lng if shop else None,
+            )
+            weight *= proximity_weight(away, radius)
         # negative idx as tiebreaker keeps the original trending order for equal scores
         scored.append((base * weight, -idx, p))
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
@@ -133,6 +159,7 @@ def get_recommendations(
     user_id: Optional[uuid.UUID] = None,
     limit: int = 20,
     buyer_county: Optional[str] = None,
+    origin: Optional[GeoPoint] = None,
 ) -> List[Product]:
     # ── Authenticated user with browsing history ──────────────
     if user_id:
@@ -172,7 +199,7 @@ def get_recommendations(
                 .limit(cat_limit * GEO_OVERFETCH)
                 .all()
             )
-            results.extend(_rank_with_geo_boost(candidates, buyer_county, cat_limit))
+            results.extend(_rank_with_geo_boost(candidates, buyer_county, cat_limit, origin))
 
         seen = {p.id for p in results}
         fill_limit = limit - len(results)
@@ -185,7 +212,7 @@ def get_recommendations(
             .limit(fill_limit * GEO_OVERFETCH)
             .all()
         )
-        results.extend(_rank_with_geo_boost(fill_candidates, buyer_county, fill_limit))
+        results.extend(_rank_with_geo_boost(fill_candidates, buyer_county, fill_limit, origin))
         return results
 
     # ── Anonymous visitor: spread evenly across all categories ─
@@ -215,7 +242,7 @@ def get_recommendations(
             .limit(per_cat * GEO_OVERFETCH)
             .all()
         )
-        products = _rank_with_geo_boost(candidates, buyer_county, per_cat)
+        products = _rank_with_geo_boost(candidates, buyer_county, per_cat, origin)
         for p in products:
             if p.id not in seen:
                 seen.add(p.id)
@@ -237,12 +264,17 @@ def get_recommendations(
             .limit(fill_limit * GEO_OVERFETCH)
             .all()
         )
-        results.extend(_rank_with_geo_boost(extra_candidates, buyer_county, fill_limit))
+        results.extend(_rank_with_geo_boost(extra_candidates, buyer_county, fill_limit, origin))
 
     return results
 
 
-def get_trending(db: Session, limit: int = 20, buyer_county: Optional[str] = None) -> List[Product]:
+def get_trending(
+    db: Session,
+    limit: int = 20,
+    buyer_county: Optional[str] = None,
+    origin: Optional[GeoPoint] = None,
+) -> List[Product]:
     query = (
         with_active_shop(
             db.query(Product)
@@ -254,8 +286,8 @@ def get_trending(db: Session, limit: int = 20, buyer_county: Optional[str] = Non
             Product.created_at.desc(),
         )
     )
-    if not buyer_county:
+    if not buyer_county and origin is None:
         return query.limit(limit).all()
 
     candidates = query.limit(limit * GEO_OVERFETCH).all()
-    return _rank_with_geo_boost(candidates, buyer_county, limit)
+    return _rank_with_geo_boost(candidates, buyer_county, limit, origin)

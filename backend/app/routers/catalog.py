@@ -30,8 +30,11 @@ from app.schemas.catalog import (
 )
 from app.models.catalog import Category, Product, ProductImage, ProductVariant, ProductReview, BackInStockSubscription
 from app.models.shop import Shop
+from app.core.config import settings
 from app.services import storage
 from app.services.catalog import with_active_shop
+from app.services.distance import GeoPoint
+from app.services.geo import distance_km, distance_km_expr, within_radius
 from app.services.notifications import create_notification
 from app.services.email import send_notification_email
 
@@ -306,6 +309,25 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), curren
     
     return product
 
+def _apply_radius(base_query, lat: float, lng: float, radius_km: float):
+    """Narrow a product query to shops within ``radius_km`` -- if anything is there.
+
+    Returns ``(query, radius_km)`` when the radius matched at least one product and
+    ``(base_query, None)`` when it matched none. The probe asks the database a
+    single question (``limit 1``) rather than counting, and it runs before the
+    search, paging and sorting clauses are added, so it sees exactly the rows the
+    caller's other filters allow.
+
+    Emptying the page is the failure mode being avoided here: a radius is a
+    preference for what to show first, not a promise about what exists, and it
+    must never be the reason a shopper with a thin local catalogue sees nothing.
+    """
+    in_radius = base_query.filter(within_radius(lat, lng, radius_km))
+    if in_radius.limit(1).first() is None:
+        return base_query, None
+    return in_radius, radius_km
+
+
 # get product with limits and option for filter (Category, count, price, range, search term)
 @products_router.get(
     "/",
@@ -321,6 +343,9 @@ def get_products(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     county: Optional[str] = None,
+    lat: Optional[float] = Query(None, ge=-90, le=90),
+    lng: Optional[float] = Query(None, ge=-180, le=180),
+    radius_km: Optional[float] = Query(None, gt=0, le=500),
     page: int = Query(1, ge=1),
     limit: int = Query(20, le=100),
     db: Session = Depends(get_db)
@@ -331,6 +356,21 @@ def get_products(
 
     if county:
         base_query = base_query.filter(func.lower(Shop.county) == county.lower())
+
+    # Hyperlocal feed. A radius here is a discovery aid, not a delivery promise,
+    # so it is applied only when it has something to show: at launch most shops
+    # have no pin and a shopper in a thin area would otherwise get an empty grid
+    # where they used to see stock. When the radius finds nothing we keep every
+    # other filter and serve the unrestricted catalogue, reporting radius_km=None
+    # so the UI can be honest about which one it got.
+    nearby_radius: Optional[float] = None
+    origin: Optional[GeoPoint] = None
+    if lat is not None and lng is not None:
+        base_query, nearby_radius = _apply_radius(
+            base_query, lat, lng, radius_km or settings.GEOFENCE_RADIUS_KM
+        )
+        if nearby_radius is not None:
+            origin = GeoPoint(lat, lng)
 
     if category_slug:
         cat = db.query(Category).filter(Category.slug == category_slug).first()
@@ -376,10 +416,21 @@ def get_products(
 
     skip = (page - 1) * limit
 
+    # Nearest first when ranking a plain browse; but when there is a search term the
+    # best text match still comes first and proximity only breaks ties. Distance
+    # leading a search would push a weak match from the next street above the
+    # product the shopper actually typed.
+    order_by = []
     if relevance is not None:
-        query = query.order_by(desc(relevance), Product.popularity.desc(), Product.created_at.desc())
+        order_by.append(desc(relevance))
+        if origin is not None:
+            order_by.append(distance_km_expr(origin.lat, origin.lng).asc())
+        order_by += [Product.popularity.desc(), Product.created_at.desc()]
     else:
-        query = query.order_by(Product.created_at.desc())
+        if origin is not None:
+            order_by.append(distance_km_expr(origin.lat, origin.lng).asc())
+        order_by.append(Product.created_at.desc())
+    query = query.order_by(*order_by)
 
     products = (
         query.options(selectinload(Product.images), selectinload(Product.variants), selectinload(Product.shop))
@@ -387,12 +438,27 @@ def get_products(
         .limit(limit)
         .all()
     )
-    
+
+    results = []
+    for product in products:
+        item = ProductRead.model_validate(product)
+        if origin is not None:
+            shop = product.shop
+            item = item.model_copy(update={
+                "distance_km": distance_km(
+                    origin.lat, origin.lng,
+                    shop.lat if shop else None,
+                    shop.lng if shop else None,
+                )
+            })
+        results.append(item)
+
     return ProductListResponse(
         total=total,
         page=page,
         limit=limit,
-        results=products
+        results=results,
+        radius_km=nearby_radius,
     )
     
 # get specific product details

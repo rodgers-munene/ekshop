@@ -90,6 +90,9 @@ export default function ProductCard({ product }: { product: Product }) {
         {product.shop?.name && (
           <p className="text-xs text-muted truncate">{decodeHtml(product.shop.name)}</p>
         )}
+        {product.distance_km != null && (
+          <p className="text-xs text-gold">{product.distance_km} km away</p>
+        )}
         <h3 className="text-sm font-medium leading-tight line-clamp-2">
           {decodeHtml(product.name)}
         </h3>

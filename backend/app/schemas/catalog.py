@@ -141,6 +141,11 @@ class ProductRead(BaseModel):
     images: List[ProductImageRead] = []
     variants: List[ProductVariantRead] = []
     shop: Optional[ShopSummary] = None
+    # Straight-line km to the shopper, present only when the request was
+    # geolocated and this product's shop has coordinates. None is the honest
+    # answer for "we don't know how far away this is" -- a missing pin must not
+    # read as "0 km away".
+    distance_km: Optional[float] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -150,6 +155,11 @@ class ProductListResponse(BaseModel):
     page: int
     limit: int
     results: List[ProductRead]
+    # Set only when a radius actually shaped this page; None means the results are
+    # the unrestricted catalogue (no location given, or nothing within range), so
+    # the UI can say which of the two it is showing instead of implying a promise
+    # it did not keep.
+    radius_km: Optional[float] = None
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
